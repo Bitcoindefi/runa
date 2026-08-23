@@ -1,6 +1,8 @@
 # Runa
 
-**A terminal RPG where you do not control your character. You write the rules it follows.**
+**An MMORPG where you never touch the controls. You write the rules your character fights by, and they run without you.**
+
+Single player is what ships today, and every piece of the shared world has its state written down below, measured rather than promised.
 
 Built for the [Aleph Hackathon 2026](https://hacki.crecimiento.build/h/aleph-hackathon-2026), Pears track.
 
@@ -113,11 +115,25 @@ Sword against something fast and you die in three and a half seconds. Two lines 
 
 ## We are building an MMORPG, and the hard part is already proven
 
-This is a single-player RPG today. It is being built into a persistent world with other players in it, and that is not a wish: the two things that normally make an MMO expensive are already working here.
+The word MMORPG is doing real work in that first line, so here is exactly what backs it.
+
+**An MMO is expensive because the server has to keep telling everyone what the world looks like.** Runa does not have that problem, and not by cleverness: by an accident of what the game is. Your character fights by a rule sheet you wrote, the simulation is a pure function of the starting state, that sheet and the tick count, and it is deterministic. Measured, not assumed: the same seed replayed twice over 2,500 ticks, through fights, potions, deaths and level ups, lands on the identical world.
+
+So two machines do not have to be told what happened. They can both work it out.
+
+| What travels            | Size                                      |
+| ----------------------- | ----------------------------------------- |
+| A frame of world state  | ~111 bytes, 15 times a second, per player |
+| One minute of that      | ~98 KB per player                         |
+| A rule sheet and a seed | **77 bytes, sent once**                   |
+
+That is three orders of magnitude, and it is the whole thesis. Everything a normal MMO spends its budget on, this game gets to skip.
+
+The second half is safety. The rule language has **no loops and no recursion**, so a script cannot run forever and cannot hang anyone's game. Running a stranger's rules at fifteen ticks a second is therefore not a risk to be managed, it is just something the language cannot do. Those two properties together are what make a shared world affordable here and unaffordable almost everywhere else.
 
 **A server is what usually kills a project like this.** Someone has to pay for it, keep it up, and shut it down when the money runs out. There is no server here. When you run `pear install`, 98 MB moves from another player's machine to yours, with no host in the middle. When a new release ships, a running copy pulls it from its peers on its own. Both of those are measured above, not planned.
 
-So the question stops being "who pays for the world" and becomes "who is right about it".
+So the question stops being "who pays for the world" and becomes "who is right about it". That one is not solved, and the table says so.
 
 | Piece                                         | State                                                                                 |
 | --------------------------------------------- | ------------------------------------------------------------------------------------- |
