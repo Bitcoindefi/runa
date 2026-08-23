@@ -1,3 +1,10 @@
+```
+  ___   _   _  _  _     _   
+ | _ \ | | | || \| |   /_\  
+ |   / | |_| || .  |  / _ \ 
+ |_|_\  \___/ |_|\_| /_/ \_\ 
+```
+
 # runa
 
 **A terminal RPG where you do not control your character. You write the rules it follows, and the world updates peer to peer while you play.**
