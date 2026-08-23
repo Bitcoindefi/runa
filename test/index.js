@@ -288,3 +288,66 @@ test('dying puts you at the church it says it puts you at', (t) => {
   t.is(game.walker.x, door.x, 'you wake up at its door, not near the gate')
   t.is(game.walker.y, door.y)
 })
+
+test('the title screen says what the swarm is actually doing', (t) => {
+  const fake = (peers, conns) => ({
+    others: () => new Array(peers).fill({ name: 'x' }),
+    conns: new Set(new Array(conns).fill(0).map((_, i) => i))
+  })
+
+  const wired = (peers, conns, started) => {
+    const game = new Runa({ presence: false })
+    game.update({ type: 'resize', width: 88, height: 26 })
+    game.online = true
+    game.presence = fake(peers, conns)
+    game.presenceStarted = started
+    return game
+  }
+
+  const solo = new Runa({ presence: false })
+  solo.update({ type: 'resize', width: 88, height: 26 })
+  t.is(solo.presenceLine(), 'modo un jugador', 'playing alone says so')
+
+  t.is(wired(0, 0, false).presenceLine(), 'la red no arranco, jugas solo')
+
+  // Searching and offline are different claims about the world, and the whole
+  // point of putting this on screen is to stop the game being silent about
+  // which one is true.
+  t.is(wired(0, 0, true).presenceLine(), 'buscando jugadores...')
+  t.is(wired(0, 1, true).presenceLine(), 'conectando...')
+  t.is(wired(1, 1, true).presenceLine(), '1 jugador mas en linea')
+  t.is(wired(3, 1, true).presenceLine(), '3 jugadores mas en linea')
+
+  const screen = style.stripAnsi(wired(3, 1, true).view())
+  t.ok(screen.indexOf('3 jugadores mas en linea') !== -1, 'and it reaches the screen')
+})
+
+test('the swarm line never pushes the title off its own screen', (t) => {
+  const game = new Runa({ presence: false })
+  game.online = true
+  game.presence = { others: () => [{ name: 'ana' }], conns: new Set([0]) }
+  game.presenceStarted = true
+
+  // 64 by 16 is the smallest terminal the game agrees to draw in at all, so it
+  // is the size where an extra line is most likely to cost something. The logo
+  // and the prompt are what this screen exists for: the status is the first
+  // thing that gets dropped, not the last.
+  for (const [w, h] of [
+    [64, 16],
+    [80, 20],
+    [88, 26],
+    [200, 50]
+  ]) {
+    game.update({ type: 'resize', width: w, height: h })
+    const screen = style.stripAnsi(game.view())
+    const lines = screen.split('\n')
+
+    t.is(lines.length, h, 'exactly ' + h + ' rows at ' + w + 'x' + h)
+    t.ok(
+      lines.every((line) => line.length === w),
+      'every row is exactly ' + w + ' wide'
+    )
+    t.ok(screen.indexOf('RUNA') !== -1, 'the logo survives at ' + w + 'x' + h)
+    t.ok(screen.indexOf('cualquier tecla') !== -1, 'and so does the prompt')
+  }
+})
