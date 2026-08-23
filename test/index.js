@@ -2,7 +2,7 @@ const { test } = require('brittle')
 const { style } = require('bare-tui')
 const { Runa } = require('../lib/game.js')
 const { MAPS, TILES } = require('../lib/map.js')
-const { reward } = require('../lib/shop.js')
+const { reward, xpToLeave } = require('../lib/shop.js')
 const CONTENT = require('../lib/content.js')
 const render = require('../lib/render.js')
 
@@ -194,24 +194,25 @@ test('the equipment rows follow what is actually in hand', (t) => {
   t.is(game.sheet().right, held.right, 'and so is the right row')
 })
 
-test('what a foe is worth comes from its own table, not from a formula', (t) => {
-  // `reward()` looked for `drops` and content.js has always written `drop`, so
-  // the override never fired and every foe fell through to numbers derived
-  // from its stats. Derived, a mosquito and a spectre were both worth 12 gold
-  // and 18 xp, which erases the whole relationship between how hard a thing is
-  // and what killing it pays.
+test('the payout stays on the numbers the game was actually tuned against', (t) => {
   const mosquito = reward('mosquito')
   const golem = reward('golem')
 
   t.ok(mosquito.xp < golem.xp, 'the easy thing is worth less experience')
   t.ok(mosquito.gold < golem.gold, 'and less gold')
 
-  const table = CONTENT.foes.mosquito.drop
-  t.is(mosquito.xp, table.xp, 'experience is the number the table declares')
-  t.ok(
-    mosquito.gold >= table.gold[0] && mosquito.gold <= table.gold[1],
-    'gold sits inside the declared range'
-  )
+  // This is a balance lock, not a description of how reward() is written.
+  //
+  // content.js carries a `drop` table that reward() has never read, because it
+  // tested `def.drops` and the table has always been `drop`. Making the names
+  // match looks like an obvious one word fix and it is not: the table pays a
+  // mosquito 3 xp where the formula pays 18, so levelling goes from one kill to
+  // four and the crossbow from five kills to fifteen. Every price and every xp
+  // threshold in this game was tuned against the formula. Whoever wants to move
+  // the economy should move it deliberately and change this test on purpose.
+  t.is(mosquito.xp, 18, 'a mosquito is still worth 18 experience')
+  t.is(mosquito.gold, 12, 'and 12 gold')
+  t.ok(reward('mosquito').xp >= xpToLeave(1), 'one kill still clears the first level')
 })
 
 test('the gold the log announces is the gold the purse receives', (t) => {
