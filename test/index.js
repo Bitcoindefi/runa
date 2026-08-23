@@ -99,3 +99,95 @@ test('the field pane paints the whole field, not one stringified line', (t) => {
     'the field reaches the right hand side of the pane'
   )
 })
+
+/**
+ * Walk out of town and keep walking until something picks a fight.
+ *
+ * @param {object} game
+ * @returns {boolean} whether a fight is running
+ */
+function pickAFight(game) {
+  let gate = null
+  const rows = MAPS.city.rows
+  for (let y = 0; y < rows.length && gate === null; y++) {
+    for (let x = 0; x < rows[y].length; x++) {
+      const tile = TILES[rows[y][x]]
+      if (tile && tile.enter && tile.enter.kind === 'travel') {
+        gate = { x, y }
+        break
+      }
+    }
+  }
+  if (gate === null) return false
+
+  game.walker.placeAt('city', gate.x, gate.y)
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('e') })
+  if (!game.field) return false
+
+  const dirs = ['right', 'down', 'right', 'right', 'up', 'right', 'down', 'right']
+  for (let i = 0; i < 600 && !game.field.snapshot().fighting; i++) {
+    const dir = dirs[i % dirs.length]
+    game.onKey({ type: 'key', is: (...keys) => keys.includes(dir) })
+    game.update({ type: 'tick' })
+  }
+  return game.field.snapshot().fighting
+}
+
+test('the experience bar shows progress into the level, not lifetime over one', (t) => {
+  const game = new Runa()
+  game.update({ type: 'resize', width: 88, height: 26 })
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+
+  game.player.xp = 18
+  const sheet = game.sheet()
+
+  // statsPanel reads `xpNext`, the snapshot only ever had `xpneed`, and a
+  // missing field is undefined rather than an error. The bar divided by one,
+  // so after a single kill it read `18/1` and stayed full from then on. That
+  // is the first number a new player watches change, so it had to be the first
+  // thing checked.
+  t.ok(sheet.xpNext > 1, 'the bar has a real denominator')
+  t.is(sheet.xp, sheet.xpinto, 'the bar draws progress into the current level')
+  t.ok(sheet.xp < sheet.xpNext, 'progress fits inside the level it belongs to')
+
+  const screen = style.stripAnsi(game.view())
+  const bar = screen.split('\n').find((line) => line.indexOf('xp [') !== -1) || ''
+  t.ok(bar.indexOf('/1 ') === -1 && !/\/1$/.test(bar.trim()), 'never renders over one')
+  t.ok(bar.indexOf('/' + sheet.xpNext) !== -1, 'prints the real denominator')
+})
+
+test('the equipment rows follow what is actually in hand', (t) => {
+  const game = new Runa()
+  game.update({ type: 'resize', width: 88, height: 26 })
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+
+  game.player.gold = 500
+  game.player.buy('sword', 'weapons')
+  const town = style.stripAnsi(game.view())
+  t.ok(town.indexOf('izq / espada') !== -1, 'what you bought shows up on the sheet')
+
+  t.ok(pickAFight(game), 'a fight starts out in the field')
+
+  // The script equips at fight time, so mid fight the sheet has to follow the
+  // world rather than the persistent record. Both rows used to read `-` here
+  // while the arena printed `alcance 14` right beside them.
+  //
+  // Equipping costs a few ticks: the rules are re-read every tick and a swap
+  // only lands between swings, so at the instant the fight opens both hands
+  // are still empty. Waiting for the hand to fill is the point of the test,
+  // not an accident of timing.
+  for (let i = 0; i < 60; i++) {
+    const c = game.field.combat
+    if (!c || c.world.held.left || c.world.held.right) break
+    game.update({ type: 'tick' })
+  }
+  t.ok(game.field.combat, 'the fight is still running')
+  const held = game.field.combat.world.held
+  t.ok(held.left || held.right, 'the script put something in a hand')
+
+  const fight = style.stripAnsi(game.view())
+  const wielded = held.left || held.right
+  t.ok(fight.indexOf(wielded.name) !== -1, 'the sheet names the weapon actually in hand')
+  t.is(game.sheet().left, held.left, 'the left row is the world truth, not a stale copy')
+  t.is(game.sheet().right, held.right, 'and so is the right row')
+})

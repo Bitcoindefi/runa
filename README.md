@@ -17,7 +17,43 @@ This is not a game that happens to be distributed with Pear. The platform is doi
 | **Pear is the distribution**               | `pear install pear://<key>` and you are playing. No package manager, no app store, no download page, no server paying for bandwidth. The binary arrives from whoever already has it.                                                                                                |
 | **Content is data, so the world can grow** | Enemies, items, prices and the town map are plain objects, not code. A new monster is a few lines of data rather than a new build, which is what makes shipping one over the air possible at all.                                                                                   |
 
-## Install
+## Run it from this repo
+
+If you are reading this on GitHub, this is the path you want. It needs Node and
+npm and nothing else. `npm install` pulls the Bare runtime in as a dependency, so
+there is no Bare and no Pear CLI to install first.
+
+```bash
+git clone https://github.com/leocagli/runa.git
+cd runa
+npm install
+npm start
+```
+
+Any key gets you past the title. Then:
+
+| Key                     | What it does                               |
+| ----------------------- | ------------------------------------------ |
+| arrows or `wasd`        | walk                                       |
+| `e`, `enter` or `space` | go through the door you are standing on    |
+| `<`                     | leave the field and go back to town        |
+| `r`                     | reload your rules while a fight is running |
+| `q` or `Ctrl+C`         | quit                                       |
+
+The game takes the whole terminal, so it wants at least **64 by 16**. Below that
+it prints the size it needs instead of drawing a broken frame.
+
+Everything else is worth running too:
+
+```bash
+npm test    # the model, headless: town, shops, field, combat, the language
+npm run make    # cross compile a standalone binary for this machine
+```
+
+## Or install it with no clone at all
+
+Same game, handed over peer to peer as one executable. Nothing on the receiving
+machine: no Node, no Bare, not even the Pear CLI.
 
 ```bash
 pear install pear://hg11t8ipq5kkc7d4prdmu4mapi18yqm7p43ee5dzmnf7y1yjyo9o
