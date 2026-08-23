@@ -1,35 +1,38 @@
-# BARE RPG
+# Runa
 
 **A terminal RPG where you do not control your character. You write the rules it follows.**
 
 Built for the [Aleph Hackathon 2026](https://hacki.crecimiento.build/h/aleph-hackathon-2026), Pears track.
 
 ```
-              /\=======================================================/\
-              ||                       BARE RPG                        ||
-              ||     ____    _    ____  _____   ____  ____   ____      ||
-              ||    | __ )  / \  |  _ \| ____| |  _ \|  _ \ / ___|     ||
-              ||    |  _ \ / _ \ | |_) |  _|   | |_) | |_) | |  _      ||
-              ||    | |_) / ___ \|  _ <| |___  |  _ <|  __/| |_| |     ||
-              ||    |____/_/   \_\_| \_\_____| |_| \_\_|    \____|     ||
-              ||          T E R M I N A L   A D V E N T U R E          ||
-              \/=======================================================\/
+  ____  _   _ _   _    _
+ |  _ \| | | | \ | |  / \
+ | |_) | | | |  \| | / _ \
+ |  _ <| |_| | |\  |/ ___ \
+ |_| \_\\___/|_| \_/_/   \_\
+      RUNA  //  UN RPG HECHO EN BARE
 
-              no controlas a tu personaje. escribis las reglas que sigue.
-
-                            [ cualquier tecla para empezar ]
+       |>>>                              |>>>
+   _  _|_  _                        _  _|_  _
+  |;|_|;|_|;|        .-^-.         |;|_|;|_|;|
+  \\.    .  /         |+ +|         \\.    .  /
+   ||:  .  |          |_-_|          ||:  .  |
+   ||:     |        __/| |\__        ||:     |
+ __||______|_______/__/| |\__\_______||______|__
+      /  \            /_| |_\            /  \
+                     /_/   \_\
 ```
 
 ## What this does with Pear and Bare
 
 This is not a game that happens to be distributed with Pear. The platform is doing four specific jobs, and the game is shaped around them.
 
-| | |
-|---|---|
-| **Bare is the runtime** | The whole game runs on Bare, not Node. No built-in modules, no `process` global, no `fs`. Everything goes through the `bare-*` packages, and the UI is `bare-tui`, the same Elm-architecture framework the Pear CLI itself runs on. |
-| **One binary, four platforms** | `bare-build --standalone` compiles the game and the runtime into a single executable. All four were cross-compiled from one Linux machine and checked with `file`: Mach-O for both Macs, PE32+ for Windows, ELF for Linux. Your users need no Node, no Bare, not even the Pear CLI. |
-| **Pear is the distribution** | `pear install pear://<key>` and you are playing. No package manager, no app store, no download page, no server paying for bandwidth. The binary arrives from whoever already has it. |
-| **Content is data, so the world can grow** | Enemies, items, prices and the town map are plain objects, not code. A new monster is a few lines of data rather than a new build, which is what makes shipping one over the air possible at all. |
+|                                            |                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Bare is the runtime**                    | The whole game runs on Bare, not Node. No built-in modules, no `process` global, no `fs`. Everything goes through the `bare-*` packages, and the UI is `bare-tui`, the same Elm-architecture framework the Pear CLI itself runs on.                                                 |
+| **One binary, four platforms**             | `bare-build --standalone` compiles the game and the runtime into a single executable. All four were cross-compiled from one Linux machine and checked with `file`: Mach-O for both Macs, PE32+ for Windows, ELF for Linux. Your users need no Node, no Bare, not even the Pear CLI. |
+| **Pear is the distribution**               | `pear install pear://<key>` and you are playing. No package manager, no app store, no download page, no server paying for bandwidth. The binary arrives from whoever already has it.                                                                                                |
+| **Content is data, so the world can grow** | Enemies, items, prices and the town map are plain objects, not code. A new monster is a few lines of data rather than a new build, which is what makes shipping one over the air possible at all.                                                                                   |
 
 ## Install
 
@@ -46,32 +49,30 @@ Every screen below is captured straight out of the game's own `view()`, not draw
 
 ### The town
 
-You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `T` the tavern, `>` the gate out to the field.
+You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `>` the gate out to the field.
 
 ```
  runa
 +- la ciudad ---------------------------------------------+ +- ficha ------------------+
 |                                                         | |vos                   nv 1|
-|                                                         | |hp [###############] 20/20|
-|#########################################################| |xp [-----------------] 0/1|
-|#........................................................| |oro 30          pociones 2|
-|#..############.....################.....##############..| |izq -                     |
-|#..#::::::::::#.....#::::::::::::::#.....#::::::::::::#..| |der -                     |
-|#..#:::casa:::#.....#:::iglesia::::#.....#::pociones::#..| +--------------------------+
-|#..#####C######.....#######I########.....######P#######..| +- log --------------------+
-|#.......@................................................| |                          |
-|#........................................................| |                          |
-|#........................................................| |                          |
-|#.......######A#######........########D#######...........| |                          |
-|#.......#::::::::::::#........#::::::::::::::#...........| |                          |
-|#.......#:::armas::::#........#::armaduras:::#...........| |                          |
-|#.......##############........################...........| |                          |
-|#........................................................| |                          |
-|#...,,,,,,,,,,,,,,.......................................| |                          |
-|#...,,,,,ooo,,,,,,.......................................| |                          |
-|#...,,,,,,,,,,,,,,.......................................| |                          |
-|##############################>##########################| |                          |
-|                                                         | |                          |
+|+--------------------------------------------------------| |hp [###############] 20/20|
+||........................................................| |xp [-----------------] 0/1|
+||..+----------+.....+--------------+.....+------------+..| |oro 30          pociones 2|
+||..|^^^^^^^^^^|.....|^^^^^^^^^^^^^^|.....|^^^^^^^^^^^^|..| |izq -                     |
+||..|:::casa:::|.....|:::iglesia::::|.....|::pociones::|..| |der -                     |
+||..+----C-----+.....+------I-------+.....+-----P------+..| +--------------------------+
+||.......@................................................| +- log --------------------+
+||...............;.;.;.;.;.;.;.;.;.;.;....................| |                          |
+||........................................................| |                          |
+||.......+------A-----+........+------D-------+...........| |                          |
+||.......|^^^^^^^^^^^^|........|^^^^^^^^^^^^^^|...........| |                          |
+||.......|:::armas::::|........|::armaduras:::|...........| |                          |
+||.......+------------+........+--------------+...........| |                          |
+||........................................................| |                          |
+||...,,,,,,,,,,,,,,.......................................| |                          |
+||...,,*,,,O,,,*,,,.......................................| |                          |
+||...,,,,,,,,,,,,,,.......................................| |                          |
+|+----------------------------->--------------------------| |                          |
 |                                                         | |                          |
 +---------------------------------------------------------+ +--------------------------+
  wasd o flechas | e entrar | ? script | q salir
