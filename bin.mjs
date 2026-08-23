@@ -15,7 +15,9 @@ const cmd = command(
   summary(pkg.description),
   flag('--version|-v', 'Print the current version'),
   flag('--storage <dir>', 'custom storage directory'),
-  flag('--no-updates', 'disable OTA updates for this run')
+  flag('--no-updates', 'disable OTA updates for this run'),
+  flag('--name <name>', 'name other players see in the town'),
+  flag('--solo', 'play without presence, nobody sees you and you see nobody')
 )
 
 cmd.parse(Bare.argv.slice(isDev ? 2 : 1))
@@ -70,7 +72,9 @@ try {
 const { Program } = await import('bare-tui')
 const { Runa } = await import('./lib/game.js')
 
-const runa = new Runa()
+// The flags are declared up top so paparam does not reject them, and handed
+// over explicitly rather than left for the game to dig out of Bare.argv.
+const runa = new Runa({ name: cmd.flags.name, presence: !cmd.flags.solo })
 const program = new Program(runa)
 
 // The game owns the alternate screen from here, so nothing may write to stdout

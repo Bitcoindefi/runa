@@ -4,6 +4,8 @@ const { Runa } = require('../lib/game.js')
 const { MAPS, TILES } = require('../lib/map.js')
 const render = require('../lib/render.js')
 
+require('./sage.test.js')
+
 test('REMOVE ME', (t) => {
   t.pass()
 })

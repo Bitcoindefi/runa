@@ -90,5 +90,85 @@ const dead = new Presence({ name: 'zz' })
 dead.stop()
 ok(true, 'stop() sin start() tampoco')
 
+console.log('\n=== sin red ===')
+// El caso que mas se juega y el que no puede fallar: sin swarm el juego tiene
+// que andar igual, callado. start() dice que no y sigue, no tira.
+const solo = new Presence({ name: 'nadie', offline: true })
+ok(solo.start() === false, 'start() sin red devuelve false en vez de explotar')
+ok(solo.online === false, 'y queda offline')
+solo.update('city', 4, 4)
+ok(solo.others('city').length === 0, 'others() es el array vacio, que es el modo un jugador')
+solo.beat()
+solo.reap()
+ok(true, 'el latido y el barrido no tienen a quien hablarle y no se quejan')
+solo.stop()
+ok(true, 'y se apaga como cualquier otra')
+
+console.log('\n=== dos sesiones por un cable de mentira ===')
+// Toda la superficie de stream que net.js toca es on/write/destroy, asi que un
+// par de objetos con esos tres metodos alcanza para probar el formato de linea
+// de punta a punta. Depender de la DHT aca seria un test que pasa o falla
+// segun el humor de la red, y lo que se quiere probar es el \n, no el NAT.
+function fakeConn() {
+  const handlers = {}
+  return {
+    destroyed: false,
+    peer: null,
+    on(ev, fn) {
+      handlers[ev] = handlers[ev] || []
+      handlers[ev].push(fn)
+    },
+    emit(ev, arg) {
+      for (const fn of handlers[ev] || []) fn(arg)
+    },
+    write(s) {
+      if (this.peer && !this.peer.destroyed) this.peer.emit('data', s)
+    },
+    destroy() {
+      this.destroyed = true
+      this.emit('close')
+    }
+  }
+}
+
+const ana = new Presence({ name: 'ana', offline: true })
+const bo = new Presence({ name: 'bo', offline: true })
+ana.start()
+bo.start()
+ana.update('city', 5, 5)
+bo.update('city', 9, 2)
+
+const ca = fakeConn()
+const cb = fakeConn()
+ca.peer = cb
+cb.peer = ca
+
+// bo engancha primero, asi que su saludo se pierde contra un cable todavia
+// mudo. El de ana llega, y el latido de bo la alcanza en la vuelta siguiente:
+// es la misma carrera que hay en la red de verdad, y el latido la resuelve.
+bo.onConnection(cb)
+ana.onConnection(ca)
+bo.beat()
+
+ok(bo.others('city').length === 1 && bo.others('city')[0].name === 'ana', 'bo ve a ana')
+ok(ana.others('city').length === 1 && ana.others('city')[0].name === 'bo', 'ana ve a bo')
+ok(
+  JSON.stringify(ana.others('city')[0]) === JSON.stringify({ x: 9, y: 2, glyph: 'B', name: 'bo' }),
+  'con la posicion y el glifo que bo dijo tener'
+)
+
+// Lo unico delicado del framing: una linea cortada entre dos chunks.
+ca.emit('data', '{"id":"cc","name":"cyn","mapId":"city","x":1,"y":')
+ok(ana.others('city').length === 1, 'media linea todavia no es nadie')
+ca.emit('data', '1,"glyph":"C"}\n{"id":"dd","name":"dan","mapId":"city","x":2,"y":2}\n')
+ok(ana.others('city').length === 3, 'la linea se completa y en el mismo chunk entra otra entera')
+
+ana.update('field', 0, 0)
+ok(ana.others('city').length === 3, 'irse al campo no borra a los que quedaron en la ciudad')
+
+ana.stop()
+bo.stop()
+ok(ca.destroyed && cb.destroyed, 'stop() cierra los sockets de las dos puntas')
+
 console.log('\n' + (fails ? fails + ' FALLAS' : 'todo ok') + ', y el proceso deberia salir solo')
 if (fails) Bare.exitCode = 1
