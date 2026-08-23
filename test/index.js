@@ -2,6 +2,8 @@ const { test } = require('brittle')
 const { style } = require('bare-tui')
 const { Runa } = require('../lib/game.js')
 const { MAPS, TILES } = require('../lib/map.js')
+const { reward } = require('../lib/shop.js')
+const CONTENT = require('../lib/content.js')
 const render = require('../lib/render.js')
 
 require('./sage.test.js')
@@ -190,4 +192,99 @@ test('the equipment rows follow what is actually in hand', (t) => {
   t.ok(fight.indexOf(wielded.name) !== -1, 'the sheet names the weapon actually in hand')
   t.is(game.sheet().left, held.left, 'the left row is the world truth, not a stale copy')
   t.is(game.sheet().right, held.right, 'and so is the right row')
+})
+
+test('what a foe is worth comes from its own table, not from a formula', (t) => {
+  // `reward()` looked for `drops` and content.js has always written `drop`, so
+  // the override never fired and every foe fell through to numbers derived
+  // from its stats. Derived, a mosquito and a spectre were both worth 12 gold
+  // and 18 xp, which erases the whole relationship between how hard a thing is
+  // and what killing it pays.
+  const mosquito = reward('mosquito')
+  const golem = reward('golem')
+
+  t.ok(mosquito.xp < golem.xp, 'the easy thing is worth less experience')
+  t.ok(mosquito.gold < golem.gold, 'and less gold')
+
+  const table = CONTENT.foes.mosquito.drop
+  t.is(mosquito.xp, table.xp, 'experience is the number the table declares')
+  t.ok(
+    mosquito.gold >= table.gold[0] && mosquito.gold <= table.gold[1],
+    'gold sits inside the declared range'
+  )
+})
+
+test('the gold the log announces is the gold the purse receives', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 88, height: 26 })
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+
+  t.ok(pickAFight(game), 'a fight starts out in the field')
+
+  // Run the fight out and watch the tick it resolves on.
+  let before = { gold: game.player.gold, xp: game.player.xp }
+  let line = null
+  let credited = null
+  for (let i = 0; i < 4000 && game.field; i++) {
+    const fighting = !!game.field.combat
+    before = { gold: game.player.gold, xp: game.player.xp }
+    game.log.length = 0
+    game.update({ type: 'tick' })
+    if (fighting && game.field && !game.field.combat) {
+      line = game.log.find((l) => String(l).indexOf('cae el') !== -1) || null
+      credited = { gold: game.player.gold - before.gold, xp: game.player.xp - before.xp }
+      break
+    }
+  }
+
+  t.ok(line, 'the kill is announced')
+  t.ok(credited && credited.gold > 0, 'and it paid something')
+
+  // The field rolled these numbers on its own throwaway sheet and said them
+  // out loud, while settle() credited a different figure entirely: the log read
+  // `+5 oro` and the purse went up by 12, on every single kill. Now one roll
+  // travels in the event and is announced by whoever banks it, so the two
+  // cannot drift apart again.
+  const said = /\+(\d+) oro, \+(\d+) exp/.exec(String(line))
+  t.ok(said, 'the line carries both numbers')
+  t.is(Number(said[1]), credited.gold, 'the gold announced is the gold received')
+  t.is(Number(said[2]), credited.xp, 'and the same for experience')
+})
+
+test('dying puts you at the church it says it puts you at', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 88, height: 26 })
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+
+  t.ok(pickAFight(game), 'a fight starts out in the field')
+
+  // Lose on purpose rather than waiting for a rule to lose for us.
+  game.field.combat.world.potions = 0
+  game.field.combat.world.hero.hp = 0
+  game.log.length = 0
+  for (let i = 0; i < 40 && game.field; i++) game.update({ type: 'tick' })
+
+  t.absent(game.field, 'the excursion is over')
+
+  // Both layers used to narrate this, so the log printed two near identical
+  // lines one under the other.
+  const church = game.log.filter((l) => String(l).indexOf('iglesia') !== -1)
+  t.is(church.length, 1, 'waking up in the church is said once, not twice')
+
+  // And it used to leave you on the cobble next to the gate out to the field,
+  // eleven rows from the church, on the doorstep of the thing that killed you.
+  let door = null
+  const rows = MAPS.city.rows
+  for (let y = 0; y < rows.length && door === null; y++) {
+    for (let x = 0; x < rows[y].length; x++) {
+      const tile = TILES[rows[y][x]]
+      if (tile && tile.enter && tile.enter.kind === 'church') {
+        door = { x, y }
+        break
+      }
+    }
+  }
+  t.ok(door !== null, 'the town has a church')
+  t.is(game.walker.x, door.x, 'you wake up at its door, not near the gate')
+  t.is(game.walker.y, door.y)
 })

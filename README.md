@@ -68,7 +68,7 @@ Real screenshots of the game running, not text pasted into a code block.
 
 ### The town
 
-You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `P` the apothecary, `D` the armoury, `T` the tavern, and `>` the gate out to the field. Lowercase letters are the painted shop signs, and they are solid: you cannot walk through a wall just because somebody wrote a name on it.
+You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `P` the apothecary, `D` the armoury, and `>` the gate out to the field. Lowercase letters are the painted shop signs, and they are solid: you cannot walk through a wall just because somebody wrote a name on it.
 
 ![The town](docs/screens/ciudad.png)
 
