@@ -1,154 +1,119 @@
-# hello-pear-bare
+# runa
 
-> Pear Hello World for Standalone Bare Processes with `pear-runtime` worker
+**A terminal RPG where you do not control your character. You write the rules it follows, and the world updates peer to peer while you play.**
 
-End-to-end boilerplate for embedding [pear-runtime] into the [Bare] worker of a [Bare] CLI with peer-to-peer OTA update support.
+Built for the [Aleph Hackathon 2026](https://hacki.crecimiento.build/h/aleph-hackathon-2026), Pears track.
 
-This boilerplate uses the companion [`hello-pear-worker`][hello-pear-worker] as a reusable cross-platform local backend. Keeping networking, storage and updates in a separate worker lets mobile apps, desktop UIs and standalone Bare applications share the same backend implementation while each parent owns its platform-specific interface.
-
-- Peer-to-Peer deployment with [pear][pear-docs] CLI
-- Peer-to-Peer Over-the-Air updates with [`pear-runtime`][pear-runtime] module
-- Bare worker process via `PearRuntime.run(...)`
-- Cross-platform standalone distributables via [`bare-build`][bare-build]
-
-## Variants
-
-- (current) [`main`](https://github.com/holepunchto/hello-pear-bare/tree/main): runs `pear-runtime` inside a Bare worker thread.
-- [`single-thread`](https://github.com/holepunchto/hello-pear-bare/tree/variant/single-thread): workerless with `pear-runtime` updates.
-- [`daemon`](https://github.com/holepunchto/hello-pear-bare/tree/variant/daemon): runs `pear-runtime` in a detached updater daemon.
-
-## Table of Contents
-
-- [OS Support](#os-support)
-- [Requirements](#requirements)
-- [Development](#development)
-  - [Install Dependencies](#install-dependencies)
-  - [Create an upgrade link](#create-an-upgrade-link)
-  - [Start](#start)
-- [Architecture](#architecture)
-  - [Updates](#updates)
-  - [Workers](#workers)
-- [Peer-to-Peer Deployments](#peer-to-peer-deployments)
-- [Installing Distributables](#installing-distributables)
-- [Scripts](#scripts)
-- [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
-
-## OS Support
-
-- **macOS** — arm64, x64
-- **Linux** — arm64, x64
-- **Windows** — arm64, x64
-
-## Requirements
-
-- `npm` via [Node.js][nodejs]
-- [pear][pear-docs] - `npx pear`
-
-## Development
-
-### Install Dependencies
-
-```sh
-npm install
+```
++- la ciudad -----------------------------+ +- ficha ------------------+
+|##########################################| |vos                   nv 2|
+|#........................................#| |hp [############----] 26/32|
+|#..############.....################.....#| |xp [########--------] 18/40|
+|#..#:::casa:::#.....#:::iglesia::::#.....#| |oro 32          pociones 1|
+|#..#####C######.....#######I########.....#| |izq ballesta              |
+|#.................@......................#| |der escudo                |
+|#..######A#######........#######D#########| +--------------------------+
+|#..#:::armas::::#........#::armaduras:::#| +- log --------------------+
+|#........................................#| |un mosquito te vio        |
+|##############################>###########| |cae el mosquito: +5 oro   |
++------------------------------------------+ |subiste a nivel 2         |
+ wasd o flechas | e entrar | ? script | q salir
 ```
 
-### Create an upgrade link
+## Install
 
-This template expects `package.json` to contain a valid `pear://` link in the `upgrade` field. If it still contains the placeholder `pear://<YOUR_KEY_HERE>`, startup will fail with `INVALID_URL`.
-
-Create a link with [`pear touch`](https://docs.pears.com/reference/cli.html#pear-touch-flags-channel):
-
-```sh
-pear touch
+```bash
+pear install pear://hg11t8ipq5kkc7d4prdmu4mapi18yqm7p43ee5dzmnf7y1yjyo9o
+runa
 ```
 
-Copy the generated `pear://...` link into the `upgrade` field in `package.json`.
+That is the whole install. No Node, no Bare, no package manager, no app store. The binary arrives from peers and keeps itself current: when a new release is staged, an installed copy picks it up on its own.
 
-### Start
+**Binaries built for:** `linux-x64`, `darwin-arm64`, `darwin-x64`, `win32-x64`.
 
-Start app in development mode:
+## The idea
 
-```sh
-npm start
+Every terminal RPG lets you press a key to swing a sword. This one does not.
+
+You walk the town yourself, with the arrows or WASD. You go into the weapon shop, the armoury, the apothecary, the church. But the moment a fight starts, the keyboard stops mattering. What fights is a **rule sheet you wrote**, in a file, in your own editor, next to the game.
+
+```
+?hp < 8
+ use potion
+:?foe.dist >= 5
+ equip crossbow
+:
+ equip sword
 ```
 
-By default this repo starts with `--no-updates` in development to avoid local dev binaries being swapped while you iterate.
+Equip the sword against something fast and you die in three and a half seconds. Add the two lines that reach for the crossbow at range and you win with fifteen health left. **The difficulty of this game is the quality of your reasoning**, and you can watch a bad rule lose in real time.
 
-Enable updates for local flow testing:
+The file is re-read while the fight is running. Fix a rule mid-combat, save, and the character changes its mind on the next tick without anything restarting.
 
-```sh
-npm start -- --updates
-```
+## The language
 
-## Architecture
+Borrowed in spirit from StoneScript in Stone Story RPG, which got the central idea right: **the whole script is re-evaluated every tick**, top to bottom. It is not a program that runs once, it is a rule sheet that gets consulted continuously.
 
-### Updates
+That single decision removes the hard parts. There is no program counter to advance, no coroutines, no scheduler, no event queue. It also buys a safety property worth stating plainly: the language has **no loops and no recursion**, so a script cannot hang the game. That is what makes it safe to run a stranger's script every frame, which is what will let strategies travel between players.
 
-Updates are managed by the `App` class in `app.js`, which wraps the updater lifecycle as a ready resource and emits update events for `bin.mjs` to log.
+| Symbol | Meaning |
+|---|---|
+| `?` | if |
+| `:?` | else if |
+| `:` | else |
+| `!` `&` `\|` | not, and, or |
+| `>` | print, with `@hp@` interpolation |
+| indentation | dependency. No braces, nothing to close |
 
-The worker uses `pear-runtime` and the configured `upgrade` link in `package.json`.
+Readable state: `hp`, `maxhp`, `potions`, `ready`, `left`, `right`, `foe.kind`, `foe.hp`, `foe.dist`, `foe.flying`.
+Commands: `equip`, `equipL`, `equipR`, `use`, `wait`.
 
-Per-run disable updates:
+Three deliberate choices in the implementation:
 
-```sh
-npm start -- --no-updates
-```
+- **Commands are collected, then applied.** The last rule that matched wins, which is how a person reads a sheet from top to bottom. Applying them as they are found would let an early rule spend the turn before a later, more specific one got to speak.
+- **An unknown name fails the condition instead of throwing.** One typo does not take the script down mid-fight.
+- **Tabs are rejected rather than guessed at.** A tab that renders as four in your editor and eight in mine silently changes which branch a line belongs to, and the player has no way to see it.
 
-### Workers
+## Why Pear is the mechanic, not the delivery
 
-The main CLI starts `workers/main.js` as a Bare sidecar and communicates with it over framed IPC.
+Content is data, not code. Enemies, items, shops, prices and the town map itself are plain objects. So a new monster is not a new build, it is an over-the-air data update that a running copy picks up from peers.
 
-## Peer-to-Peer Deployments
+That turns the track's hardest requirement into the most interesting thing in the game: **the world can change under a script that is already running**. You solved the mosquito with one rule; a patch lands, a golem walks in with a longer reach, and the rule that used to win now loses. You have to write another one.
 
-Use the [`pear`][pear-docs] CLI to deploy applications.
+## Playing
 
-Set the `upgrade` field in `package.json` to your distribution drive link, then follow the default flow from section 4 onward:
+| Key | Does |
+|---|---|
+| `wasd` or arrows | walk |
+| `e` | enter the door you are standing on |
+| `r` | reload the script by hand |
+| `?` | remind you where the script lives |
+| `q` | quit |
 
-[hello-pear-electron: 4. Build Deployment Directory and onward](https://github.com/holepunchto/hello-pear-electron#4-build-deployment-directory-)
+Doors are the capital letters: `C` your house, `I` the church (free healing), `P` apothecary, `A` weapons, `D` armour, `>` the gate out to the field. Lowercase letters are the painted shop signs and are solid, so you cannot walk through a wall just because someone wrote a name on it.
 
-## Installing Distributables
+Your script lives in `script.txt` next to the binary. It is created on first run.
 
-Once the `pear://<key>` upgrade link is seeding the build deployment folder the CLI standalone binary can be installed peer-to-peer directly onto the system with Pear:
+## Built from
 
-```sh
-npx pear-install pear://<key>
-```
+Started from [`holepunchto/hello-pear-bare`](https://github.com/holepunchto/hello-pear-bare), branch **`main`** (the updater in a Bare worker thread, which is the shape their docs recommend for long-lived TUIs).
 
-## Scripts
+- [`bare-tui`](https://github.com/holepunchto/bare-tui) for the interface, Elm architecture, zero dependencies. The Pear CLI itself runs on it.
+- `pear-runtime` for the peer-to-peer OTA updater.
+- `hyperswarm` for connectivity.
+- Everything else is in this repo.
 
-- `npm start` - run the Bare CLI in dev mode (`bare bin.mjs --no-updates`)
-- `npm test` - run `brittle-bare` tests
-- `npm run lint` - run prettier check and lunte
-- `npm run format` - format repository with prettier
-- `npm run make` - auto-detect host OS/arch and run matching build target
-- `npm run make:darwin-arm64` - build standalone to `out/darwin-arm64`
-- `npm run make:darwin-x64` - build standalone to `out/darwin-x64`
-- `npm run make:linux-arm64` - build standalone to `out/linux-arm64`
-- `npm run make:linux-x64` - build standalone to `out/linux-x64`
-- `npm run make:win32-arm64` - build standalone to `out/win32-arm64`
-- `npm run make:win32-x64` - build standalone to `out/win32-x64`
+## Notes from building it
 
-## Project Structure
+Pear and Bare are not Node, and the gap is not cosmetic. Things that cost real time and are written down here so they cost you less:
 
-- `bin.mjs` - CLI entrypoint and runtime wiring
-- `app.js` - update resource used by the entrypoint
-- `workers/main.js` - Bare worker example
-- `scripts/make.js` - platform/arch build target selector
-- `test/index.js` - brittle-bare tests
+- **`pear run` no longer exists** in Pear 3.2.0. Some templates still reference it.
+- **`pear install` serves binaries, not source.** Without `pear build` first it answers `Not found` for `by-arch/<platform>/app/<name>`.
+- **`bare-build` cross-compiles.** All four platforms above were produced from one Linux machine, verified with `file`: Mach-O for the two Macs, PE32+ for Windows.
+- **Bare has no built-in modules and no `process` global.** `require('fs')` fails; it is `bare-fs`. Same for `tty`, `path`, `process`.
+- **`TextEncoder`, `TextDecoder`, `crypto` and `fetch` are not globals either.**
+- **The `upgrade` field in `package.json` is mandatory.** The app will not start without a real link from `pear touch`.
 
-## Troubleshooting
+## License
 
-- `INVALID_URL: Invalid URL 'pear://<YOUR_KEY_HERE>'` means the placeholder `upgrade` link in `package.json` has not been replaced. Run `pear touch`, then put the generated `pear://...` link in `package.json`.
-- If updates do not trigger, verify `package.json` contains a valid `upgrade` Pear link and that peers are seeding the target drive.
-- If `npm run make` fails on unsupported hosts, run a specific `make:<platform>-<arch>` script or build on a supported host.
-- This template does not implement app-level data persistence; it is a minimal CLI + updater example.
-
-<!-- Reference Links -->
-
-[pear-docs]: https://docs.pears.com
-[hello-pear-worker]: https://github.com/holepunchto/hello-pear-worker
-[pear-runtime]: https://github.com/holepunchto/pear-runtime
-[Bare]: https://github.com/holepunchto/bare
-[nodejs]: https://nodejs.org
-[bare-build]: https://github.com/holepunchto/bare-build
+Apache-2.0.
