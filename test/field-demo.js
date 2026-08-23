@@ -29,7 +29,12 @@ function line(title) {
 const field = new Field({ seed: 7, script: SCRIPT })
 
 line('campo sembrado con semilla 7')
-console.log('tamano', field.width + 'x' + field.height, 'porton en', field.gate.x + ',' + field.gate.y)
+console.log(
+  'tamano',
+  field.width + 'x' + field.height,
+  'porton en',
+  field.gate.x + ',' + field.gate.y
+)
 console.log('errores de script:', field.scriptErrors.length)
 for (let z = 0; z < CONTENT.zones.length; z++) {
   const zone = CONTENT.zones[z]
@@ -64,7 +69,9 @@ while (!field.combat && steps < 600) {
   steps++
   for (const e of events) {
     if (e.type === 'aggro') {
-      console.log('paso ' + steps + ': ' + e.kind + ' te vio a ' + e.dist + ' celdas (zona ' + e.zone + ')')
+      console.log(
+        'paso ' + steps + ': ' + e.kind + ' te vio a ' + e.dist + ' celdas (zona ' + e.zone + ')'
+      )
     }
   }
 }
@@ -75,10 +82,16 @@ line('pelea (la maneja el script, no el jugador)')
 let fightTicks = 0
 let done = null
 while (!done && fightTicks < 4000) {
-  for (const e of field.tick()) if (e.type === 'win' || e.type === 'death' || e.type === 'flee') done = e
+  for (const e of field.tick()) {
+    if (e.type === 'win' || e.type === 'death' || e.type === 'flee') done = e
+  }
   fightTicks++
 }
-console.log('ticks de pelea:', fightTicks, '(' + (fightTicks / 30).toFixed(1) + ' segundos de juego)')
+console.log(
+  'ticks de pelea:',
+  fightTicks,
+  '(' + (fightTicks / 30).toFixed(1) + ' segundos de juego)'
+)
 console.log('resultado:', JSON.stringify(done))
 
 line('log de combate (lo que hizo el script)')
@@ -86,7 +99,13 @@ for (const l of field.lastFight.log) console.log(' t' + String(l.tick).padStart(
 
 line('estado del jugador despues del drop')
 console.log(JSON.stringify(field.snapshot().player))
-console.log('novedades:', field.news.slice(-3).map((n) => n.text).join(' / '))
+console.log(
+  'novedades:',
+  field.news
+    .slice(-3)
+    .map((n) => n.text)
+    .join(' / ')
+)
 
 line('respawn del monstruo')
 const dead = field.foes.find((f) => f.dead)
@@ -127,12 +146,17 @@ for (const f of naked.foes) {
 }
 let end = null
 for (let i = 0; i < 20000 && !end; i++) {
-  if (!naked.combat) naked.walk(Math.sign(target2.f.x - naked.player.x), Math.sign(target2.f.y - naked.player.y))
+  if (!naked.combat) {
+    naked.walk(Math.sign(target2.f.x - naked.player.x), Math.sign(target2.f.y - naked.player.y))
+  }
   for (const e of naked.tick()) if (e.type === 'win' || e.type === 'death') end = e
 }
 console.log('resultado:', JSON.stringify(end))
 console.log('jugador:', JSON.stringify(naked.snapshot().player))
-console.log('revive en el porton:', naked.player.x === naked.gate.x + 1 && naked.player.y === naked.gate.y)
+console.log(
+  'revive en el porton:',
+  naked.player.x === naked.gate.x + 1 && naked.player.y === naked.gate.y
+)
 console.log('novedad:', naked.news[naked.news.length - 1].text)
 
 line('mismo seed, mismo campo')
@@ -149,7 +173,9 @@ const golem = far.foes.find((f) => f.kind === 'golem')
 let end3 = null
 for (let i = 0; i < 40000 && !end3; i++) {
   if (!far.combat) far.walk(Math.sign(golem.x - far.player.x), Math.sign(golem.y - far.player.y))
-  for (const e of far.tick()) if (e.type === 'win' || e.type === 'death' || e.type === 'flee') end3 = e
+  for (const e of far.tick()) {
+    if (e.type === 'win' || e.type === 'death' || e.type === 'flee') end3 = e
+  }
 }
 console.log('contra el golem:', JSON.stringify(end3))
 console.log('jugador:', JSON.stringify(far.snapshot().player))

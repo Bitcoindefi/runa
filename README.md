@@ -1,8 +1,13 @@
 ```
-  ___   _   _  _  _     _   
- | _ \ | | | || \| |   /_\  
- |   / | |_| || .  |  / _ \ 
- |_|_\  \___/ |_|\_| /_/ \_\ 
+/\=======================================================/\
+||                       BARE RPG                        ||
+||     ____    _    ____  _____   ____  ____   ____      ||
+||    | __ )  / \  |  _ \| ____| |  _ \|  _ \ / ___|     ||
+||    |  _ \ / _ \ | |_) |  _|   | |_) | |_) | |  _      ||
+||    | |_) / ___ \|  _ <| |___  |  _ <|  __/| |_| |     ||
+||    |____/_/   \_\_| \_\_____| |_| \_\_|    \____|     ||
+||          T E R M I N A L   A D V E N T U R E          ||
+\/=======================================================\/
 ```
 
 # runa
@@ -10,7 +15,6 @@
 **A terminal RPG where you do not control your character. You write the rules it follows, and the world updates peer to peer while you play.**
 
 Built for the [Aleph Hackathon 2026](https://hacki.crecimiento.build/h/aleph-hackathon-2026), Pears track.
-
 
 ## What it looks like
 
@@ -184,14 +188,14 @@ Borrowed in spirit from StoneScript in Stone Story RPG, which got the central id
 
 That single decision removes the hard parts. There is no program counter to advance, no coroutines, no scheduler, no event queue. It also buys a safety property worth stating plainly: the language has **no loops and no recursion**, so a script cannot hang the game. That is what makes it safe to run a stranger's script every frame, which is what will let strategies travel between players.
 
-| Symbol | Meaning |
-|---|---|
-| `?` | if |
-| `:?` | else if |
-| `:` | else |
-| `!` `&` `\|` | not, and, or |
-| `>` | print, with `@hp@` interpolation |
-| indentation | dependency. No braces, nothing to close |
+| Symbol       | Meaning                                 |
+| ------------ | --------------------------------------- |
+| `?`          | if                                      |
+| `:?`         | else if                                 |
+| `:`          | else                                    |
+| `!` `&` `\|` | not, and, or                            |
+| `>`          | print, with `@hp@` interpolation        |
+| indentation  | dependency. No braces, nothing to close |
 
 Readable state: `hp`, `maxhp`, `potions`, `ready`, `left`, `right`, `foe.kind`, `foe.hp`, `foe.dist`, `foe.flying`.
 Commands: `equip`, `equipL`, `equipR`, `use`, `wait`.
@@ -210,13 +214,13 @@ That turns the track's hardest requirement into the most interesting thing in th
 
 ## Playing
 
-| Key | Does |
-|---|---|
-| `wasd` or arrows | walk |
-| `e` | enter the door you are standing on |
-| `r` | reload the script by hand |
-| `?` | remind you where the script lives |
-| `q` | quit |
+| Key              | Does                               |
+| ---------------- | ---------------------------------- |
+| `wasd` or arrows | walk                               |
+| `e`              | enter the door you are standing on |
+| `r`              | reload the script by hand          |
+| `?`              | remind you where the script lives  |
+| `q`              | quit                               |
 
 Doors are the capital letters: `C` your house, `I` the church (free healing), `P` apothecary, `A` weapons, `D` armour, `>` the gate out to the field. Lowercase letters are the painted shop signs and are solid, so you cannot walk through a wall just because someone wrote a name on it.
 
