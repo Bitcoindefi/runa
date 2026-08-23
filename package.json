@@ -1,6 +1,6 @@
 {
   "name": "runa",
-  "version": "0.0.0-rc.0",
+  "version": "0.1.0",
   "description": "Pear Runtime CLI boilerplate using Bare with OTA updater support.",
   "private": true,
   "bin": "bin.mjs",

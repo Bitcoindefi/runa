@@ -177,30 +177,67 @@ Here the keyboard stops mattering. Distance, reach and the swing cooldown are al
  pelea tu script | r recargar script | q salir
 ```
 
-## Roadmap: an RPG on its way to an MMORPG
+## We are building an MMORPG, and the hard part is already proven
 
-The single-player game is what runs today. The direction it is built for is many players in one world, and the architecture already leans that way.
+This is a single-player RPG today. It is being built into a persistent world with other players in it, and that is not a wish: the two things that normally make an MMO expensive are already working here.
 
-- **Now.** One town, one field, a shop economy, levels, and a scripting language for combat. Content is data.
-- **Next: strategies travel.** The language has no loops and no recursion, so a script cannot hang the game. That is not a footnote, it is the property that makes it safe to run a stranger's rules every frame. Sharing a strategy over Hyperswarm is the natural next step.
-- **Next: the world updates while you play.** Content is already data, so a new monster is a release rather than a rebuild. The updater is wired to report into the game log as "el mundo cambio". **Not yet demonstrated end to end, see Honest status.**
-- **Then: shared world.** Hyperswarm gives peer discovery without a server. A town where other players are visible, then trade, then fights that two people watch at once. No server means no hosting bill, which is the only reason a hackathon project could keep running.
-- **The far end.** An MMORPG where the world's content and the players' strategies both travel peer to peer, and nobody pays for a server.
+**A server is what usually kills a project like this.** Someone has to pay for it, keep it up, and shut it down when the money runs out. There is no server here. When you run `pear install`, 98 MB moves from another player's machine to yours, with no host in the middle. When a new release ships, a running copy pulls it from its peers on its own. Both of those are measured above, not planned.
+
+So the question stops being "who pays for the world" and becomes "who is right about it".
+
+| Piece | State |
+|---|---|
+| Find other players with no server | **Working.** It is what `pear install` does: announce on the swarm, get found by key. |
+| Move data between players | **Working.** 98 MB peer to peer, in seconds. |
+| Ship new content to a live world | **Working.** A running copy went `0.0.0-rc.0` to `0.1.0` by itself. |
+| Share the state of the world | Next. `Hyperbee` for the log, `Autobase` for many writers. |
+| Decide who is right when two players disagree | The real work, and the honest hard part. |
+
+**What lands next, in order.** Strategies travel first: the language has no loops and no recursion, so a script cannot hang the game, and that is exactly the property that makes it safe to run a stranger's rules at 15 ticks a second. Sharing a rule sheet over Hyperswarm is a small change with a large consequence, because the moment one player can send another a strategy, the game has a community instead of an audience.
+
+Then presence: seeing another `@` walk across your town. Then trade. Then a fight two people watch at once.
+
+The far end is a world where the content and the players' strategies both travel peer to peer, nobody pays a hosting bill, and the thing keeps running as long as one person still has it installed. That last part is the reason to build it this way: **a peer-to-peer MMO cannot be shut down by its author running out of money**, which is how almost every small MMO has ever died.
+
+
+## Over-the-air updates work, and the trap that hides it
+
+An installed copy picks up a new release from its peers while it is running. Measured, not asserted:
+
+| | Before | After, with nothing touched |
+|---|---|---|
+| Version the binary reports | `runa v0.0.0-rc.0` | `runa v0.1.0` |
+| Storage | 572 KB | 95 MB |
+
+Nobody downloaded anything by hand. The running copy found the new release on the swarm, pulled 95 MB from peers and applied it.
+
+**The trap, because it cost hours and the boilerplate walks you straight into it.** The updater does not compare drive length. It compares the semver in `package.json`, at `pear-runtime-updater/index.js:138`:
+
+```js
+const current = semver.Version.parse(this.version)      // the installed package.json
+const remote  = semver.Version.parse(manifest.version)  // the published one
+
+if (!remote || current.compare(remote) >= 0) {
+  this.checkout = null   // decides there is nothing new
+}
+```
+
+`hello-pear-bare` ships `"version": "0.0.0-rc.0"` and never tells you to change it. So you stage new content, the drive length climbs, the seeder serves it, the swarm connects, and the updater sits there silently deciding nothing happened, because `0.0.0-rc.0` compares equal to `0.0.0-rc.0` and equal satisfies `>= 0`.
+
+**Publishing new content is not enough. Bump the version in `package.json` before you stage,** or the update will never fire and every other part of the pipeline will look healthy while it does not.
 
 ## Honest status
 
-What is verified, and what is not, because a README that overstates is worse than one that admits a gap.
+Verified by hand, against a real PTY rather than CI:
 
-**Verified by hand:**
-
-- `pear install` from a clean machine, then the game boots. Checked repeatedly against a real PTY, not just CI.
-- Walking, collision, entering all six doors, buying, the church healing, walking out to the field, a fight resolving, gold and experience landing, levelling up.
+- `pear install` from a clean machine, then the game boots.
+- Walking, collision, all six doors, buying, the church healing, the field, a fight resolving, gold and experience landing, levelling up.
 - The measured balance: the naive script dies in 3.5 seconds, the fixed one wins with 15 health left.
 - Cross-compilation to four platforms, checked with `file`.
+- An OTA update landing on a running installed copy, above.
 
-**Not verified:**
+CI is green too, but CI never launched the app to see what it printed. For most of this weekend the binary installed fine and then ran the boilerplate's `Hello from worker` instead of the game, and every check stayed green through all of it. Launching the thing in a terminal is the only test that would have caught that.
 
-- **The OTA update landing.** The updater starts and reports `Updates: enabled`, and a newer version is staged, but a running installed copy did not pick it up within 70 seconds and its storage never grew. It is wired, it is not proven. Anything you read elsewhere claiming this works is ahead of the evidence.
 
 ## The idea
 
