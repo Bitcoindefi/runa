@@ -185,13 +185,13 @@ This is a single-player RPG today. It is being built into a persistent world wit
 
 So the question stops being "who pays for the world" and becomes "who is right about it".
 
-| Piece | State |
-|---|---|
-| Find other players with no server | **Working.** It is what `pear install` does: announce on the swarm, get found by key. |
-| Move data between players | **Working.** 98 MB peer to peer, in seconds. |
-| Ship new content to a live world | **Working.** A running copy went `0.0.0-rc.0` to `0.1.0` by itself. |
-| Share the state of the world | Next. `Hyperbee` for the log, `Autobase` for many writers. |
-| Decide who is right when two players disagree | The real work, and the honest hard part. |
+| Piece                                         | State                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Find other players with no server             | **Working.** It is what `pear install` does: announce on the swarm, get found by key. |
+| Move data between players                     | **Working.** 98 MB peer to peer, in seconds.                                          |
+| Ship new content to a live world              | **Working.** A running copy went `0.0.0-rc.0` to `0.1.0` by itself.                   |
+| Share the state of the world                  | Next. `Hyperbee` for the log, `Autobase` for many writers.                            |
+| Decide who is right when two players disagree | The real work, and the honest hard part.                                              |
 
 **What lands next, in order.** Strategies travel first: the language has no loops and no recursion, so a script cannot hang the game, and that is exactly the property that makes it safe to run a stranger's rules at 15 ticks a second. Sharing a rule sheet over Hyperswarm is a small change with a large consequence, because the moment one player can send another a strategy, the game has a community instead of an audience.
 
@@ -199,26 +199,25 @@ Then presence: seeing another `@` walk across your town. Then trade. Then a figh
 
 The far end is a world where the content and the players' strategies both travel peer to peer, nobody pays a hosting bill, and the thing keeps running as long as one person still has it installed. That last part is the reason to build it this way: **a peer-to-peer MMO cannot be shut down by its author running out of money**, which is how almost every small MMO has ever died.
 
-
 ## Over-the-air updates work, and the trap that hides it
 
 An installed copy picks up a new release from its peers while it is running. Measured, not asserted:
 
-| | Before | After, with nothing touched |
-|---|---|---|
-| Version the binary reports | `runa v0.0.0-rc.0` | `runa v0.1.0` |
-| Storage | 572 KB | 95 MB |
+|                            | Before             | After, with nothing touched |
+| -------------------------- | ------------------ | --------------------------- |
+| Version the binary reports | `runa v0.0.0-rc.0` | `runa v0.1.0`               |
+| Storage                    | 572 KB             | 95 MB                       |
 
 Nobody downloaded anything by hand. The running copy found the new release on the swarm, pulled 95 MB from peers and applied it.
 
 **The trap, because it cost hours and the boilerplate walks you straight into it.** The updater does not compare drive length. It compares the semver in `package.json`, at `pear-runtime-updater/index.js:138`:
 
 ```js
-const current = semver.Version.parse(this.version)      // the installed package.json
-const remote  = semver.Version.parse(manifest.version)  // the published one
+const current = semver.Version.parse(this.version) // the installed package.json
+const remote = semver.Version.parse(manifest.version) // the published one
 
 if (!remote || current.compare(remote) >= 0) {
-  this.checkout = null   // decides there is nothing new
+  this.checkout = null // decides there is nothing new
 }
 ```
 
@@ -237,7 +236,6 @@ Verified by hand, against a real PTY rather than CI:
 - An OTA update landing on a running installed copy, above.
 
 CI is green too, but CI never launched the app to see what it printed. For most of this weekend the binary installed fine and then ran the boilerplate's `Hello from worker` instead of the game, and every check stayed green through all of it. Launching the thing in a terminal is the only test that would have caught that.
-
 
 ## The idea
 
