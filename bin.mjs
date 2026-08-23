@@ -56,8 +56,49 @@ process.on('SIGTERM', () => app.exit(143))
 
 try {
   await app.ready()
-  console.log('\nCLI ready. Press Ctrl+C to stop.\n')
 } catch (err) {
   console.error('[app:error]', err)
   await app.close().finally(() => Bare.exit(1))
+}
+
+// The updater is up; hand the terminal to the game.
+//
+// This has to happen after app.ready() and not instead of it: the OTA worker is
+// what makes an installed copy pick up a new release, and starting the UI first
+// would take over the screen before the updater ever ran. The template stops at
+// "CLI ready" because it is a boilerplate with no app to start.
+const { Program } = await import('bare-tui')
+const { Runa } = await import('./lib/game.js')
+
+const runa = new Runa()
+const program = new Program(runa)
+
+// The game owns the alternate screen from here, so nothing may write to stdout
+// any more. The updater's news is not thrown away though: it is routed into the
+// game's log, because an update landing is the premise of this game rather than
+// maintenance noise.
+app.removeAllListeners('message')
+app.removeAllListeners('updating')
+app.removeAllListeners('updating-delta')
+app.removeAllListeners('updated')
+app.removeAllListeners('update-applied')
+app.removeAllListeners('error')
+
+const news = (text) => {
+  try {
+    if (typeof runa.world === 'function') runa.world(text)
+  } catch {
+    // A broken log line must never take the game down with it.
+  }
+}
+
+app.on('updating', () => news('algo se mueve afuera...'))
+app.on('updated', () => news('el mundo cambio. reinicia para verlo.'))
+app.on('update-applied', () => news('el mundo cambio. reinicia para verlo.'))
+app.on('error', () => {})
+
+try {
+  await program.run()
+} finally {
+  await app.close().catch(() => {})
 }
