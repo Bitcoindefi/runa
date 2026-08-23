@@ -19,6 +19,7 @@
     "make:win32-x64": "bare-build --name runa --standalone --host win32-x64 --out ./out/win32-x64 bin.mjs"
   },
   "dependencies": {
+    "bare-crypto": "^1.15.3",
     "bare-os": "^3.9.0",
     "bare-path": "^3.0.0",
     "bare-process": "^4.5.0",

@@ -1,4 +1,4 @@
-/** @typedef {import('pear-interface')} */ /* global Pear, Bare */
+/** @typedef {import('pear-interface')} */ /* global Pear */
 'use strict'
 
 /**
@@ -11,13 +11,6 @@
  *
  * bare-tui is Elm-shaped, so everything that happens arrives at `update` as a
  * message and `view` only ever renders. Nothing here does IO inside `view`.
- *
- * A third layer sits on top of walking and is optional in the strongest sense:
- * presence. Other people show up on the same map, they are drawn, and that is
- * all. Nothing about them is saved and nothing about them is agreed on, so
- * there is no state to reconcile and no failure worth recovering from. If the
- * network is missing or breaks, presence turns itself off and the game is the
- * single player game it already was.
  */
 
 const { quit, every, key } = require('bare-tui')
@@ -31,21 +24,6 @@ const { parse } = require('./script.js')
 const portraits = require('./portraits.js')
 const { ARENA } = require('./world.js')
 const CONTENT = require('./content.js')
-
-/**
- * The swarm, if there is one.
- *
- * Required behind a guard because playing alone is the common case, not the
- * degraded one: net.js may not be installed, and it may fail to load when a
- * dependency is missing. Either way this require is the only place that has to
- * know, and everything below is written to work with `Presence` being null.
- */
-let Presence = null
-try {
-  Presence = require('./net.js').Presence || null
-} catch {
-  Presence = null
-}
 
 /** Simulation rate. Rendering follows the same clock; at this size it is cheap. */
 const TICK_MS = 1000 / 15
@@ -66,106 +44,10 @@ const DEFAULT_SCRIPT = [
   ''
 ].join('\n')
 
-/** Shown to other players when nobody picked a name. */
-const DEFAULT_NAME = 'viajero'
-
-/**
- * The map announced while the player is off in the field.
- *
- * Presence only ever talks about a map and a position, so leaving town has to
- * be said in that language: announce a map nobody draws and you are off every
- * other player's screen without inventing a message for it.
- */
-const AWAY_MAP = 'field'
-
-/** How many arrivals may pile up between two ticks before the oldest drop. */
-const QUEUE_MAX = 20
-
-/** Drawn for another player when they do not offer a glyph of their own. */
-const OTHER_GLYPH = 'o'
-
-/**
- * Cut a name down to something a pane can draw.
- *
- * Names come off the wire, which makes them the one string in this file that
- * is not ours. The screen is ASCII only, so anything outside it is dropped
- * rather than replaced: a name of question marks is worse than a short name.
- *
- * @param {string} raw
- * @returns {string}
- */
-function cleanName(raw) {
-  let out = ''
-  for (const ch of String(raw === null || raw === undefined ? '' : raw)) {
-    const cp = ch.codePointAt(0)
-    if (cp >= 32 && cp <= 126) out += ch
-    if (out.length >= 16) break
-  }
-  out = out.trim()
-  return out || DEFAULT_NAME
-}
-
-/**
- * One printable character for another player.
- *
- * Space is excluded on purpose: an actor drawn as a space is an actor that is
- * not drawn at all, and a peer should not be able to make itself invisible.
- *
- * @param {string} [raw]
- * @returns {string}
- */
-function cleanGlyph(raw) {
-  const ch = String(raw === null || raw === undefined ? '' : raw)[0]
-  if (!ch) return OTHER_GLYPH
-  const cp = ch.codePointAt(0)
-  return cp >= 33 && cp <= 126 ? ch : OTHER_GLYPH
-}
-
-/**
- * Read the command line, which under Bare hangs off the Bare global because
- * there is no process to ask.
- *
- * @returns {{ name: string|null, solo: boolean }}
- */
-function argFlags() {
-  let argv = []
-  try {
-    argv = (typeof Bare !== 'undefined' && Bare.argv) || []
-  } catch {
-    argv = []
-  }
-
-  let name = null
-  let solo = false
-  for (let i = 0; i < argv.length; i++) {
-    const a = String(argv[i])
-    if (a === '--solo' || a === '--no-presence') solo = true
-    else if (a === '--name' && i + 1 < argv.length) name = String(argv[++i])
-    else if (a.slice(0, 7) === '--name=') name = a.slice(7)
-  }
-  return { name, solo }
-}
-
-/**
- * A default nobody has to type, with enough tail on it that two people who
- * never picked a name are still two people in the log.
- *
- * @returns {string}
- */
-function anonName() {
-  const tail = Math.floor(Math.random() * 46656).toString(36)
-  return DEFAULT_NAME + '-' + ('000' + tail).slice(-3)
-}
-
 const tick = every(TICK_MS, () => ({ type: 'tick' }))
 
 class Runa {
-  /**
-   * @param {object} [opts]
-   * @param {string} [opts.name] - what other players see
-   * @param {boolean} [opts.presence] - false plays alone no matter what
-   */
-  constructor(opts = {}) {
+  constructor() {
     this.width = 80
     this.height = 24
 
@@ -183,26 +65,6 @@ class Runa {
     this.scriptSource = ''
     this.scriptMtime = 0
     this.scriptErrors = []
-
-    // Presence is built here and started in init(). A constructor that opens a
-    // socket is a class that cannot be built in a test, and every test in this
-    // repo builds a Runa.
-    const args = argFlags()
-    this.name = cleanName(opts.name || args.name || anonName())
-    this.online = opts.presence !== false && args.solo === false && Presence !== null
-    this.presence = null
-    this.presenceStarted = false
-    this.arrivals = []
-
-    if (this.online) {
-      try {
-        this.presence = new Presence({ name: this.name })
-        this.presence.on('join', (who) => this.noteLater('llego ' + cleanName(who)))
-        this.presence.on('leave', (who) => this.noteLater('se fue ' + cleanName(who)))
-      } catch {
-        this.dropPresence()
-      }
-    }
 
     this.loadScript(true)
   }
@@ -276,130 +138,6 @@ class Runa {
     if (this.log.length > 40) this.log.shift()
   }
 
-  // -------------------------------------------------------------------------
-
-  /**
-   * Park a line from the swarm until the next tick.
-   *
-   * Join and leave fire whenever the network feels like it, which includes the
-   * middle of a render. `view` has to stay pure, so nothing arriving from
-   * outside is allowed to touch the log on the spot: it waits in a queue that
-   * the tick drains, where every other mutation in this class already happens.
-   *
-   * @param {string} text
-   */
-  noteLater(text) {
-    this.arrivals.push(text)
-    // Ten people joining at once must not grow a queue without bound.
-    if (this.arrivals.length > QUEUE_MAX) this.arrivals.shift()
-  }
-
-  /** Move whatever the swarm parked into the log. Called from the tick only. */
-  drainArrivals() {
-    if (this.arrivals.length === 0) return
-    const queued = this.arrivals
-    this.arrivals = []
-    for (const text of queued) this.say(text)
-  }
-
-  /**
-   * Join the swarm. Called from init(), never from the constructor.
-   *
-   * @returns {boolean} whether presence came up
-   */
-  startPresence() {
-    if (!this.presence || this.presenceStarted) return this.presenceStarted
-    try {
-      this.presence.start()
-      this.presenceStarted = true
-      this.announce()
-      this.say('sos ' + this.name + ', mirando quien mas anda por el pueblo')
-      return true
-    } catch {
-      this.dropPresence()
-      this.say('sin red, caminas solo')
-      return false
-    }
-  }
-
-  /** Leave the swarm. Safe to call on a game that never had one. */
-  stopPresence() {
-    const p = this.presence
-    this.dropPresence()
-    if (!p) return
-    try {
-      p.stop()
-    } catch {
-      // Leaving is best effort. The process is on its way out either way.
-    }
-  }
-
-  /**
-   * Forget the network and go back to being a single player game.
-   *
-   * There is nothing to salvage when presence breaks, because presence never
-   * held anything: no score, no inventory, no position anyone else needs. So
-   * it is dropped whole rather than retried.
-   */
-  dropPresence() {
-    this.presence = null
-    this.presenceStarted = false
-    this.online = false
-    this.arrivals = []
-  }
-
-  /**
-   * Say where we are, if anyone is listening.
-   *
-   * Sent after something moves the walker rather than on every tick: the
-   * position only changes on a key, and repeating it fifteen times a second is
-   * traffic that carries no news.
-   */
-  announce() {
-    if (!this.presence || !this.presenceStarted) return
-    // Walking out of town has to take the player off everyone else's map, and
-    // the only thing presence knows about is the map you are standing on.
-    const mapId = this.field ? AWAY_MAP : this.walker.mapId
-    try {
-      this.presence.update(mapId, this.walker.x, this.walker.y)
-    } catch {
-      this.dropPresence()
-      this.say('se corto la red, seguis solo')
-    }
-  }
-
-  /**
-   * The other players standing on the map about to be drawn.
-   *
-   * Called from `view`, so it reads and does nothing else: it does not start,
-   * stop or repair anything, and a bad read is an empty town for one frame,
-   * which is what a single player sees anyway. Everything is checked again
-   * here because these coordinates came off the wire and land in a pane.
-   *
-   * @param {string} mapId
-   * @returns {Array<{x: number, y: number, glyph: string, name: string}>}
-   */
-  others(mapId) {
-    if (!this.presence) return []
-
-    let list = null
-    try {
-      list = this.presence.others(mapId)
-    } catch {
-      return []
-    }
-
-    const out = []
-    for (const o of list || []) {
-      if (!o) continue
-      const x = Math.round(Number(o.x))
-      const y = Math.round(Number(o.y))
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-      out.push({ x, y, glyph: cleanGlyph(o.glyph), name: cleanName(o.name) })
-    }
-    return out
-  }
-
   /**
    * Handle the field's structured events. These are control signals, not text:
    * the prose lives in the field's own news feed and is pulled separately, so
@@ -413,7 +151,6 @@ class Runa {
         case 'town':
           this.field = null
           this.walker.travel('city')
-          this.announce()
           this.say('volves a la ciudad')
           break
         case 'busy':
@@ -448,7 +185,6 @@ class Runa {
 
   init() {
     this.say('bienvenido. las flechas caminan, e entra, s abre el script.')
-    this.startPresence()
     return tick
   }
 
@@ -472,10 +208,6 @@ class Runa {
   }
 
   onTick() {
-    // Whatever the swarm said since the last tick becomes log now, on the
-    // update side of the loop, where writing to the log is allowed.
-    this.drainArrivals()
-
     // The strategy is re-read while a fight is running, which is the point: the
     // player fixes a rule and sees it take effect without restarting anything.
     this.loadScript(false)
@@ -512,7 +244,6 @@ class Runa {
           this.say('caiste. te despertas en la iglesia.')
           this.walker.travel('city')
           this.field = null
-          this.announce()
         }
       }
     }
@@ -523,10 +254,7 @@ class Runa {
    * @returns {object|null} a Cmd
    */
   onKey(msg) {
-    if (key.matches(msg, 'q', 'ctrl+c')) {
-      this.stopPresence()
-      return quit
-    }
+    if (key.matches(msg, 'q', 'ctrl+c')) return quit
     if (this.title) {
       this.title = false
       return null
@@ -573,9 +301,7 @@ class Runa {
       this.drainNews()
       return
     }
-    // Only a step that landed is news. Walking into a wall changes nothing
-    // anyone else can see.
-    if (this.walker.move(dx, dy).moved) this.announce()
+    this.walker.move(dx, dy)
   }
 
   /** Act on whatever the player is standing on. */
@@ -597,7 +323,6 @@ class Runa {
         } else {
           this.walker.travel(action.to)
         }
-        this.announce()
         break
 
       case 'shop': {
@@ -772,13 +497,10 @@ class Runa {
       cellW: 1,
       map: {
         tiles: city ? city.rows : [],
-        hero: { x: this.walker.x, y: this.walker.y, glyph: '@' },
-        // mapPane already knows how to draw actors and paints the hero last,
-        // so nobody can stand on top of the player. Nothing to add here.
-        actors: this.others(this.walker.mapId)
+        hero: { x: this.walker.x, y: this.walker.y, glyph: '@' }
       }
     })
   }
 }
 
-module.exports = { Runa, TICK_MS, SCRIPT_PATH, DEFAULT_SCRIPT, DEFAULT_NAME }
+module.exports = { Runa, TICK_MS, SCRIPT_PATH, DEFAULT_SCRIPT }
