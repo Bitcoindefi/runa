@@ -5,22 +5,26 @@
 Built for the [Aleph Hackathon 2026](https://hacki.crecimiento.build/h/aleph-hackathon-2026), Pears track.
 
 ```
-  ____  _   _ _   _    _
- |  _ \| | | | \ | |  / \
- | |_) | | | |  \| | / _ \
- |  _ <| |_| | |\  |/ ___ \
- |_| \_\\___/|_| \_/_/   \_\
-      RUNA  //  UN RPG HECHO EN BARE
+                                  ____  _   _ _   _    _
+                                |  _ \| | | | \ | |  / \
+                                | |_) | | | |  \| | / _ \
+                               |  _ <| |_| | |\  |/ ___ \
+                               |_| \_\\___/|_| \_/_/   \_\
+                                RUNA  //  UN RPG HECHO EN BARE
 
-       |>>>                              |>>>
-   _  _|_  _                        _  _|_  _
-  |;|_|;|_|;|        .-^-.         |;|_|;|_|;|
-  \\.    .  /         |+ +|         \\.    .  /
-   ||:  .  |          |_-_|          ||:  .  |
-   ||:     |        __/| |\__        ||:     |
- __||______|_______/__/| |\__\_______||______|__
-      /  \            /_| |_\            /  \
-                     /_/   \_\
+                           |>>>                              |>>>
+                       _  _|_  _                        _  _|_  _
+                      |;|_|;|_|;|        .-^-.         |;|_|;|_|;|
+                      \\.    .  /         |+ +|         \\.    .  /
+                       ||:  .  |          |_-_|          ||:  .  |
+                       ||:     |        __/| |\__        ||:     |
+                     __||______|_______/__/| |\__\_______||______|__
+                          /  \            /_| |_\            /  \
+                                         /_/   \_\
+
+              no controlas a tu personaje. escribis las reglas que sigue.
+
+                              cualquier tecla para empezar
 ```
 
 ## What this does with Pear and Bare
@@ -45,23 +49,24 @@ runa
 
 ## What it looks like
 
-Every screen below is captured straight out of the game's own `view()`, not drawn by hand.
+Every screen below comes straight out of the game's own `view()`. Nothing here was drawn by hand for the README.
 
 ### The town
 
-You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `>` the gate out to the field.
+You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `P` the apothecary, `D` the armoury, `T` the tavern, and `>` the gate out to the field. Lowercase letters are the painted shop signs and they are solid, so you cannot walk through a wall just because somebody wrote a name on it.
 
 ```
  runa
 +- la ciudad ---------------------------------------------+ +- ficha ------------------+
 |                                                         | |vos                   nv 1|
-|+--------------------------------------------------------| |hp [###############] 20/20|
-||........................................................| |xp [-----------------] 0/1|
-||..+----------+.....+--------------+.....+------------+..| |oro 30          pociones 2|
-||..|^^^^^^^^^^|.....|^^^^^^^^^^^^^^|.....|^^^^^^^^^^^^|..| |izq -                     |
-||..|:::casa:::|.....|:::iglesia::::|.....|::pociones::|..| |der -                     |
-||..+----C-----+.....+------I-------+.....+-----P------+..| +--------------------------+
-||.......@................................................| +- log --------------------+
+|                                                         | |hp [###############] 20/20|
+|+--------------------------------------------------------| |xp [-----------------] 0/1|
+||........................................................| |oro 30          pociones 2|
+||..+----------+.....+--------------+.....+------------+..| |izq -                     |
+||..|^^^^^^^^^^|.....|^^^^^^^^^^^^^^|.....|^^^^^^^^^^^^|..| |der -                     |
+||..|:::casa:::|.....|:::iglesia::::|.....|::pociones::|..| +--------------------------+
+||..+----C-----+.....+------I-------+.....+-----P------+..| +- log --------------------+
+||.......@................................................| |                          |
 ||...............;.;.;.;.;.;.;.;.;.;.;....................| |                          |
 ||........................................................| |                          |
 ||.......+------A-----+........+------D-------+...........| |                          |
@@ -74,13 +79,14 @@ You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` 
 ||...,,,,,,,,,,,,,,.......................................| |                          |
 |+----------------------------->--------------------------| |                          |
 |                                                         | |                          |
+|                                                         | |                          |
 +---------------------------------------------------------+ +--------------------------+
  wasd o flechas | e entrar | ? script | q salir
 ```
 
-### The smithy
+### A shop
 
-The two weapons are deliberately far apart. A sword twenty percent better than a crossbow would make a wrong rule cost you a slightly longer fight, and you would never notice your script was wrong.
+The two weapons are deliberately far apart. A sword twenty percent better than a crossbow would make a wrong rule cost you a slightly longer fight, and you would never notice your script was wrong. The gap has to be wide enough that a bad rule loses on screen.
 
 ```
  runa
@@ -113,40 +119,75 @@ The two weapons are deliberately far apart. A sword twenty percent better than a
 
 ### The field
 
-Monsters wander on their own clock. Walking is free, in the Pokemon sense: a step is not a turn.
+Monsters wander on their own clock. Walking is free, in the Pokemon sense: a step is not a turn, and the world ticks 15 times a second whether you move or not.
 
 ```
  runa
-+- combate -----------------------------------------------+ +- ficha ------------------+
++- un encuentro ------------------------------------------+ +- ficha ------------------+
 |                                                         | |vos                   nv 1|
 |                                                         | |hp [###############] 20/20|
 |                                                         | |xp [-----------------] 0/1|
 |                                                         | |oro 140         pociones 2|
 |                                                         | |izq -                     |
-|~ mosquito                                          13/13| |der -                     |
-|[#######################################################]| +--------------------------+
-|                                                         | +- log --------------------+
-|@                                                      ~ | |                          |
-|+-------------------------------------------------------+| |                          |
-| .                                                  lejos| |                          |
+|                                                         | |der -                     |
+|                                                         | +--------------------------+
+|                     \\|//      \\|//                    | +- log --------------------+
+|                     \\|/        \\|/                    | |                          |
+|                 >====(  o    o  )====                   | |                          |
+|                        /|  ||  |\                       | |                          |
 |                                                         | |                          |
-|@ vos                                               20/20| |                          |
-|[#######################################################]| |                          |
+|                      - mosquito -                       | |                          |
+|              algo zumba y se acerca rapido              | |                          |
 |                                                         | |                          |
-|golpe [############] listo                        dist 39| |                          |
-|alcance 1                                                | |                          |
+|                                                         | |                          |
+|                                                         | |                          |
 |                                                         | |                          |
 |                                                         | |                          |
 |                                                         | |entras a herreria         |
 |                                                         | |salis de la ciudad        |
 |                                                         | |un mosquito te vio        |
 +---------------------------------------------------------+ +--------------------------+
- pelea tu script | r recargar script | q salir
+ tu script ya esta peleando
 ```
 
-### A fight
+### Meeting something
 
-Here the keyboard stops mattering. Distance, reach and the swing cooldown are all on screen, because those are exactly the numbers your rules read.
+A creature used to start existing as one character on a line. That is enough to fight it and not enough to remember it, so it gets a card of its own for about two seconds.
+
+It is not a pause. The fight is already running underneath, and your rules are already working; this is a look at what they are working against. A monster that arrives over the air with no portrait falls back to a question mark, which reads as "something new" rather than as a bug.
+
+```
+ runa
++- un encuentro ------------------------------------------+ +- ficha ------------------+
+|                                                         | |vos                   nv 1|
+|                                                         | |hp [###############] 20/20|
+|                                                         | |xp [-----------------] 0/1|
+|                                                         | |oro 140         pociones 2|
+|                                                         | |izq -                     |
+|                                                         | |der -                     |
+|                                                         | +--------------------------+
+|                     \\|//      \\|//                    | +- log --------------------+
+|                     \\|/        \\|/                    | |                          |
+|                 >====(  o    o  )====                   | |                          |
+|                        /|  ||  |\                       | |                          |
+|                                                         | |                          |
+|                      - mosquito -                       | |                          |
+|              algo zumba y se acerca rapido              | |                          |
+|                                                         | |                          |
+|                                                         | |                          |
+|                                                         | |                          |
+|                                                         | |                          |
+|                                                         | |                          |
+|                                                         | |entras a herreria         |
+|                                                         | |salis de la ciudad        |
+|                                                         | |un mosquito te vio        |
++---------------------------------------------------------+ +--------------------------+
+ tu script ya esta peleando
+```
+
+### The fight, which you do not play
+
+Here the keyboard stops mattering. What fights is the rule sheet you wrote.
 
 ```
  runa
@@ -159,14 +200,14 @@ Here the keyboard stops mattering. Distance, reach and the swing cooldown are al
 |~ mosquito                                          13/13| |der -                     |
 |[#######################################################]| +--------------------------+
 |                                                         | +- log --------------------+
-|           @                             ~               | |                          |
+|             @                        ~                  | |                          |
 |+-------------------------------------------------------+| |                          |
-|            ....................                    lejos| |                          |
+|              ....................                  lejos| |                          |
 |                                                         | |                          |
 |@ vos                                               20/20| |                          |
 |[#######################################################]| |                          |
 |                                                         | |                          |
-|golpe [############] listo                        dist 21| |                          |
+|golpe [############] listo                        dist 18| |                          |
 |alcance 14                                               | |                          |
 |                                                         | |                          |
 |                                                         | |                          |
@@ -176,6 +217,19 @@ Here the keyboard stops mattering. Distance, reach and the swing cooldown are al
 +---------------------------------------------------------+ +--------------------------+
  pelea tu script | r recargar script | q salir
 ```
+
+**Everything on that screen is a number your rules can read.** That is the whole design: the interface shows exactly the state the language exposes, so watching a fight and debugging a rule are the same activity.
+
+| On screen                    | In your rules  | What it decides                 |
+| ---------------------------- | -------------- | ------------------------------- |
+| The two fighters on the line | `foe.dist`     | Whether you can reach it at all |
+| The dotted stretch           | `reach`        | How far your weapon hits from   |
+| `golpe [####] listo`         | `ready`        | Whether you can swing this tick |
+| The health bars              | `hp`, `foe.hp` | When to drink, when to run      |
+
+The hero holds the range its weapon wants: it closes when too far and backs away when the foe gets inside it. That retreat is what makes reach mean anything. Without it a long weapon and a short one produce the same fight, and your choice of item never shows up on screen.
+
+Sword against something fast and you die in three and a half seconds. Two lines that reach for the crossbow at range and you win with fifteen health left. Both numbers are measured, not estimated.
 
 ## We are building an MMORPG, and the hard part is already proven
 
