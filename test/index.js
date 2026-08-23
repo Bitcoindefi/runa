@@ -3,7 +3,6 @@ const { style } = require('bare-tui')
 const { Runa } = require('../lib/game.js')
 const { MAPS, TILES } = require('../lib/map.js')
 const { reward, xpToLeave } = require('../lib/shop.js')
-const CONTENT = require('../lib/content.js')
 const render = require('../lib/render.js')
 
 require('./sage.test.js')
