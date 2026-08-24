@@ -70,7 +70,11 @@ Real screenshots of the game running, not text pasted into a code block.
 
 ### The town
 
-You walk this yourself, with WASD or the arrows. Capital letters are doors: `C` your house, `I` the church, `A` the smithy, `P` the apothecary, `D` the armoury, and `>` the gate out to the field. Lowercase letters are the painted shop signs, and they are solid: you cannot walk through a wall just because somebody wrote a name on it.
+You walk this yourself, with WASD or the arrows. Capital letters are doors you stand on and open with `e`: `C` your house, `I` the church, `A` the smithy, `P` the apothecary, `D` the armoury. Lowercase letters are the painted shop signs, and they are solid: you cannot walk through a wall just because somebody wrote a name on it.
+
+**The way out is the gatehouse at the bottom.** It used to be a single `>` in the wall, and nobody could find it, which is fair: one character in a sixty-wide wall does not read as an exit, it reads as a flaw in the wall. It is five tiles now, flanked by two towers, with a cobbled path running down to it. All three of those do work. A wide opening reads as an opening, a gap between two solid masses reads as a door, and the eye follows paths. The city wall is drawn in `#` rather than the `+-|` the buildings use, because the panel already draws a frame in those characters and two concentric frames read as a box inside a box instead of as a wall.
+
+Your character is written down between sessions, so the gold you earn and the gear you buy are still there tomorrow. And the shops matter: a rule that reaches for a crossbow you have not bought does nothing, and says so.
 
 ![The town](docs/screens/ciudad.png)
 
