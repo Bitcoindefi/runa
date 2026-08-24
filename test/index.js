@@ -425,3 +425,100 @@ test('a save that cannot be read never costs you the character silently', (t) =>
     fs.unlinkSync(save + '.roto')
   } catch {}
 })
+
+test('the way out of town is a gate you can find', (t) => {
+  const city = MAPS.city
+  const gates = []
+  for (let y = 0; y < city.rows.length; y++) {
+    for (let x = 0; x < city.rows[y].length; x++) {
+      if (city.rows[y][x] === '>') gates.push({ x, y })
+    }
+  }
+
+  // A single character in a sixty-wide wall does not read as an exit, it reads
+  // as a flaw in the wall, and players could not find it. The opening is five
+  // tiles now, flanked by towers, with a cobbled path leading to it.
+  t.ok(gates.length >= 3, 'the opening is wide enough to read as an opening')
+
+  const ys = gates.map((g) => g.y)
+  t.ok(
+    ys.every((y) => y === ys[0]),
+    'and it is one gate, not several exits in different walls'
+  )
+  const xs = gates.map((g) => g.x).sort((a, b) => a - b)
+  t.ok(
+    xs.every((x, i) => i === 0 || x === xs[i - 1] + 1),
+    'the opening is continuous, with no wall left standing inside it'
+  )
+
+  // Every tile of it has to actually travel, or the wide gate is a wide lie.
+  for (const g of gates) {
+    const tile = TILES[city.rows[g.y][g.x]]
+    t.is(tile.enter.kind, 'travel', 'every tile of the gate leads out')
+    t.is(tile.solid, false)
+  }
+
+  // And you have to be able to walk to it from where the game drops you.
+  const walker = new Runa({ presence: false, save: false }).walker
+  const seen = new Set()
+  const queue = [[city.spawn.x, city.spawn.y]]
+  seen.add(city.spawn.x + ',' + city.spawn.y)
+  while (queue.length) {
+    const [x, y] = queue.pop()
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1]
+    ]) {
+      const nx = x + dx
+      const ny = y + dy
+      const key = nx + ',' + ny
+      if (seen.has(key)) continue
+      if (ny < 0 || ny >= city.rows.length || nx < 0 || nx >= city.rows[ny].length) continue
+      const tile = TILES[city.rows[ny][nx]]
+      if (!tile || tile.solid !== false) continue
+      seen.add(key)
+      queue.push([nx, ny])
+    }
+  }
+  t.ok(walker !== null, 'the town has a walker')
+  t.ok(
+    gates.every((g) => seen.has(g.x + ',' + g.y)),
+    'the whole gate is reachable on foot from the spawn'
+  )
+})
+
+test('the field footer does not name a key that is not a key', (t) => {
+  const game = new Runa({ presence: false, save: false })
+  game.update({ type: 'resize', width: 88, height: 26 })
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  // Walk out through the gate without picking a fight. Mid combat the footer
+  // belongs to the encounter card, which is a different line entirely, and the
+  // first version of this test read that one and found nothing.
+  let gate = null
+  const rows = MAPS.city.rows
+  for (let y = 0; y < rows.length && gate === null; y++) {
+    for (let x = 0; x < rows[y].length; x++) {
+      const tile = TILES[rows[y][x]]
+      if (tile && tile.enter && tile.enter.kind === 'travel') {
+        gate = { x, y }
+        break
+      }
+    }
+  }
+  game.walker.placeAt('city', gate.x, gate.y)
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('e') })
+  t.ok(game.field, 'we are out in the field')
+
+  const screen = style.stripAnsi(game.view())
+  const footer = screen.split('\n').filter((l) => l.indexOf('q salir') !== -1)[0] || ''
+
+  // `<` is the gate painted on the west edge of the field, not a key. The
+  // footer named it as if you could press it, so people pressed it, nothing
+  // happened, and they were stuck in the meadow. Same mistake as the line that
+  // said `s` opened the script.
+  t.ok(footer.length > 0, 'there is a footer')
+  t.absent(/\|\s*<\s+volver/.test(footer), 'it no longer offers `<` as a key')
+  t.ok(footer.indexOf('camina') !== -1, 'it says to walk there instead')
+})
