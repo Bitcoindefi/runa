@@ -6,37 +6,54 @@ function ok(cond, what) {
   if (!cond) fails++
 }
 
-console.log('=== CIUDAD entera (60x18), jugador en el spawn ===')
+function scan(map, glyph) {
+  const at = []
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) if (map.rows[y][x] === glyph) at.push([x, y])
+  }
+  return at
+}
+
+console.log(
+  '=== CIUDAD entera (' +
+    M.MAPS.city.width +
+    'x' +
+    M.MAPS.city.height +
+    '), jugador en el spawn ==='
+)
 const w = new M.Walker('city')
 console.log(M.render(w.map, { at: w }))
 console.log('spawn:', w.x, w.y, '->', w.here().name)
 
 console.log('\n=== colision ===')
-// El spawn esta justo debajo de la puerta de casa, con la pared de la casa
-// pegada a la izquierda y a la derecha de esa puerta.
-w.placeAt('city', 8, 6)
+// La prueba se coloca debajo de la puerta de casa, con la mamposteria de la
+// fachada a ambos lados.
+const home = scan(M.MAPS.city, 'C')[0]
+w.placeAt('city', home[0], home[1] + 1)
 let r = w.move(0, -1)
-ok(
-  r.moved && w.here().id === 'door.home',
-  'arriba desde (8,6) entra a la puerta de casa: ' + w.here().name
-)
+ok(r.moved && w.here().id === 'door.home', 'arriba entra a la puerta de casa: ' + w.here().name)
 r = w.move(0, -1)
-// (8,4) cae sobre la letra a de la palabra casa, pintada adentro del edificio.
-// Las letras del cartel son solidas igual que la pared: si no, el nombre del
-// negocio seria un agujero en su propia fachada.
+// La fachada es solida: el dibujo del edificio no debe convertirse en un
+// pasillo oculto al caminar contra la puerta.
 ok(
   !r.moved && r.blocked.solid,
   'otra vez arriba choca contra ' + r.blocked.name + ' (' + r.blocked.id + ')'
 )
-ok(r.blocked.id === 'sign', '  y lo que bloquea es la letra del cartel, no una pared')
-ok(w.x === 8 && w.y === 5, 'no se movio: sigue en ' + w.x + ',' + w.y)
+ok(
+  ['masonry', 'window'].includes(r.blocked.id),
+  '  y lo que bloquea sigue siendo parte de la fachada'
+)
+ok(w.x === home[0] && w.y === home[1], 'no se movio: sigue en ' + w.x + ',' + w.y)
 r = w.move(-1, 0)
 ok(
-  !r.moved && r.blocked.id === 'wall',
-  'izquierda desde la puerta choca contra la pared de la casa'
+  !r.moved && r.blocked.id === 'masonry',
+  'izquierda desde la puerta choca contra la mamposteria de la casa'
 )
 r = w.move(1, 0)
-ok(!r.moved && r.blocked.id === 'wall', 'derecha desde la puerta choca contra la pared de la casa')
+ok(
+  !r.moved && r.blocked.id === 'masonry',
+  'derecha desde la puerta choca contra la mamposteria de la casa'
+)
 console.log('  accion parado en la puerta:', JSON.stringify(w.action()))
 
 w.placeAt('city', 1, 1)
@@ -49,13 +66,6 @@ r = w.move(-1, -1)
 ok(!r.moved, 'la diagonal a la esquina tambien choca')
 
 console.log('\n=== puertas: una sola de cada una, y todas alcanzables ===')
-function scan(map, glyph) {
-  const at = []
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) if (map.rows[y][x] === glyph) at.push([x, y])
-  }
-  return at
-}
 function flood(map, from) {
   const seen = new Set()
   const q = [from]
@@ -71,7 +81,7 @@ function flood(map, from) {
 }
 const city = M.MAPS.city
 const reach = flood(city, [city.spawn.x, city.spawn.y])
-for (const g of ['C', 'I', 'P', 'A', 'D', '>']) {
+for (const g of ['C', 'I', 'P', 'A', 'D', 'T', 'V', '>']) {
   const at = scan(city, g)
   const named = M.TILES[g].name
   ok(at.length === 1, 'ciudad: ' + g + ' (' + named + ') aparece 1 vez, aparece ' + at.length)
@@ -85,10 +95,16 @@ const freach = flood(field, [field.spawn.x, field.spawn.y])
 const back = scan(field, '<')
 ok(back.length === 1, 'campo: < aparece 1 vez')
 ok(freach.has(back[0][0] + ',' + back[0][1]), 'campo: se llega a la entrada de la ciudad')
+const dungeon = M.MAPS.dungeon
+const dreach = flood(dungeon, [dungeon.spawn.x, dungeon.spawn.y])
+const stairs = scan(dungeon, 'U')
+ok(stairs.length === 1, 'dungeon: U aparece 1 vez')
+ok(dreach.has(stairs[0][0] + ',' + stairs[0][1]), 'dungeon: se llega a la salida al castillo')
 console.log('  celdas caminables ciudad:', reach.size, '| campo:', freach.size)
 
 console.log('\n=== viaje ciudad -> campo por el porton ===')
-w.placeAt('city', 30, 16)
+const gate = scan(city, '>')[0]
+w.placeAt('city', gate[0], gate[1] - 1)
 r = w.move(0, 1)
 ok(r.moved && w.here().id === 'gate.field', 'bajando en la calle central se pisa el porton sur')
 const act = w.action()
@@ -121,7 +137,7 @@ v = M.viewport(field, { x: 0, y: 0 }, 46, 14)
 ok(v.x === 0 && v.y === 0, 'esquina noroeste: ' + JSON.stringify(v))
 v = M.viewport(field, { x: 999, y: 999 }, 46, 14)
 ok(v.x === field.width - 46 && v.y === field.height - 14, 'esquina sudeste: ' + JSON.stringify(v))
-v = M.viewport(city, { x: 30, y: 9 }, 200, 200)
+v = M.viewport(city, { x: 30, y: 9 }, 500, 500)
 ok(
   v.width === city.width && v.height === city.height,
   'pantalla mas grande que el mapa: ' + JSON.stringify(v)

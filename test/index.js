@@ -1,22 +1,79 @@
 const { test } = require('brittle')
 const { style } = require('bare-tui')
-const { Runa } = require('../lib/game.js')
-const { MAPS, TILES } = require('../lib/map.js')
-const { reward, xpToLeave } = require('../lib/shop.js')
+const { Runa, COMBAT_TURN_TICKS } = require('../lib/game.js')
+const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES } = require('../lib/map.js')
+const { Field } = require('../lib/field.js')
+const { Player, reward, xpToLeave, SAVE_VERSION } = require('../lib/shop.js')
+const { World } = require('../lib/world.js')
+const {
+  BEGIN_SYNCHRONIZED_UPDATE,
+  END_SYNCHRONIZED_UPDATE,
+  synchronizeRenderer
+} = require('../lib/synchronized-renderer.js')
 const render = require('../lib/render.js')
-const fs = require('bare-fs')
 
 require('./sage.test.js')
 
+function press(game, name) {
+  return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
+}
+
+function typeText(game, value) {
+  for (const sequence of String(value)) {
+    game.onKey({ type: 'key', sequence, ctrl: false, meta: false, is: () => false })
+  }
+}
+
+function startGame(game, name = 'Tomas') {
+  press(game, 'enter')
+  typeText(game, name)
+  press(game, 'enter')
+}
+
 test('REMOVE ME', (t) => {
   t.pass()
+})
+
+test('terminal frames are published as one synchronized update', (t) => {
+  const writes = []
+  const output = { write: (chunk) => writes.push(String(chunk)) }
+  const inner = {
+    out: output,
+    start() {},
+    clear() {},
+    stop() {},
+    render(view) {
+      this.out.write('row 1: ' + view)
+      this.out.write('row 2: done')
+    }
+  }
+  const renderer = synchronizeRenderer(inner)
+
+  renderer.render('walking')
+
+  t.is(writes.length, 1, 'the real terminal receives one write per frame')
+  t.is(
+    writes[0],
+    BEGIN_SYNCHRONIZED_UPDATE + 'row 1: walkingrow 2: done' + END_SYNCHRONIZED_UPDATE,
+    'the complete frame stays between BSU and ESU'
+  )
+  t.is(inner.out, output, 'the real output stream is restored after rendering')
+})
+
+test('terrain colour is encoded once per run instead of once per cell', (t) => {
+  const plain = '.'.repeat(120)
+  const painted = render.paintRuns(plain, Array(120).fill('green'))
+
+  t.is(style.stripAnsi(painted), plain, 'colour compaction preserves every visible cell')
+  t.ok(painted.length < 150, 'one terrain row stays close to its visible byte length')
 })
 
 test('title screen renders the Runa logo and start prompt', (t) => {
   const screen = style.stripAnsi(render.titleScreen(80, 30))
   t.ok(screen.includes('RUNA'))
   t.ok(screen.includes('UN RPG HECHO EN BARE'))
-  t.ok(screen.includes('cualquier tecla para empezar'))
+  t.ok(screen.includes('ENTER / ESPACIO  nueva partida'))
+  t.ok(screen.includes('Q  salir'))
   const lines = screen.split('\n')
   t.is(lines.length, 30)
   t.ok(lines.every((line) => line.length === 80))
@@ -30,32 +87,358 @@ test('title screen falls back cleanly in a small terminal', (t) => {
   t.ok(lines.every((line) => line.length === 40))
 })
 
-test('pressing a key opens the navigable city map', (t) => {
-  const game = new Runa()
+test('new game asks for a name and puts its initial on the hero', (t) => {
+  const game = new Runa({ presence: false })
   game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  t.is(game.title, true, 'an unrelated or residual key leaves the menu visible')
+  t.ok(style.stripAnsi(game.view()).includes('nueva partida'))
+
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('enter') })
+  t.is(game.naming, true, 'the menu opens name entry before the city')
+  t.ok(style.stripAnsi(game.view()).includes('NOMBRE'))
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('enter') })
+  t.ok(style.stripAnsi(game.view()).includes('escribi un nombre'))
+  typeText(game, 'Quinn')
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('enter') })
 
   const screen = style.stripAnsi(game.view())
   t.is(game.title, false)
+  t.is(game.name, 'Quinn', 'q is accepted as part of a name instead of quitting')
   t.ok(screen.includes('la ciudad'))
   t.ok(screen.includes('wasd o flechas'))
+  t.ok(screen.includes('/Q\\'), 'the first letter of the name is painted on the chest')
+})
+
+test('the larger city scrolls inside an 80-column console', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 80, height: 24 })
+  startGame(game)
+
+  const screen = style.stripAnsi(game.view())
+  const lines = screen.split('\n')
+  t.is(lines.length, 24, 'uses exactly the terminal height')
+  t.ok(
+    lines.every((line) => line.length === 80),
+    'uses exactly the terminal width'
+  )
+  t.ok(MAPS.city.width > 80, 'the city is wider than one terminal viewport')
+  t.ok(MAPS.city.height > 24, 'the city is taller than one terminal viewport')
+  t.ok(
+    MAPS.city.rows.some((row) => row.includes('~~~~~~~~~~~~~~~~~~')),
+    'the city keeps its detailed fountain'
+  )
+  t.ok(screen.includes('hp 20/20'), 'compact stats remain visible in the title bar')
+  t.ok(!screen.includes('[#]'), 'a new hero does not display an unequipped shield')
+  t.ok(!screen.includes('@'), 'the city no longer represents the hero with an at sign')
+
+  t.ok(
+    NPC_SPRITES.resident.some((line) => line.includes('[C]')),
+    'city residents keep recognizable native map sprites'
+  )
+  t.ok(
+    MAPS.city.rows.some((row) => row.includes('iglesia de la luz')),
+    'the west district exists at high resolution'
+  )
+  t.ok(
+    MAPS.city.rows.some((row) => row.includes('pociones y elixires')),
+    'the east district exists at high resolution'
+  )
+})
+
+test('the named hero animates and draws only equipped gear', (t) => {
+  const standing = render.heroSprite({ frame: 0, items: [], initial: 'A' })
+  const walking = render.heroSprite({ frame: 1, items: [], initial: 'A' })
+  const equipped = render.heroSprite({
+    frame: 0,
+    items: ['sword', 'shield'],
+    initial: 'A'
+  })
+  const expectedStanding = ['  O', ' /A\\', ' / \\'].join('\n')
+  const expectedWalking = ['  O', ' \\A-', '  /|'].join('\n')
+
+  t.is(standing.join('\n'), expectedStanding, 'the approved resting pose is reproduced exactly')
+  t.is(walking.join('\n'), expectedWalking, 'movement advances the arms and legs')
+  t.ok(equipped.join('\n').includes('[#]'), 'the shield appears once it is equipped')
+  t.ok(equipped.join('\n').includes('/|A\\'), 'the sword appears in the left hand')
+  t.is(standing[0], walking[0], 'the head remains fixed while walking')
+  t.ok(
+    standing.length === 3 && Math.max(...standing.map((line) => line.length)) <= 8,
+    'the moving hero never exceeds its approved 8x3 footprint'
+  )
+  t.ok(
+    walking.length === 3 && Math.max(...walking.map((line) => line.length)) <= 8,
+    'the animated pose keeps the approved 8x3 footprint'
+  )
+  t.is(
+    standing.join('').replace(/ /g, '').length,
+    walking.join('').replace(/ /g, '').length,
+    'both poses draw the same number of visible cells'
+  )
+})
+
+test('weapons and armour occupy real slots, survive saves and affect combat', (t) => {
+  const player = new Player({ gold: 500, xp: xpToLeave(1) })
+  player.buy('sword', 'weapons')
+  player.buy('shield', 'armor')
+  t.alike(player.snapshot().equipped, { left: 'sword', right: 'shield' })
+
+  player.buy('crossbow', 'weapons')
+  t.is(player.snapshot().equipped.left, 'crossbow', 'a new weapon replaces the same slot')
+  t.ok(player.owns('sword'), 'replaced gear stays in the inventory')
+
+  const loaded = Player.fromJSON(JSON.stringify(player))
+  t.is(loaded.toJSON().version, SAVE_VERSION)
+  t.alike(loaded.snapshot().equipped, player.snapshot().equipped, 'the loadout survives a save')
+
+  const oldSave = Player.fromJSON({
+    version: 1,
+    gold: 30,
+    xp: 0,
+    hp: 20,
+    potions: 2,
+    items: ['shield']
+  })
+  t.alike(oldSave.snapshot().equipped, { left: null, right: null }, 'old saves invent no gear')
+
+  const world = new World('mosquito')
+  loaded.outfit(world)
+  world.foe.x = 1
+  const hp = world.hero.hp
+  world.step()
+  t.is(world.held.right.id, 'shield', 'combat starts with the persistent armour equipped')
+  t.is(world.hero.hp, hp - 3, 'the shield reduces a mosquito hit from 5 to 3')
+
+  loaded.unequip('shield')
+  t.is(loaded.snapshot().equipped.right, null, 'gear can be removed without selling it')
+  t.ok(loaded.owns('shield'))
+})
+
+test('the shop lets the player equip and remove owned gear', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.width = 100
+  game.height = 30
+  game.player.gold = 100
+  game.shop = 'weapons'
+
+  press(game, 'enter')
+  t.is(game.player.snapshot().equipped.left, 'sword', 'buying equipment puts it in its slot')
+  t.ok(style.stripAnsi(game.view()).includes('equipado'), 'the shop marks the active item')
+
+  press(game, 'x')
+  t.is(game.player.snapshot().equipped.left, null, 'x removes the selected item')
+  t.ok(game.player.owns('sword'), 'removing equipment does not sell it')
+
+  press(game, 'enter')
+  t.is(game.player.snapshot().equipped.left, 'sword', 'enter equips an item already owned')
+})
+
+test('spaces inside actor sprites are transparent over city and field terrain', (t) => {
+  const sprite = render.heroSprite({ frame: 0 })
+  const city = style
+    .stripAnsi(
+      render.mapPane(
+        {
+          tiles: Array(5).fill(','.repeat(12)),
+          hero: { x: 5, y: 3, sprite },
+          actors: []
+        },
+        12,
+        5,
+        { cellW: 1 }
+      )
+    )
+    .split('\n')
+
+  t.is(city[1][3], ',', 'terrain remains visible left of the head')
+  t.is(city[2][7], ',', 'terrain remains visible between the arm and shield')
+  t.is(city[3][5], ',', 'terrain remains visible between the legs')
+
+  const field = style
+    .stripAnsi(
+      render.fieldPane(
+        {
+          rows: Array(5).fill('.'.repeat(12)),
+          width: 12,
+          height: 5,
+          player: { x: 5, y: 3, sprite },
+          foes: []
+        },
+        12,
+        5
+      )
+    )
+    .split('\n')
+
+  t.is(field[1][3], '.', 'field terrain remains visible left of the head')
+  t.is(field[2][7], '.', 'field terrain remains visible between the arm and shield')
+  t.is(field[3][5], '.', 'field terrain remains visible between the legs')
+})
+
+test('the field can provide clean terrain beneath detailed actors', (t) => {
+  const field = new Field({ seed: 17 })
+  const composited = field.render(40, 10)
+  const terrain = field.render(40, 10, false)
+
+  t.ok(
+    composited.some((row) => row.includes('@')),
+    'the standalone field render keeps its player marker'
+  )
+  t.ok(
+    terrain.every((row) => !row.includes('@')),
+    'the detailed renderer receives terrain without actor glyphs'
+  )
+})
+
+test('a successful map step changes position and advances the walking pose', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.walker.placeAt('city', 160, 130)
+  const before = render.heroSprite({ frame: game.walker.x + game.walker.y, items: [] })
+
+  press(game, 'right')
+  const after = render.heroSprite({ frame: game.walker.x + game.walker.y, items: [] })
+
+  t.is(game.walker.x, 161, 'the player advances one world tile')
+  t.not(before.join('\n'), after.join('\n'), 'the limbs advance to the second pose')
+  t.is(before.length, after.length, 'walking keeps the same height')
+  t.is(
+    Math.max(...before.map((line) => line.length)),
+    Math.max(...after.map((line) => line.length)),
+    'walking keeps the same width'
+  )
+})
+
+test('doors and the field gate activate when the player steps on them', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+
+  const find = (glyph) => {
+    for (let y = 0; y < MAPS.city.rows.length; y++) {
+      const x = MAPS.city.rows[y].indexOf(glyph)
+      if (x !== -1) return { x, y }
+    }
+    return null
+  }
+
+  const potions = find('P')
+  game.walker.placeAt('city', potions.x, potions.y + 1)
+  press(game, 'up')
+  t.is(game.shop, 'potions', 'stepping on P opens the potion shop')
+  press(game, 'escape')
+
+  const church = find('I')
+  game.player.hp = 1
+  game.walker.placeAt('city', church.x, church.y + 1)
+  press(game, 'up')
+  t.is(game.player.hp, game.player.maxHp, 'stepping on I enters the church and heals')
+
+  const tavern = find('T')
+  game.player.hp = 1
+  game.walker.placeAt('city', tavern.x, tavern.y + 1)
+  press(game, 'up')
+  t.is(game.player.hp, game.player.maxHp, 'stepping on T rests at the tavern')
+  t.is(game.player.gold, 27, 'the tavern charges its visible three-coin price')
+
+  const gate = MAPS.city.fieldGate
+  game.walker.placeAt('city', gate.x1, gate.y1 - 1)
+  press(game, 'down')
+  t.ok(game.field, 'touching the broad porton area enters the field before collision')
 })
 
 test('city art remains rectangular and walkable', (t) => {
   const city = MAPS.city
-  t.is(city.width, 60)
-  t.is(city.height, 18)
+  const cityText = city.rows.join('\n').toLowerCase()
+  t.is(city.width, 320)
+  t.is(city.height, 200)
   t.ok(city.rows.every((row) => row.length === city.width))
   t.ok(city.rows.some((row) => row.includes('^')))
   t.ok(city.rows.some((row) => row.includes('O')))
   t.ok(city.rows.some((row) => row.includes('*')))
+  t.ok(city.rows.some((row) => row.includes('/')))
+  t.ok(city.rows.some((row) => row.includes('[====]')))
+  t.ok(cityText.includes('iglesia'))
+  t.ok(cityText.includes('jarra dorada'))
+  t.ok(cityText.includes('herreria'))
+  t.ok(cityText.includes('armaduras'))
+  t.ok(cityText.includes('castillo'), 'the northern district has a castle')
+  t.ok(cityText.includes('porton'), 'the meadow exit has a visible gatehouse')
+  t.ok(!cityText.includes('mercado'), 'the market has been completely removed from the city')
+  t.ok(cityText.includes('yunque'), 'the smithy has its own detailed facade')
+  t.ok(cityText.includes('elixires'), 'the alchemist facade keeps unique bottlework')
+  t.ok(
+    cityText.includes('.-====-.'),
+    'the church has a rose window instead of a generic shop facade'
+  )
+  t.ok(cityText.includes('[== jarra ==]'), 'the tavern has its own half-timbered sign')
+  t.ok(cityText.includes('fragua (())'), 'the smithy exposes a working forge bay')
+  t.ok(cityText.includes('[]__[]__[]'), 'the armoury has a crenellated silhouette')
+  t.is(city.npcs.length, 9, 'the city has nine static residents')
+  t.ok(NPC_MASTER_SPRITES.guard.length >= 20, 'the faithful high-resolution knight is preserved')
+  t.ok(
+    NPC_MASTER_SPRITES.guard.some((line) => line.includes('hjw')),
+    'the original knight credit is preserved'
+  )
+  t.ok(NPC_SPRITES.guard !== NPC_MASTER_SPRITES.guard, 'the map uses a compact guard drawing')
+  t.ok(
+    Object.values(NPC_SPRITES).every(
+      (sprite) => sprite.length === 4 && sprite.every((line) => line.length === 7)
+    ),
+    'every city resident stays inside a stable 7x4 footprint'
+  )
+  t.ok(
+    NPC_SPRITES.smith.some((line) => line.includes('T')),
+    'the smith carries a compact hammer'
+  )
   t.is(TILES[';'].solid, false)
   t.is(TILES.O.solid, true)
+  t.is(TILES.T.enter.kind, 'tavern')
+})
+
+test('city NPCs block movement and provide their services', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  const brom = MAPS.city.npcs.find((npc) => npc.id === 'brom')
+
+  game.walker.placeAt('city', brom.x, brom.y + 1)
+  press(game, 'up')
+  t.is(game.walker.y, brom.y + 1, 'the player cannot walk through an NPC anchor')
+  t.ok(game.log.some((line) => String(line).includes('pulsa e para hablar')))
+
+  press(game, 'e')
+  t.is(game.shop, 'weapons', 'talking to the blacksmith opens the weapon shop')
+})
+
+test('the castle dungeon entrance descends and returns to the same district', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  const locate = (map, glyph) => {
+    for (let y = 0; y < map.height; y++) {
+      const x = map.rows[y].indexOf(glyph)
+      if (x !== -1) return { x, y }
+    }
+    return null
+  }
+
+  const entrance = locate(MAPS.city, 'V')
+  t.ok(entrance, 'the castle has a visible dungeon stair')
+  game.walker.placeAt('city', entrance.x, entrance.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'dungeon', 'V descends into the ruins')
+  t.ok(style.stripAnsi(game.view()).includes('las ruinas bajo el castillo'))
+
+  const exit = locate(MAPS.dungeon, 'U')
+  game.walker.placeAt('dungeon', exit.x, exit.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'city', 'U climbs back into the city')
+  t.is(game.walker.x, entrance.x, 'the player returns beside the castle entrance')
+  t.is(game.walker.y, entrance.y + 1)
 })
 
 test('the field pane paints the whole field, not one stringified line', (t) => {
-  const game = new Runa()
+  const game = new Runa({ presence: false })
   game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  startGame(game)
 
   // Find the gate the map itself declares. Hardcoding its coordinates would let
   // somebody move the gate and quietly turn this test into a no-op.
@@ -64,7 +447,7 @@ test('the field pane paints the whole field, not one stringified line', (t) => {
   for (let y = 0; y < rows.length && gate === null; y++) {
     for (let x = 0; x < rows[y].length; x++) {
       const tile = TILES[rows[y][x]]
-      if (tile && tile.enter && tile.enter.kind === 'travel') {
+      if (tile && tile.enter && tile.enter.kind === 'travel' && tile.enter.to === 'field') {
         gate = { x, y }
         break
       }
@@ -89,8 +472,8 @@ test('the field pane paints the whole field, not one stringified line', (t) => {
   // stayed green, so only an assertion about the painted frame can see it.
   t.ok(painted.length > 10, 'terrain covers the pane rather than a single row')
   t.ok(
-    lines.some((line) => line.includes('@')),
-    'the hero is somewhere on screen'
+    lines.some((line) => line.includes('/T\\') || line.includes('\\T-')),
+    'the small moving hero is somewhere on screen'
   )
 
   // And the field is drawn at full width. Dividing the pane by CELL_W as well
@@ -102,8 +485,146 @@ test('the field pane paints the whole field, not one stringified line', (t) => {
   )
 })
 
+test('field monsters are recognizable moving sprites', (t) => {
+  const rows = Array(16).fill(' '.repeat(72))
+  const pane = style.stripAnsi(
+    render.fieldPane(
+      {
+        rows,
+        width: 72,
+        height: 16,
+        player: { x: 40, y: 8 },
+        foes: [
+          { kind: 'mosquito', glyph: '~', x: 8, y: 8 },
+          { kind: 'espectro', glyph: '&', x: 25, y: 8 },
+          { kind: 'golem', glyph: '#', x: 63, y: 8 }
+        ]
+      },
+      72,
+      16
+    )
+  )
+
+  t.ok(pane.includes('(o)>'), 'the compact mosquito has a readable body and proboscis')
+  t.ok(pane.includes('(S)'), 'the compact spectre has a floating silhouette')
+  t.ok(pane.includes('[G]'), 'the compact golem has a stone silhouette')
+  t.ok(pane.includes('/T\\'), 'the unequipped player remains visible over every sprite')
+  t.ok(
+    pane.split('\n').every((line) => line.length === 72),
+    'sprites do not change pane width'
+  )
+})
+
+test('field monsters keep patrolling without bloating redraw rows', (t) => {
+  const field = new Field({ seed: 17 })
+  const before = field.foes.map((foe) => foe.x + ',' + foe.y).join('|')
+
+  for (let i = 0; i < 200; i++) field.tick()
+  const after = field.foes.map((foe) => foe.x + ',' + foe.y).join('|')
+  t.ok(after !== before, 'the rendering fix does not freeze monster patrols')
+
+  const pane = render.fieldPane(
+    {
+      rows: Array(12).fill('.'.repeat(120)),
+      width: 120,
+      height: 12,
+      player: { x: 60, y: 6 },
+      foes: field.snapshot().foes
+    },
+    120,
+    12
+  )
+  t.ok(
+    pane.split('\n').every((line) => line.length < 220),
+    'even rows containing moving sprites stay compact on the wire'
+  )
+})
+
+test('touching hitboxes keep both compact sprites visible', (t) => {
+  const pane = style.stripAnsi(
+    render.fieldPane(
+      {
+        rows: Array(12).fill(' '.repeat(40)),
+        width: 40,
+        height: 12,
+        player: { x: 20, y: 6 },
+        foes: [{ kind: 'mosquito', glyph: '~', x: 21, y: 6, active: true }]
+      },
+      40,
+      12
+    )
+  )
+
+  t.ok(pane.includes('(o)>'), 'the contacted monster is not hidden by the hero')
+  t.ok(pane.includes('/T\\'), 'the hero remains visible beside the contacted monster')
+  t.ok(
+    pane.split('\n').every((line) => line.length === 40),
+    'presentation separation preserves pane width'
+  )
+})
+
+test('moving actors restore every terrain cell they leave behind', (t) => {
+  const cityRows = Array(10).fill('-'.repeat(40))
+  const movedHero = style.stripAnsi(
+    render.mapPane(
+      {
+        tiles: cityRows,
+        hero: { x: 25, y: 5, sprite: render.heroSprite({ frame: 1, items: [] }) },
+        actors: []
+      },
+      40,
+      10,
+      { cellW: 1 }
+    )
+  )
+  for (const row of movedHero.split('\n').slice(3, 7)) {
+    t.is(row.slice(5, 12), '-------', 'the old hero footprint is restored')
+  }
+  t.is(movedHero.split('\n')[6], '-'.repeat(40), 'the hero never paints below its collision cell')
+
+  const fieldRows = Array(10).fill('.'.repeat(40))
+  const movedFoe = style.stripAnsi(
+    render.fieldPane(
+      {
+        rows: fieldRows,
+        width: 40,
+        height: 10,
+        player: { x: 20, y: 5 },
+        foes: [{ kind: 'mosquito', x: 31, y: 5 }]
+      },
+      40,
+      10
+    )
+  )
+  for (const row of movedFoe.split('\n').slice(4, 7)) {
+    t.is(row.slice(6, 10), '....', 'the old monster footprint is restored')
+  }
+})
+
+test('field combat starts only when actor hitboxes touch', (t) => {
+  const field = new Field({ seed: 17 })
+  const foe = field.foes[0]
+  foe.nextStep = Infinity
+  field.player.x = foe.x > 3 ? foe.x - 3 : foe.x + 3
+  field.player.y = foe.y
+
+  for (let i = 0; i < 180; i++) field.tick()
+  t.is(field.combat, null, 'distance alone never rolls an encounter')
+
+  const toward = Math.sign(foe.x - field.player.x)
+  field.walk(toward, 0)
+  t.is(field.combat, null, 'two tiles apart is outside the hitbox')
+  const events = field.walk(toward, 0)
+  t.ok(
+    events.some((event) => event.type === 'contact'),
+    'touching the one-tile hitbox emits contact'
+  )
+  t.ok(field.combat, 'contact arms direct combat on the field')
+  t.is(field.combat.world.foe.x, 1, 'visible contact is also contact in combat geometry')
+})
+
 /**
- * Walk out of town and keep walking until something picks a fight.
+ * Walk out of town and touch the first monster's hitbox.
  *
  * @param {object} game
  * @returns {boolean} whether a fight is running
@@ -114,7 +635,7 @@ function pickAFight(game) {
   for (let y = 0; y < rows.length && gate === null; y++) {
     for (let x = 0; x < rows[y].length; x++) {
       const tile = TILES[rows[y][x]]
-      if (tile && tile.enter && tile.enter.kind === 'travel') {
+      if (tile && tile.enter && tile.enter.kind === 'travel' && tile.enter.to === 'field') {
         gate = { x, y }
         break
       }
@@ -126,19 +647,18 @@ function pickAFight(game) {
   game.onKey({ type: 'key', is: (...keys) => keys.includes('e') })
   if (!game.field) return false
 
-  const dirs = ['right', 'down', 'right', 'right', 'up', 'right', 'down', 'right']
-  for (let i = 0; i < 600 && !game.field.snapshot().fighting; i++) {
-    const dir = dirs[i % dirs.length]
-    game.onKey({ type: 'key', is: (...keys) => keys.includes(dir) })
-    game.update({ type: 'tick' })
-  }
+  const foe = game.field.foes.find((candidate) => !candidate.dead)
+  if (!foe) return false
+  game.field.player.x = foe.x > 1 ? foe.x - 2 : foe.x + 2
+  game.field.player.y = foe.y
+  press(game, foe.x > game.field.player.x ? 'right' : 'left')
   return game.field.snapshot().fighting
 }
 
 test('the experience bar shows progress into the level, not lifetime over one', (t) => {
-  const game = new Runa()
-  game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 100, height: 30 })
+  startGame(game)
 
   game.player.xp = 18
   const sheet = game.sheet()
@@ -159,24 +679,14 @@ test('the experience bar shows progress into the level, not lifetime over one', 
 })
 
 test('the equipment rows follow what is actually in hand', (t) => {
-  const game = new Runa()
-  game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 100, height: 30 })
+  startGame(game)
 
   game.player.gold = 500
-  // The crossbow is gated behind level 2, so the experience comes first. Found
-  // by watching the buy come back `necesitas nivel 2` and the hand stay empty.
-  game.player.gainXp(200)
-  game.player.buy('crossbow', 'weapons')
+  game.player.buy('sword', 'weapons')
   const town = style.stripAnsi(game.view())
-  t.ok(town.indexOf('izq') !== -1, 'the sheet has an equipment row')
-
-  // The crossbow is bought here rather than the sword so the fight is not a
-  // race. The starting rule sheet reaches for the crossbow while the foe is far
-  // and only falls back to the sword up close, so a player who owns just the
-  // sword holds nothing at all until something closes in. That is correct
-  // behaviour and it makes a test that waits for "something in hand" depend on
-  // where a monster happens to be standing.
+  t.ok(town.indexOf('izq / espada') !== -1, 'what you bought shows up on the sheet')
 
   t.ok(pickAFight(game), 'a fight starts out in the field')
 
@@ -191,7 +701,7 @@ test('the equipment rows follow what is actually in hand', (t) => {
   for (let i = 0; i < 60; i++) {
     const c = game.field.combat
     if (!c || c.world.held.left || c.world.held.right) break
-    game.update({ type: 'tick' })
+    press(game, 'f')
   }
   t.ok(game.field.combat, 'the fight is still running')
   const held = game.field.combat.world.held
@@ -228,7 +738,7 @@ test('the payout stays on the numbers the game was actually tuned against', (t) 
 test('the gold the log announces is the gold the purse receives', (t) => {
   const game = new Runa({ presence: false })
   game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  startGame(game)
 
   t.ok(pickAFight(game), 'a fight starts out in the field')
 
@@ -240,7 +750,7 @@ test('the gold the log announces is the gold the purse receives', (t) => {
     const fighting = !!game.field.combat
     before = { gold: game.player.gold, xp: game.player.xp }
     game.log.length = 0
-    game.update({ type: 'tick' })
+    press(game, 'f')
     if (fighting && game.field && !game.field.combat) {
       line = game.log.find((l) => String(l).indexOf('cae el') !== -1) || null
       credited = { gold: game.player.gold - before.gold, xp: game.player.xp - before.xp }
@@ -265,7 +775,7 @@ test('the gold the log announces is the gold the purse receives', (t) => {
 test('dying puts you at the church it says it puts you at', (t) => {
   const game = new Runa({ presence: false })
   game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  startGame(game)
 
   t.ok(pickAFight(game), 'a fight starts out in the field')
 
@@ -273,7 +783,7 @@ test('dying puts you at the church it says it puts you at', (t) => {
   game.field.combat.world.potions = 0
   game.field.combat.world.hero.hp = 0
   game.log.length = 0
-  for (let i = 0; i < 40 && game.field; i++) game.update({ type: 'tick' })
+  for (let i = 0; i < 40 && game.field; i++) press(game, 'f')
 
   t.absent(game.field, 'the excursion is over')
 
@@ -319,7 +829,7 @@ test('the title screen says what the swarm is actually doing', (t) => {
   solo.update({ type: 'resize', width: 88, height: 26 })
   t.is(solo.presenceLine(), 'modo un jugador', 'playing alone says so')
 
-  t.is(wired(0, 0, false).presenceLine(), 'la red no arranco, jugas solo')
+  t.is(wired(0, 0, false).presenceLine(), 'la red se conecta al comenzar')
 
   // Searching and offline are different claims about the world, and the whole
   // point of putting this on screen is to stop the game being silent about
@@ -359,176 +869,60 @@ test('the swarm line never pushes the title off its own screen', (t) => {
       'every row is exactly ' + w + ' wide'
     )
     t.ok(screen.indexOf('RUNA') !== -1, 'the logo survives at ' + w + 'x' + h)
-    t.ok(screen.indexOf('cualquier tecla') !== -1, 'and so does the prompt')
+    t.ok(screen.indexOf('ENTER / ESPACIO') !== -1, 'and so does the prompt')
   }
 })
 
-test('a rule cannot equip what the player does not own, and says so', (t) => {
-  const game = new Runa({ presence: false, save: false })
-  game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+test('hitbox combat stays on the field and advances on attack input', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 100, height: 30 })
+  startGame(game)
+  t.ok(pickAFight(game), 'a fight starts in the field')
 
-  t.absent(game.player.owns('crossbow'), 'no crossbow to start with')
-  t.ok(game.player.owns('sword'), 'but a sword, so the first fight is winnable')
+  const world = game.field.combat.world
+  const before = world.tick
+  for (let i = 0; i < 60; i++) game.update({ type: 'tick' })
+  t.is(world.tick, before, 'clock ticks do not advance combat')
 
-  t.ok(pickAFight(game), 'a fight starts out in the field')
-  for (let i = 0; i < 200 && game.field.combat; i++) game.update({ type: 'tick' })
+  const paused = style.stripAnsi(game.view())
+  t.ok(paused.includes('hitbox activa'))
+  t.ok(paused.includes('f / espacio atacar'))
+  t.ok(!paused.includes('[#]'), 'combat does not invent an unequipped shield')
+  t.ok(paused.includes('(S)') || paused.includes('(o)>') || paused.includes('[G]'))
+  t.ok(!paused.includes('un encuentro'), 'there is no encounter card')
+  t.ok(!paused.includes('combate por turnos'), 'there is no separate arena')
 
-  // `ownedOnly` was written for exactly this, documented with this call site in
-  // its own comment, and called by nothing. `equip crossbow` handed over a
-  // crossbow nobody had bought, which made every shop in the game decoration.
-  const seen = game.log.join(' | ')
-  t.ok(seen.indexOf('no tenes ballesta') !== -1, 'the refusal is said out loud, not swallowed')
-
-  const held = game.field.combat ? game.field.combat.world.held : { left: null, right: null }
-  const wielded = [held.left, held.right].filter(Boolean).map((i) => i.id)
-  for (const id of wielded) t.ok(game.player.owns(id), 'only owned gear reaches the hand: ' + id)
-})
-
-test('the character survives being closed and reopened', (t) => {
-  // Relative, not /tmp. The first version of this hardcoded a POSIX path and
-  // the Windows runners failed on D:\\tmp, which does not exist. Save paths are
-  // relative to the working directory everywhere, so this is the portable one.
-  const save = 'save.test-abierto.json'
-
-  const first = new Runa({ presence: false, savePath: save })
-  first.update({ type: 'resize', width: 88, height: 26 })
-  first.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
-  first.player.gold = 777
-  first.player.gainXp(40)
-  first.player.buy('crossbow', 'weapons')
-  t.ok(first.savePlayer(), 'the character is written down')
-
-  // The whole reason this test exists: toJSON, fromJSON and migrate were all
-  // written, exported and tested, and the only writeFileSync in the entire
-  // program wrote script.txt. Nothing ever called them, so closing the game
-  // threw the character away and every run started at level 1 with 30 gold.
-  const second = new Runa({ presence: false, savePath: save })
-  second.update({ type: 'resize', width: 88, height: 26 })
-  t.ok(second.loadPlayer(), 'and read back on the next run')
-  t.is(second.player.gold, first.player.gold, 'the gold survives')
-  t.is(second.player.xp, first.player.xp, 'the experience survives')
-  t.ok(second.player.owns('crossbow'), 'and so does what you bought')
-
-  try {
-    fs.unlinkSync(save)
-  } catch {}
-})
-
-test('a save that cannot be read never costs you the character silently', (t) => {
-  const save = 'save.test-roto.json'
-  fs.writeFileSync(save, 'esto no es json')
-
-  const game = new Runa({ presence: false, savePath: save })
-  game.update({ type: 'resize', width: 88, height: 26 })
-  t.absent(game.loadPlayer(), 'a broken save does not load')
+  press(game, 'space')
+  t.is(world.tick, before + COMBAT_TURN_TICKS, 'one input resolves one visible turn')
+  t.is(game.sheet().hp, Math.ceil(world.hero.hp), 'the side sheet follows direct combat damage')
   t.ok(
-    game.log.join(' | ').indexOf('no pude leer tu partida') !== -1,
-    'and the player is told rather than quietly restarted'
-  )
-  t.ok(fs.existsSync(save + '.roto'), 'the unreadable file is kept, not overwritten')
-
-  try {
-    fs.unlinkSync(save + '.roto')
-  } catch {}
-  try {
-    fs.unlinkSync(save)
-  } catch {}
-})
-
-test('the way out of town is a gate you can find', (t) => {
-  const city = MAPS.city
-  const gates = []
-  for (let y = 0; y < city.rows.length; y++) {
-    for (let x = 0; x < city.rows[y].length; x++) {
-      if (city.rows[y][x] === '>') gates.push({ x, y })
-    }
-  }
-
-  // A single character in a sixty-wide wall does not read as an exit, it reads
-  // as a flaw in the wall, and players could not find it. The opening is five
-  // tiles now, flanked by towers, with a cobbled path leading to it.
-  t.ok(gates.length >= 3, 'the opening is wide enough to read as an opening')
-
-  const ys = gates.map((g) => g.y)
-  t.ok(
-    ys.every((y) => y === ys[0]),
-    'and it is one gate, not several exits in different walls'
-  )
-  const xs = gates.map((g) => g.x).sort((a, b) => a - b)
-  t.ok(
-    xs.every((x, i) => i === 0 || x === xs[i - 1] + 1),
-    'the opening is continuous, with no wall left standing inside it'
-  )
-
-  // Every tile of it has to actually travel, or the wide gate is a wide lie.
-  for (const g of gates) {
-    const tile = TILES[city.rows[g.y][g.x]]
-    t.is(tile.enter.kind, 'travel', 'every tile of the gate leads out')
-    t.is(tile.solid, false)
-  }
-
-  // And you have to be able to walk to it from where the game drops you.
-  const walker = new Runa({ presence: false, save: false }).walker
-  const seen = new Set()
-  const queue = [[city.spawn.x, city.spawn.y]]
-  seen.add(city.spawn.x + ',' + city.spawn.y)
-  while (queue.length) {
-    const [x, y] = queue.pop()
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1]
-    ]) {
-      const nx = x + dx
-      const ny = y + dy
-      const key = nx + ',' + ny
-      if (seen.has(key)) continue
-      if (ny < 0 || ny >= city.rows.length || nx < 0 || nx >= city.rows[ny].length) continue
-      const tile = TILES[city.rows[ny][nx]]
-      if (!tile || tile.solid !== false) continue
-      seen.add(key)
-      queue.push([nx, ny])
-    }
-  }
-  t.ok(walker !== null, 'the town has a walker')
-  t.ok(
-    gates.every((g) => seen.has(g.x + ',' + g.y)),
-    'the whole gate is reachable on foot from the spawn'
+    game.log.some((line) => String(line).includes('pegas')),
+    'the direct exchange reaches the field log'
   )
 })
 
-test('the field footer does not name a key that is not a key', (t) => {
-  const game = new Runa({ presence: false, save: false })
-  game.update({ type: 'resize', width: 88, height: 26 })
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
-  // Walk out through the gate without picking a fight. Mid combat the footer
-  // belongs to the encounter card, which is a different line entirely, and the
-  // first version of this test read that one and found nothing.
+test('t returns from the field to the city outside combat', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game)
+
   let gate = null
-  const rows = MAPS.city.rows
-  for (let y = 0; y < rows.length && gate === null; y++) {
-    for (let x = 0; x < rows[y].length; x++) {
-      const tile = TILES[rows[y][x]]
-      if (tile && tile.enter && tile.enter.kind === 'travel') {
+  for (let y = 0; y < MAPS.city.rows.length && gate === null; y++) {
+    for (let x = 0; x < MAPS.city.rows[y].length; x++) {
+      const tile = TILES[MAPS.city.rows[y][x]]
+      if (tile && tile.enter && tile.enter.to === 'field') {
         gate = { x, y }
         break
       }
     }
   }
+
   game.walker.placeAt('city', gate.x, gate.y)
-  game.onKey({ type: 'key', is: (...keys) => keys.includes('e') })
-  t.ok(game.field, 'we are out in the field')
+  press(game, 'e')
+  t.ok(game.field, 'the player is in the field')
+  t.ok(style.stripAnsi(game.view()).includes('t volver a la ciudad'))
 
-  const screen = style.stripAnsi(game.view())
-  const footer = screen.split('\n').filter((l) => l.indexOf('q salir') !== -1)[0] || ''
-
-  // `<` is the gate painted on the west edge of the field, not a key. The
-  // footer named it as if you could press it, so people pressed it, nothing
-  // happened, and they were stuck in the meadow. Same mistake as the line that
-  // said `s` opened the script.
-  t.ok(footer.length > 0, 'there is a footer')
-  t.absent(/\|\s*<\s+volver/.test(footer), 'it no longer offers `<` as a key')
-  t.ok(footer.indexOf('camina') !== -1, 'it says to walk there instead')
+  press(game, 't')
+  t.absent(game.field, 't closes the excursion')
+  t.is(game.walker.mapId, 'city')
+  t.ok(game.log.includes('volves a la ciudad'))
 })

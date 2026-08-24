@@ -71,11 +71,13 @@ try {
 // "CLI ready" because it is a boilerplate with no app to start.
 const { Program } = await import('bare-tui')
 const { Runa } = await import('./lib/game.js')
+const { synchronizeRenderer } = await import('./lib/synchronized-renderer.js')
 
 // The flags are declared up top so paparam does not reject them, and handed
 // over explicitly rather than left for the game to dig out of Bare.argv.
 const runa = new Runa({ name: cmd.flags.name, presence: !cmd.flags.solo })
 const program = new Program(runa)
+program.renderer = synchronizeRenderer(program.renderer)
 
 // The game owns the alternate screen from here, so nothing may write to stdout
 // any more. The updater's news is not thrown away though: it is routed into the
