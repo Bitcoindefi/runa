@@ -138,3 +138,17 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Se agregó `scripts/readme-screens.js` para volver a generar los estados documentados de forma reproducible.
 - Capturas revisadas individualmente a 1280x800: texto legible, marcos completos y colores ANSI conservados.
 - TODO: ninguno para la documentación actual.
+
+## Ranuras y autoguardado persistente
+
+- El menú principal ofrece tres ranuras navegables con flechas o `W`/`S`.
+- `Enter` carga una ranura ocupada o crea un personaje en una vacía; `N` permite reemplazar la seleccionada.
+- El guardado conserva nombre, vida, oro, experiencia, pociones, inventario, equipo, mapa y coordenadas.
+- La posición en la pradera se restaura sin reanudar un combate a medio resolver.
+- Cada entrada relevante y el cierre del programa escriben la ranura activa mediante `lib/saves.js`.
+- Los archivos viven bajo el directorio persistente de RUNA, no en la carpeta temporal usada anteriormente.
+- Revisión integrada: se creó un `slot-1.json` real, se comprobó su contenido y se eliminó el fixture aislado.
+- Pulido posterior: menú principal y selector de ranuras son pantallas separadas; en `64x16` no se pisan ni cortan controles.
+- Resultado final: 62/62 pruebas (473 aserciones), lint limpio y smoke del mapa `TODO OK`.
+- Las seis capturas quedaron recortadas al borde real de la terminal, sin el lienzo exterior de `1280x800`.
+- TODO: ninguno para este ajuste.

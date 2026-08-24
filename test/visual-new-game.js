@@ -14,6 +14,8 @@ const typeText = (game, value) => {
 const game = new Runa({ presence: false })
 game.width = 80
 game.height = 24
+console.log('\n=== partidas ===\n' + style.stripAnsi(game.view()))
+
 press(game, 'enter')
 typeText(game, 'Quinn')
 console.log('\n=== nombre ===\n' + style.stripAnsi(game.view()))

@@ -14,13 +14,16 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 - Monstruos que patrullan el mapa sin detener el movimiento del mundo.
 - Combate sobre la propia pradera, sin cambiar a una pantalla separada.
 - Nueva partida con nombre personalizado e inicial visible en el pecho del héroe.
+- Tres ranuras persistentes con carga y autoguardado de progreso.
 - Inventario y equipamiento separados, con ranuras para arma y armadura.
 - Estrategias de combate escritas en `script.txt` y recargadas mientras juegas.
 - Presencia opcional entre jugadores mediante Hyperswarm.
 
 ## Nueva partida y personaje
 
-Desde el menú, `Enter` o `Espacio` abre una nueva partida. Antes de entrar a la ciudad debes escribir un nombre.
+El menú principal separa claramente `Continuar`, `Nueva partida`, `Cargar partida` y `Salir`. `Continuar` abre la partida más reciente; `Nueva partida` usa la primera ranura vacía y `Cargar partida` abre el selector de tres ranuras. Si las tres están ocupadas, `N` permite elegir cuál reemplazar y la pantalla de nombre avisa qué personaje será sustituido.
+
+El juego autoguarda después de cada acción y al salir. Conserva nombre, nivel, vida, oro, experiencia, pociones, inventario, equipo y posición en la ciudad, las ruinas o la pradera. La ranura activa aparece en el pie de la pantalla como `autoguardado R1`, `R2` o `R3`.
 
 La primera letra alfanumérica se convierte en el emblema del pecho. Por ejemplo, **Ayla** aparece como `A`:
 
@@ -96,7 +99,11 @@ El escudo solo aparece junto al personaje cuando está equipado y reduce en `2` 
 
 | Contexto         | Teclas                       | Acción                              |
 | ---------------- | ---------------------------- | ----------------------------------- |
-| Menú             | `Enter` / `Espacio`          | Abrir nueva partida                 |
+| Menú principal   | flechas / `W` / `S`          | Elegir una opción                   |
+| Menú principal   | `Enter` / `Espacio`          | Aceptar la opción                   |
+| Menú principal   | `N`                          | Comenzar una partida nueva          |
+| Ranuras          | flechas / `W` / `S`          | Elegir una ranura                   |
+| Ranuras          | `Enter`, `N`, `Esc`          | Cargar, reemplazar o volver         |
 | Nombre           | escribir, `Enter`, `Esc`     | Editar, confirmar o volver          |
 | Ciudad y pradera | `WASD` / flechas             | Moverse                             |
 | Mundo            | `E` / `Enter` / `Espacio`    | Hablar o interactuar                |
@@ -142,11 +149,11 @@ npx bare test/map.smoke.js
 
 Estado revisado de esta versión:
 
-- `60/60` pruebas correctas.
-- `449/449` aserciones correctas.
+- `62/62` pruebas correctas.
+- `473/473` aserciones correctas.
 - Formato y lint limpios.
 - Ciudad, puertas, portón, pradera y dungeon validados por el smoke test.
-- Capturas inspeccionadas a `1280x800`.
+- Capturas inspeccionadas y recortadas al borde exacto de la terminal.
 
 ## Capturas reproducibles
 
@@ -167,6 +174,7 @@ Esto evita documentar una ciudad, un héroe o un combate que ya no coincidan con
 | `lib/field.js`                 | Pradera, cámara, patrullaje y encuentros              |
 | `lib/world.js`                 | Simulación de combate y estadísticas derivadas        |
 | `lib/shop.js`                  | Economía, inventario, equipo, guardados y migraciones |
+| `lib/saves.js`                 | Tres ranuras, archivos persistentes y carga segura    |
 | `lib/render.js`                | Composición estable de cada cuadro de terminal        |
 | `lib/sprites.js`               | Arte ASCII del héroe, NPC y referencias maestras      |
 | `lib/synchronized-renderer.js` | Publicación atómica de cuadros en Windows Terminal    |

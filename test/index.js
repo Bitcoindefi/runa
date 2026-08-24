@@ -1,9 +1,13 @@
 const { test } = require('brittle')
 const { style } = require('bare-tui')
+const fs = require('bare-fs')
+const os = require('bare-os')
+const path = require('bare-path')
 const { Runa, COMBAT_TURN_TICKS } = require('../lib/game.js')
 const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES } = require('../lib/map.js')
 const { Field } = require('../lib/field.js')
 const { Player, reward, xpToLeave, SAVE_VERSION } = require('../lib/shop.js')
+const { SaveStore } = require('../lib/saves.js')
 const { World } = require('../lib/world.js')
 const {
   BEGIN_SYNCHRONIZED_UPDATE,
@@ -28,6 +32,23 @@ function startGame(game, name = 'Tomas') {
   press(game, 'enter')
   typeText(game, name)
   press(game, 'enter')
+}
+
+function keyMessage(name) {
+  return { type: 'key', is: (...keys) => keys.includes(name) }
+}
+
+function removeSaveFixture(dir) {
+  for (let slot = 1; slot <= 3; slot++) {
+    for (const suffix of ['', '.tmp']) {
+      try {
+        fs.unlinkSync(path.join(dir, `slot-${slot}.json${suffix}`))
+      } catch {}
+    }
+  }
+  try {
+    fs.rmdirSync(dir)
+  } catch {}
 }
 
 test('REMOVE ME', (t) => {
@@ -91,7 +112,7 @@ test('new game asks for a name and puts its initial on the hero', (t) => {
   const game = new Runa({ presence: false })
   game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
   t.is(game.title, true, 'an unrelated or residual key leaves the menu visible')
-  t.ok(style.stripAnsi(game.view()).includes('nueva partida'))
+  t.ok(style.stripAnsi(game.view()).toLowerCase().includes('nueva partida'))
 
   game.onKey({ type: 'key', is: (...keys) => keys.includes('enter') })
   t.is(game.naming, true, 'the menu opens name entry before the city')
@@ -107,6 +128,108 @@ test('new game asks for a name and puts its initial on the hero', (t) => {
   t.ok(screen.includes('la ciudad'))
   t.ok(screen.includes('wasd o flechas'))
   t.ok(screen.includes('/Q\\'), 'the first letter of the name is painted on the chest')
+})
+
+test('three save slots create, autosave and load persistent progress', (t) => {
+  const dir = path.join(
+    os.tmpdir(),
+    `runa-save-slots-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+  )
+  const saves = new SaveStore(dir)
+
+  try {
+    const game = new Runa({ presence: false, saves })
+    const menu = style.stripAnsi(game.view())
+    t.ok(menu.includes('MENU PRINCIPAL'))
+    t.ok(menu.includes('CONTINUAR  (sin partidas)'))
+    t.ok(menu.includes('NUEVA PARTIDA'))
+    t.ok(menu.includes('CARGAR PARTIDA  (sin partidas)'))
+
+    game.update(keyMessage('enter'))
+    typeText(game, 'Ayla')
+    game.update(keyMessage('enter'))
+
+    t.is(game.activeSlot, 1)
+    t.is(saves.load(1).name, 'Ayla', 'creating a character writes slot one immediately')
+
+    game.player.gold = 73
+    game.player.xp = 29
+    game.update(keyMessage('?'))
+    const onDisk = saves.load(1)
+    t.is(onDisk.player.gold, 73, 'a regular key update autosaves gold')
+    t.is(onDisk.player.xp, 29, 'a regular key update autosaves experience')
+
+    const loaded = new Runa({ presence: false, saves })
+    loaded.update(keyMessage('enter'))
+    t.is(loaded.title, false)
+    t.is(loaded.activeSlot, 1)
+    t.is(loaded.name, 'Ayla')
+    t.is(loaded.player.gold, 73)
+    t.is(loaded.player.xp, 29)
+    t.ok(loaded.log.some((line) => line.includes('partida 1 cargada')))
+
+    const second = new Runa({ presence: false, saves })
+    second.update(keyMessage('down'))
+    second.update(keyMessage('enter'))
+    typeText(second, 'Borin')
+    second.update(keyMessage('enter'))
+    t.is(second.activeSlot, 2)
+    t.is(saves.load(2).name, 'Borin')
+    t.is(saves.load(1).name, 'Ayla', 'a second slot never overwrites the first')
+
+    const browser = new Runa({ presence: false, saves })
+    browser.update(keyMessage('down'))
+    browser.update(keyMessage('down'))
+    browser.update(keyMessage('enter'))
+    t.is(browser.menuPage, 'slots', 'loading opens a separate slot screen')
+    t.ok(style.stripAnsi(browser.view()).includes('PARTIDAS GUARDADAS'))
+    browser.update(keyMessage('escape'))
+    t.is(browser.menuPage, 'main', 'escape returns to the main menu')
+  } finally {
+    removeSaveFixture(dir)
+  }
+})
+
+test('a field position survives closing and loading its slot', (t) => {
+  const records = new Map()
+  const saves = {
+    list() {
+      return Array.from({ length: 3 }, (_, index) => {
+        const data = records.get(index + 1)
+        return data
+          ? {
+              slot: index + 1,
+              empty: false,
+              corrupt: false,
+              name: data.name,
+              level: data.summary.level,
+              place: data.summary.place
+            }
+          : { slot: index + 1, empty: true, corrupt: false }
+      })
+    },
+    save(slot, state) {
+      records.set(slot, JSON.parse(JSON.stringify(state)))
+      return this.list()[slot - 1]
+    },
+    load(slot) {
+      return JSON.parse(JSON.stringify(records.get(slot)))
+    }
+  }
+
+  const game = new Runa({ presence: false, saves })
+  startGame(game, 'Nara')
+  game.field = new Field({ script: game.scriptSource })
+  game.field.player.x = 41
+  game.field.player.y = 17
+  game.saveCurrent()
+
+  const loaded = new Runa({ presence: false, saves })
+  press(loaded, 'enter')
+  t.ok(loaded.field)
+  t.is(loaded.field.player.x, 41)
+  t.is(loaded.field.player.y, 17)
+  t.ok(style.stripAnsi(loaded.view()).includes('autoguardado R1'))
 })
 
 test('the larger city scrolls inside an 80-column console', (t) => {

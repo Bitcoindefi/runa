@@ -28,7 +28,7 @@ if (cmd.flags.version) {
 }
 
 const updates = cmd.flags.updates
-const storage = cmd.flags.storage || (isDev ? null : path.join(persistent(), appName))
+const storage = cmd.flags.storage || path.join(persistent(), appName)
 const dir = storage || path.join(os.tmpdir(), 'pear', appName)
 
 console.log(`Updates: ${updates === false ? 'disabled' : 'enabled'}`)
@@ -51,10 +51,16 @@ app.on('update-applied', () =>
 )
 app.on('error', (err) => console.error('[app:error]', err))
 
-process.on('SIGHUP', () => app.exit(129))
-process.on('SIGINT', () => app.exit(130))
-process.on('SIGQUIT', () => app.exit(131))
-process.on('SIGTERM', () => app.exit(143))
+let runa = null
+const exit = (code) => {
+  if (runa) runa.saveCurrent()
+  app.exit(code)
+}
+
+process.on('SIGHUP', () => exit(129))
+process.on('SIGINT', () => exit(130))
+process.on('SIGQUIT', () => exit(131))
+process.on('SIGTERM', () => exit(143))
 
 try {
   await app.ready()
@@ -71,11 +77,16 @@ try {
 // "CLI ready" because it is a boilerplate with no app to start.
 const { Program } = await import('bare-tui')
 const { Runa } = await import('./lib/game.js')
+const { SaveStore } = await import('./lib/saves.js')
 const { synchronizeRenderer } = await import('./lib/synchronized-renderer.js')
 
 // The flags are declared up top so paparam does not reject them, and handed
 // over explicitly rather than left for the game to dig out of Bare.argv.
-const runa = new Runa({ name: cmd.flags.name, presence: !cmd.flags.solo })
+runa = new Runa({
+  name: cmd.flags.name,
+  presence: !cmd.flags.solo,
+  saves: new SaveStore(path.join(dir, 'saves'))
+})
 const program = new Program(runa)
 program.renderer = synchronizeRenderer(program.renderer)
 
@@ -106,5 +117,6 @@ app.on('error', () => {})
 try {
   await program.run()
 } finally {
+  runa.saveCurrent()
   await app.close().catch(() => {})
 }
