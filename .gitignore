@@ -8,3 +8,4 @@ script.txt
 save.json
 save.json.tmp
 *.roto
+save.test-*.json

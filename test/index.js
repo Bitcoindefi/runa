@@ -386,7 +386,10 @@ test('a rule cannot equip what the player does not own, and says so', (t) => {
 })
 
 test('the character survives being closed and reopened', (t) => {
-  const save = '/tmp/runa-test-save-' + MAPS.city.width + '.json'
+  // Relative, not /tmp. The first version of this hardcoded a POSIX path and
+  // the Windows runners failed on D:\\tmp, which does not exist. Save paths are
+  // relative to the working directory everywhere, so this is the portable one.
+  const save = 'save.test-abierto.json'
 
   const first = new Runa({ presence: false, savePath: save })
   first.update({ type: 'resize', width: 88, height: 26 })
@@ -406,10 +409,14 @@ test('the character survives being closed and reopened', (t) => {
   t.is(second.player.gold, first.player.gold, 'the gold survives')
   t.is(second.player.xp, first.player.xp, 'the experience survives')
   t.ok(second.player.owns('crossbow'), 'and so does what you bought')
+
+  try {
+    fs.unlinkSync(save)
+  } catch {}
 })
 
 test('a save that cannot be read never costs you the character silently', (t) => {
-  const save = '/tmp/runa-test-roto-' + MAPS.city.height + '.json'
+  const save = 'save.test-roto.json'
   fs.writeFileSync(save, 'esto no es json')
 
   const game = new Runa({ presence: false, savePath: save })
@@ -423,6 +430,9 @@ test('a save that cannot be read never costs you the character silently', (t) =>
 
   try {
     fs.unlinkSync(save + '.roto')
+  } catch {}
+  try {
+    fs.unlinkSync(save)
   } catch {}
 })
 
