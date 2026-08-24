@@ -2,3 +2,9 @@ node_modules/
 out/
 build/
 script.txt
+
+# La partida del jugador. Nunca se commitea: es de quien juega,
+# no del repositorio, y ademas cambia en cada pelea.
+save.json
+save.json.tmp
+*.roto

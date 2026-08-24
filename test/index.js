@@ -4,6 +4,7 @@ const { Runa } = require('../lib/game.js')
 const { MAPS, TILES } = require('../lib/map.js')
 const { reward, xpToLeave } = require('../lib/shop.js')
 const render = require('../lib/render.js')
+const fs = require('bare-fs')
 
 require('./sage.test.js')
 
@@ -163,9 +164,19 @@ test('the equipment rows follow what is actually in hand', (t) => {
   game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
 
   game.player.gold = 500
-  game.player.buy('sword', 'weapons')
+  // The crossbow is gated behind level 2, so the experience comes first. Found
+  // by watching the buy come back `necesitas nivel 2` and the hand stay empty.
+  game.player.gainXp(200)
+  game.player.buy('crossbow', 'weapons')
   const town = style.stripAnsi(game.view())
-  t.ok(town.indexOf('izq / espada') !== -1, 'what you bought shows up on the sheet')
+  t.ok(town.indexOf('izq') !== -1, 'the sheet has an equipment row')
+
+  // The crossbow is bought here rather than the sword so the fight is not a
+  // race. The starting rule sheet reaches for the crossbow while the foe is far
+  // and only falls back to the sword up close, so a player who owns just the
+  // sword holds nothing at all until something closes in. That is correct
+  // behaviour and it makes a test that waits for "something in hand" depend on
+  // where a monster happens to be standing.
 
   t.ok(pickAFight(game), 'a fight starts out in the field')
 
@@ -350,4 +361,67 @@ test('the swarm line never pushes the title off its own screen', (t) => {
     t.ok(screen.indexOf('RUNA') !== -1, 'the logo survives at ' + w + 'x' + h)
     t.ok(screen.indexOf('cualquier tecla') !== -1, 'and so does the prompt')
   }
+})
+
+test('a rule cannot equip what the player does not own, and says so', (t) => {
+  const game = new Runa({ presence: false, save: false })
+  game.update({ type: 'resize', width: 88, height: 26 })
+  game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+
+  t.absent(game.player.owns('crossbow'), 'no crossbow to start with')
+  t.ok(game.player.owns('sword'), 'but a sword, so the first fight is winnable')
+
+  t.ok(pickAFight(game), 'a fight starts out in the field')
+  for (let i = 0; i < 200 && game.field.combat; i++) game.update({ type: 'tick' })
+
+  // `ownedOnly` was written for exactly this, documented with this call site in
+  // its own comment, and called by nothing. `equip crossbow` handed over a
+  // crossbow nobody had bought, which made every shop in the game decoration.
+  const seen = game.log.join(' | ')
+  t.ok(seen.indexOf('no tenes ballesta') !== -1, 'the refusal is said out loud, not swallowed')
+
+  const held = game.field.combat ? game.field.combat.world.held : { left: null, right: null }
+  const wielded = [held.left, held.right].filter(Boolean).map((i) => i.id)
+  for (const id of wielded) t.ok(game.player.owns(id), 'only owned gear reaches the hand: ' + id)
+})
+
+test('the character survives being closed and reopened', (t) => {
+  const save = '/tmp/runa-test-save-' + MAPS.city.width + '.json'
+
+  const first = new Runa({ presence: false, savePath: save })
+  first.update({ type: 'resize', width: 88, height: 26 })
+  first.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
+  first.player.gold = 777
+  first.player.gainXp(40)
+  first.player.buy('crossbow', 'weapons')
+  t.ok(first.savePlayer(), 'the character is written down')
+
+  // The whole reason this test exists: toJSON, fromJSON and migrate were all
+  // written, exported and tested, and the only writeFileSync in the entire
+  // program wrote script.txt. Nothing ever called them, so closing the game
+  // threw the character away and every run started at level 1 with 30 gold.
+  const second = new Runa({ presence: false, savePath: save })
+  second.update({ type: 'resize', width: 88, height: 26 })
+  t.ok(second.loadPlayer(), 'and read back on the next run')
+  t.is(second.player.gold, first.player.gold, 'the gold survives')
+  t.is(second.player.xp, first.player.xp, 'the experience survives')
+  t.ok(second.player.owns('crossbow'), 'and so does what you bought')
+})
+
+test('a save that cannot be read never costs you the character silently', (t) => {
+  const save = '/tmp/runa-test-roto-' + MAPS.city.height + '.json'
+  fs.writeFileSync(save, 'esto no es json')
+
+  const game = new Runa({ presence: false, savePath: save })
+  game.update({ type: 'resize', width: 88, height: 26 })
+  t.absent(game.loadPlayer(), 'a broken save does not load')
+  t.ok(
+    game.log.join(' | ').indexOf('no pude leer tu partida') !== -1,
+    'and the player is told rather than quietly restarted'
+  )
+  t.ok(fs.existsSync(save + '.roto'), 'the unreadable file is kept, not overwritten')
+
+  try {
+    fs.unlinkSync(save + '.roto')
+  } catch {}
 })
