@@ -2139,6 +2139,28 @@ test('the world boss animates powers with real field damage', (t) => {
   game.field.player.y = incoming.y
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
+test('every character in all maps is defined in the TILES table', (t) => {
+  for (const [id, map] of Object.entries(MAPS)) {
+    const missing = new Set()
+    for (let y = 0; y < map.rows.length; y++) {
+      for (let x = 0; x < map.rows[y].length; x++) {
+        const ch = map.rows[y][x]
+        if (!TILES[ch]) missing.add(ch)
+      }
+    }
+    t.is(missing.size, 0, `map ${id} has no missing tiles: ${Array.from(missing).join(', ')}`)
+  }
+})
+
+test('spaces in plaza art overlays do not create invisible walls', (t) => {
+  const city = MAPS.city
+  const fountainRow = 79
+  for (let x = 140; x <= 156; x++) {
+    const ch = city.rows[fountainRow][x]
+    const tile = TILES[ch]
+    t.ok(tile, `tile at (${x}, ${fountainRow}) is recognized`)
+    t.is(tile.solid, false, `approach at (${x}, ${fountainRow}) [glyph: '${ch}'] is walkable`)
+  }
 })
 test('city gardens are open and accessible from spawn', (t) => {
   const city = MAPS.city
