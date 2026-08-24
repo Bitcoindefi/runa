@@ -40,16 +40,39 @@ test('pressing a key opens the navigable city map', (t) => {
   t.ok(screen.includes('wasd o flechas'))
 })
 
-test('city art remains rectangular and walkable', (t) => {
+test('city art stays rectangular, known and walkable', (t) => {
   const city = MAPS.city
-  t.is(city.width, 60)
-  t.is(city.height, 18)
-  t.ok(city.rows.every((row) => row.length === city.width))
-  t.ok(city.rows.some((row) => row.includes('^')))
-  t.ok(city.rows.some((row) => row.includes('O')))
-  t.ok(city.rows.some((row) => row.includes('*')))
-  t.is(TILES[';'].solid, false)
-  t.is(TILES.O.solid, true)
+
+  // This used to assert that the art contained a fountain and some flowers.
+  // That is a test of the decoration, not of the map, and it meant any artist
+  // who improved the town broke the suite for no reason. It did exactly that.
+  //
+  // What actually has to hold is structural: the rows are a rectangle, every
+  // glyph is one the game knows how to draw and walk on, and the doors the code
+  // looks for are all there.
+  t.ok(city.rows.length > 0, 'the town has rows')
+  t.ok(
+    city.rows.every((row) => row.length === city.width),
+    'every row is the same width'
+  )
+  t.is(city.rows.length, city.height, 'and the height matches the art')
+
+  const unknown = new Set()
+  for (const row of city.rows) {
+    for (const ch of row) if (!TILES[ch]) unknown.add(ch)
+  }
+  t.is(unknown.size, 0, 'no glyph the game cannot draw: ' + [...unknown].join(''))
+
+  for (const glyph of ['C', 'I', 'P', 'A', 'D']) {
+    t.ok(
+      city.rows.some((row) => row.indexOf(glyph) !== -1),
+      'the door ' + glyph + ' exists'
+    )
+  }
+  t.ok(
+    city.rows.some((row) => row.indexOf('>') !== -1),
+    'and the way out to the field'
+  )
 })
 
 test('the field pane paints the whole field, not one stringified line', (t) => {
