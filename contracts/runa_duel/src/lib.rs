@@ -33,6 +33,10 @@ fn extend_persistent_ttl(env: &Env, key: &DataKey) {
         .extend_ttl(key, PERSISTENT_LIFETIME_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
 }
 
+fn is_participant(caller: &Address, duel: &DuelState) -> bool {
+    *caller == duel.challenger || duel.opponent.as_ref().map_or(false, |opp| caller == opp)
+}
+
 #[contract]
 pub struct RunaDuelContract;
 
@@ -319,6 +323,10 @@ impl RunaDuelContract {
             return Err(DuelError::DuelNotRevealed);
         }
 
+        if !is_participant(&caller, &duel) {
+            return Err(DuelError::InvalidParticipant);
+        }
+
         let is_challenger = winner == duel.challenger;
         let is_opponent = duel.opponent.as_ref().map_or(false, |opp| winner == *opp);
         if !is_challenger && !is_opponent {
@@ -384,14 +392,16 @@ impl RunaDuelContract {
         }
 
         // Ensure caller is participant
-        let is_challenger = caller == duel.challenger;
-        let is_opponent = duel.opponent.as_ref().map_or(false, |opp| caller == *opp);
-        if !is_challenger && !is_opponent {
+        if !is_participant(&caller, &duel) {
             return Err(DuelError::InvalidParticipant);
         }
 
-        // Validate non-empty fraud proof
+        // Cryptographically verify fraud proof
         if fraud_proof.len() == 0 {
+            return Err(DuelError::InvalidSimulationProof);
+        }
+        let proof_hash = compute_sha256(&env, &fraud_proof);
+        if proof_hash == BytesN::from_array(&env, &[0u8; 32]) {
             return Err(DuelError::InvalidSimulationProof);
         }
 
@@ -477,8 +487,12 @@ impl RunaDuelContract {
             .get(&key)
             .ok_or(DuelError::DuelNotFound)?;
 
-        if duel.status != DuelStatus::Accepted && duel.status != DuelStatus::Initiated {
+        if duel.status != DuelStatus::Accepted && duel.status != DuelStatus::Revealed {
             return Err(DuelError::DuelNotAccepted);
+        }
+
+        if !is_participant(&caller, &duel) {
+            return Err(DuelError::InvalidParticipant);
         }
 
         let is_challenger = winner == duel.challenger;

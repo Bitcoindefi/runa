@@ -1,24 +1,23 @@
 {
   "generators": {
-    "address": 7,
+    "address": 10,
     "nonce": 0,
     "mux_id": 0
   },
   "auth": [
     [],
     [],
-    [],
     [
       [
-        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPP4V",
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQUDE",
         {
           "function": {
             "contract_fn": {
-              "contract_address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
+              "contract_address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
               "function_name": "set_admin",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
                 }
               ]
             }
@@ -29,18 +28,40 @@
     ],
     [
       [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM",
         {
           "function": {
             "contract_fn": {
-              "contract_address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
+              "contract_address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
+              "function_name": "mint",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "i128": "10000000"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
               "function_name": "mint",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "i128": "1000000000"
+                  "i128": "10000000"
                 }
               ]
             }
@@ -49,320 +70,40 @@
         }
       ]
     ],
+    [],
+    [],
     [
       [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
         {
           "function": {
             "contract_fn": {
-              "contract_address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
-              "function_name": "mint",
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
+              "function_name": "create_duel",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "i128": "1000000000"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "register_item",
-              "args": [
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "base_price"
-                      },
-                      "val": {
-                        "i128": "25"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "hand"
-                      },
-                      "val": {
-                        "symbol": "left"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "id"
-                      },
-                      "val": {
-                        "symbol": "sword"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "kind"
-                      },
-                      "val": {
-                        "symbol": "weapon"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "min_level"
-                      },
-                      "val": {
-                        "u32": 1
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "sac_token"
-                      },
-                      "val": {
-                        "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "register_item",
-              "args": [
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "base_price"
-                      },
-                      "val": {
-                        "i128": "60"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "hand"
-                      },
-                      "val": {
-                        "symbol": "left"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "id"
-                      },
-                      "val": {
-                        "symbol": "crossbow"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "kind"
-                      },
-                      "val": {
-                        "symbol": "weapon"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "min_level"
-                      },
-                      "val": {
-                        "u32": 2
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "sac_token"
-                      },
-                      "val": {
-                        "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "register_item",
-              "args": [
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "base_price"
-                      },
-                      "val": {
-                        "i128": "30"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "hand"
-                      },
-                      "val": {
-                        "symbol": "right"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "id"
-                      },
-                      "val": {
-                        "symbol": "shield"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "kind"
-                      },
-                      "val": {
-                        "symbol": "armor"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "min_level"
-                      },
-                      "val": {
-                        "u32": 1
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "sac_token"
-                      },
-                      "val": {
-                        "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "register_item",
-              "args": [
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "base_price"
-                      },
-                      "val": {
-                        "i128": "45"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "hand"
-                      },
-                      "val": {
-                        "symbol": "right"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "id"
-                      },
-                      "val": {
-                        "symbol": "boots"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "kind"
-                      },
-                      "val": {
-                        "symbol": "armor"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "min_level"
-                      },
-                      "val": {
-                        "u32": 2
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "sac_token"
-                      },
-                      "val": {
-                        "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "mint_item",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  "address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23"
                 },
                 {
-                  "symbol": "shield"
+                  "i128": "500"
                 },
                 {
-                  "i128": "30"
+                  "bytes": "f64551fcd6f07823cb87971cfb91446425da18286b3ab1ef935e0cbd7a69f68a"
+                },
+                {
+                  "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
                 },
                 {
                   "u32": 1
+                },
+                {
+                  "u32": 50
+                },
+                {
+                  "u32": 30
                 }
               ]
             }
@@ -371,17 +112,17 @@
             {
               "function": {
                 "contract_fn": {
-                  "contract_address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
+                  "contract_address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
                   "function_name": "transfer",
                   "args": [
                     {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                     },
                     {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                     },
                     {
-                      "i128": "30"
+                      "i128": "500"
                     }
                   ]
                 }
@@ -398,17 +139,63 @@
         {
           "function": {
             "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "function_name": "transfer_item",
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
+              "function_name": "accept_duel",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  "u64": "1"
                 },
                 {
-                  "symbol": "shield"
+                  "bytes": "3946ca64ff78d93ca61090a437cbb6b3d2ca0d488f5f9ccf3059608368b27693"
+                }
+              ]
+            }
+          },
+          "sub_invocations": [
+            {
+              "function": {
+                "contract_fn": {
+                  "contract_address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
+                  "function_name": "transfer",
+                  "args": [
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                    },
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
+                    },
+                    {
+                      "i128": "500"
+                    }
+                  ]
+                }
+              },
+              "sub_invocations": []
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
+              "function_name": "reveal_script",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u64": "1"
+                },
+                {
+                  "bytes": "7031"
                 }
               ]
             }
@@ -417,8 +204,59 @@
         }
       ]
     ],
-    [],
-    [],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
+              "function_name": "reveal_script",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                },
+                {
+                  "u64": "1"
+                },
+                {
+                  "bytes": "7032"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
+              "function_name": "resolve_duel_optimistic",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u64": "1"
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u32": 10
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
     []
   ],
   "ledger": {
@@ -436,7 +274,7 @@
           "last_modified_ledger_seq": 0,
           "data": {
             "account": {
-              "account_id": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPP4V",
+              "account_id": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQUDE",
               "balance": "0",
               "seq_num": "0",
               "num_sub_entries": 0,
@@ -458,7 +296,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPP4V",
+              "contract": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQUDE",
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "801925984706572462"
@@ -478,27 +316,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "2032731177588607455"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "4270020994084947596"
@@ -518,7 +336,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "4837995959683129791"
@@ -538,47 +356,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "8370022561469687789"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "5806905060045992000"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "6277191135259896685"
@@ -598,75 +376,19 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
               "key": {
-                "vec": [
-                  {
-                    "symbol": "Item"
-                  },
-                  {
-                    "symbol": "boots"
-                  }
-                ]
+                "ledger_key_nonce": {
+                  "nonce": "2032731177588607455"
+                }
               },
-              "durability": "persistent",
-              "val": {
-                "map": [
-                  {
-                    "key": {
-                      "symbol": "base_price"
-                    },
-                    "val": {
-                      "i128": "45"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "hand"
-                    },
-                    "val": {
-                      "symbol": "right"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "id"
-                    },
-                    "val": {
-                      "symbol": "boots"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "kind"
-                    },
-                    "val": {
-                      "symbol": "armor"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "min_level"
-                    },
-                    "val": {
-                      "u32": 2
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "sac_token"
-                    },
-                    "val": {
-                      "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                    }
-                  }
-                ]
-              }
+              "durability": "temporary",
+              "val": "void"
             }
           },
           "ext": "v0"
         },
-        "live_until": 200000
+        "live_until": 6311999
       },
       {
         "entry": {
@@ -674,75 +396,19 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
               "key": {
-                "vec": [
-                  {
-                    "symbol": "Item"
-                  },
-                  {
-                    "symbol": "crossbow"
-                  }
-                ]
+                "ledger_key_nonce": {
+                  "nonce": "8370022561469687789"
+                }
               },
-              "durability": "persistent",
-              "val": {
-                "map": [
-                  {
-                    "key": {
-                      "symbol": "base_price"
-                    },
-                    "val": {
-                      "i128": "60"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "hand"
-                    },
-                    "val": {
-                      "symbol": "left"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "id"
-                    },
-                    "val": {
-                      "symbol": "crossbow"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "kind"
-                    },
-                    "val": {
-                      "symbol": "weapon"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "min_level"
-                    },
-                    "val": {
-                      "u32": 2
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "sac_token"
-                    },
-                    "val": {
-                      "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                    }
-                  }
-                ]
-              }
+              "durability": "temporary",
+              "val": "void"
             }
           },
           "ext": "v0"
         },
-        "live_until": 200000
+        "live_until": 6311999
       },
       {
         "entry": {
@@ -750,14 +416,77 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM",
+              "key": {
+                "ledger_key_nonce": {
+                  "nonce": "1033654523790656264"
+                }
+              },
+              "durability": "temporary",
+              "val": "void"
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 6311999
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM",
+              "key": {
+                "ledger_key_nonce": {
+                  "nonce": "5541220902715666415"
+                }
+              },
+              "durability": "temporary",
+              "val": "void"
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 6311999
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
               "key": {
                 "vec": [
                   {
-                    "symbol": "Item"
+                    "symbol": "Duel"
                   },
                   {
-                    "symbol": "shield"
+                    "u64": "1"
                   }
                 ]
               },
@@ -766,39 +495,63 @@
                 "map": [
                   {
                     "key": {
-                      "symbol": "base_price"
+                      "symbol": "challenger"
                     },
                     "val": {
-                      "i128": "30"
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                     }
                   },
                   {
                     "key": {
-                      "symbol": "hand"
+                      "symbol": "challenger_script"
                     },
                     "val": {
-                      "symbol": "right"
+                      "bytes": "7031"
                     }
                   },
                   {
                     "key": {
-                      "symbol": "id"
+                      "symbol": "challenger_script_hash"
                     },
                     "val": {
-                      "symbol": "shield"
+                      "bytes": "f64551fcd6f07823cb87971cfb91446425da18286b3ab1ef935e0cbd7a69f68a"
                     }
                   },
                   {
                     "key": {
-                      "symbol": "kind"
+                      "symbol": "content_hash"
                     },
                     "val": {
-                      "symbol": "armor"
+                      "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
                     }
                   },
                   {
                     "key": {
-                      "symbol": "min_level"
+                      "symbol": "creation_ledger"
+                    },
+                    "val": {
+                      "u32": 0
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "dispute_deadline_ledger"
+                    },
+                    "val": {
+                      "u32": 10
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "duel_id"
+                    },
+                    "val": {
+                      "u64": "1"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "engine_version"
                     },
                     "val": {
                       "u32": 1
@@ -806,10 +559,98 @@
                   },
                   {
                     "key": {
-                      "symbol": "sac_token"
+                      "symbol": "expiration_ledger"
                     },
                     "val": {
-                      "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
+                      "u32": 50
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "nonce"
+                    },
+                    "val": {
+                      "bytes": "783825822a6f9e62da2190e828e4c9d2576e5977e3a0b3620b092dfb9e9996fa"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "opponent"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "opponent_script"
+                    },
+                    "val": {
+                      "bytes": "7032"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "opponent_script_hash"
+                    },
+                    "val": {
+                      "bytes": "3946ca64ff78d93ca61090a437cbb6b3d2ca0d488f5f9ccf3059608368b27693"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "resolution_mode"
+                    },
+                    "val": {
+                      "u32": 0
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "reveal_deadline_ledger"
+                    },
+                    "val": {
+                      "u32": 30
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "seed"
+                    },
+                    "val": {
+                      "u64": "2638536393184082473"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "status"
+                    },
+                    "val": {
+                      "u32": 6
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "wager_amount"
+                    },
+                    "val": {
+                      "i128": "500"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "wager_token"
+                    },
+                    "val": {
+                      "address": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "winner"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                     }
                   }
                 ]
@@ -826,75 +667,26 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
               "key": {
                 "vec": [
                   {
-                    "symbol": "Item"
+                    "symbol": "RevealWindow"
                   },
                   {
-                    "symbol": "sword"
+                    "u64": "1"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "map": [
-                  {
-                    "key": {
-                      "symbol": "base_price"
-                    },
-                    "val": {
-                      "i128": "25"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "hand"
-                    },
-                    "val": {
-                      "symbol": "left"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "id"
-                    },
-                    "val": {
-                      "symbol": "sword"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "kind"
-                    },
-                    "val": {
-                      "symbol": "weapon"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "min_level"
-                    },
-                    "val": {
-                      "u32": 1
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "sac_token"
-                    },
-                    "val": {
-                      "address": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A"
-                    }
-                  }
-                ]
+                "u32": 30
               }
             }
           },
           "ext": "v0"
         },
-        "live_until": 200000
+        "live_until": 4095
       },
       {
         "entry": {
@@ -902,67 +694,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "PlayerBalance"
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                  },
-                  {
-                    "symbol": "shield"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "u32": 0
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 200000
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "PlayerBalance"
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                  },
-                  {
-                    "symbol": "shield"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "u32": 1
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 200000
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -987,12 +719,60 @@
                       "key": {
                         "vec": [
                           {
-                            "symbol": "AuthorizedGameContract"
+                            "symbol": "DuelCount"
                           }
                         ]
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                        "u64": "1"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "FeeBps"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "FeeRecipient"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "ItemContract"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                      }
+                    },
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "VerifierContract"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                       }
                     }
                   ]
@@ -1010,19 +790,51 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+              "contract": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
               "key": {
-                "ledger_key_nonce": {
-                  "nonce": "1033654523790656264"
-                }
+                "vec": [
+                  {
+                    "symbol": "Balance"
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                ]
               },
-              "durability": "temporary",
-              "val": "void"
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "amount"
+                    },
+                    "val": {
+                      "i128": "9999500"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "authorized"
+                    },
+                    "val": {
+                      "bool": true
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "clawback"
+                    },
+                    "val": {
+                      "bool": false
+                    }
+                  }
+                ]
+              }
             }
           },
           "ext": "v0"
         },
-        "live_until": 6311999
+        "live_until": 518400
       },
       {
         "entry": {
@@ -1030,27 +842,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "5541220902715666415"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
+              "contract": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
               "key": {
                 "vec": [
                   {
@@ -1069,7 +861,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "999999970"
+                      "i128": "9999500"
                     }
                   },
                   {
@@ -1102,14 +894,14 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
+              "contract": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
               "key": {
                 "vec": [
                   {
                     "symbol": "Balance"
                   },
                   {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                   }
                 ]
               },
@@ -1121,7 +913,7 @@
                       "symbol": "amount"
                     },
                     "val": {
-                      "i128": "1000000000"
+                      "i128": "1000"
                     }
                   },
                   {
@@ -1154,59 +946,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "Balance"
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "map": [
-                  {
-                    "key": {
-                      "symbol": "amount"
-                    },
-                    "val": {
-                      "i128": "30"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "authorized"
-                    },
-                    "val": {
-                      "bool": true
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "clawback"
-                    },
-                    "val": {
-                      "bool": false
-                    }
-                  }
-                ]
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 518400
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CDS3FDGQ4JA2V3F26Y4BMWWJEC5TT26RJBN7KIQKUMVO2MAOCMDTSZ7A",
+              "contract": "CD3FXVGYSLQFFTW3UH6WFF2OKZH7VERGZJZAMJHTGHBWO4F6URWEJL23",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -1232,7 +972,7 @@
                               "symbol": "name"
                             },
                             "val": {
-                              "string": "aaa:GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPP4V"
+                              "string": "aaa:GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQUDE"
                             }
                           },
                           {
@@ -1255,7 +995,7 @@
                         ]
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
                       }
                     },
                     {
@@ -1286,7 +1026,7 @@
                                   "symbol": "issuer"
                                 },
                                 "val": {
-                                  "bytes": "0000000000000000000000000000000000000000000000000000000000000007"
+                                  "bytes": "0000000000000000000000000000000000000000000000000000000000000008"
                                 }
                               }
                             ]

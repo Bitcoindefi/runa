@@ -1,5 +1,5 @@
 use runa_common::{
-    compute_sha256, DuelStatus, Groth16Proof, VerificationKey,
+    compute_sha256, DuelStatus, Groth16Proof,
 };
 use runa_duel::{RunaDuelContract, RunaDuelContractClient};
 use soroban_sdk::{
@@ -86,7 +86,7 @@ pub fn generate_matching_proof(
 
 struct DuelTestRig {
     env: Env,
-    admin: Address,
+    _admin: Address,
     challenger: Address,
     opponent: Address,
     fee_recipient: Address,
@@ -94,7 +94,7 @@ struct DuelTestRig {
     token_client: token::Client<'static>,
     duel_contract_id: Address,
     duel_client: RunaDuelContractClient<'static>,
-    verifier_id: Address,
+    _verifier_id: Address,
 }
 
 fn setup_duel_rig(fee_bps: u32) -> DuelTestRig {
@@ -133,7 +133,7 @@ fn setup_duel_rig(fee_bps: u32) -> DuelTestRig {
 
     DuelTestRig {
         env,
-        admin,
+        _admin: admin,
         challenger,
         opponent,
         fee_recipient,
@@ -141,7 +141,7 @@ fn setup_duel_rig(fee_bps: u32) -> DuelTestRig {
         token_client,
         duel_contract_id,
         duel_client,
-        verifier_id,
+        _verifier_id: verifier_id,
     }
 }
 
@@ -269,6 +269,99 @@ fn test_challenge1_zk_invalid_winner_rejected() {
         &public_inputs,
     );
     assert!(res.is_err(), "Non-participant winner must be rejected");
+}
+
+#[test]
+fn test_challenge1_zk_initiated_status_drain_rejected() {
+    let rig = setup_duel_rig(0);
+    let script1_hash = BytesN::from_array(&rig.env, &[0x11; 32]);
+    let content_hash = BytesN::from_array(&rig.env, &[0x33; 32]);
+
+    let duel_id = rig.duel_client.create_duel(
+        &rig.challenger,
+        &rig.wager_token,
+        &500,
+        &script1_hash,
+        &content_hash,
+        &1,
+        &50,
+        &20,
+    );
+
+    // Duel is still in Initiated status (no opponent has accepted yet)
+    let public_inputs = vec![&rig.env, script1_hash.clone(), content_hash.clone()];
+    let valid_proof = generate_matching_proof(&rig.env, &public_inputs);
+    let mut valid_proof_bytes = [0u8; 192];
+    for i in 0..48 {
+        valid_proof_bytes[i] = valid_proof.a.get(i as u32).unwrap_or(0);
+    }
+    for i in 0..96 {
+        valid_proof_bytes[48 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
+    }
+    for i in 0..48 {
+        valid_proof_bytes[144 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
+    }
+    let proof_data = Bytes::from_slice(&rig.env, &valid_proof_bytes);
+
+    // Attempting to resolve ZK on unaccepted (Initiated) duel must fail
+    let res = rig.duel_client.try_resolve_duel_zk(
+        &rig.challenger,
+        &duel_id,
+        &rig.challenger,
+        &proof_data,
+        &public_inputs,
+    );
+    assert!(res.is_err(), "resolve_duel_zk on Initiated duel must fail with DuelNotAccepted");
+
+    // Wager escrow must remain intact in contract
+    assert_eq!(rig.token_client.balance(&rig.duel_contract_id), 500);
+}
+
+#[test]
+fn test_challenge1_zk_unauthorized_caller_rejected() {
+    let rig = setup_duel_rig(0);
+    let script1_hash = BytesN::from_array(&rig.env, &[0x11; 32]);
+    let script2_hash = BytesN::from_array(&rig.env, &[0x22; 32]);
+    let content_hash = BytesN::from_array(&rig.env, &[0x33; 32]);
+
+    let duel_id = rig.duel_client.create_duel(
+        &rig.challenger,
+        &rig.wager_token,
+        &500,
+        &script1_hash,
+        &content_hash,
+        &1,
+        &50,
+        &20,
+    );
+
+    rig.duel_client
+        .accept_duel(&rig.opponent, &duel_id, &script2_hash);
+
+    let third_party = Address::generate(&rig.env);
+    let public_inputs = vec![&rig.env, script2_hash.clone(), content_hash.clone()];
+    let valid_proof = generate_matching_proof(&rig.env, &public_inputs);
+    let mut valid_proof_bytes = [0u8; 192];
+    for i in 0..48 {
+        valid_proof_bytes[i] = valid_proof.a.get(i as u32).unwrap_or(0);
+    }
+    for i in 0..96 {
+        valid_proof_bytes[48 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
+    }
+    for i in 0..48 {
+        valid_proof_bytes[144 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
+    }
+    let proof_data = Bytes::from_slice(&rig.env, &valid_proof_bytes);
+
+    // Outsider calls resolve_duel_zk -> must fail
+    let res = rig.duel_client.try_resolve_duel_zk(
+        &third_party,
+        &duel_id,
+        &rig.challenger,
+        &proof_data,
+        &public_inputs,
+    );
+    assert!(res.is_err(), "Outsider calling resolve_duel_zk must be rejected");
 }
 
 // =========================================================================
@@ -457,6 +550,43 @@ fn test_challenge3_wager_escrow_double_settlement_drain_prevention() {
 
     // Escrow balance remains 0
     assert_eq!(rig.token_client.balance(&rig.duel_contract_id), 0);
+}
+
+#[test]
+fn test_challenge3_optimistic_unauthorized_caller_rejected() {
+    let rig = setup_duel_rig(0);
+    let script1 = Bytes::from_slice(&rig.env, b"p1");
+    let script1_hash = compute_sha256(&rig.env, &script1);
+    let script2 = Bytes::from_slice(&rig.env, b"p2");
+    let script2_hash = compute_sha256(&rig.env, &script2);
+    let content_hash = BytesN::from_array(&rig.env, &[0x01; 32]);
+
+    let duel_id = rig.duel_client.create_duel(
+        &rig.challenger,
+        &rig.wager_token,
+        &1000,
+        &script1_hash,
+        &content_hash,
+        &1,
+        &50,
+        &30,
+    );
+
+    rig.duel_client
+        .accept_duel(&rig.opponent, &duel_id, &script2_hash);
+    rig.duel_client
+        .reveal_script(&rig.challenger, &duel_id, &script1);
+    rig.duel_client
+        .reveal_script(&rig.opponent, &duel_id, &script2);
+
+    let outsider = Address::generate(&rig.env);
+    let res = rig.duel_client.try_resolve_duel_optimistic(
+        &outsider,
+        &duel_id,
+        &rig.challenger,
+        &0,
+    );
+    assert!(res.is_err(), "Outsider calling resolve_duel_optimistic must fail with InvalidParticipant");
 }
 
 #[test]
@@ -706,7 +836,7 @@ fn test_challenge5_dispute_window_boundaries() {
 fn test_challenge5_concurrent_multi_duel_lifecycle_isolation() {
     let rig = setup_duel_rig(250); // 2.5% fee
     let charlie = Address::generate(&rig.env);
-    let token_admin = Address::generate(&rig.env);
+    let _token_admin = Address::generate(&rig.env);
     let token_contract = env_token_client(&rig.env, &rig.wager_token);
     token_contract.mint(&charlie, &10_000_000);
 
@@ -789,6 +919,84 @@ fn test_challenge3_odd_wager_and_fee_math_precision() {
     assert_eq!(winner_after - winner_before, 644);
     assert_eq!((fee_after - fee_before) + (winner_after - winner_before), 666);
     assert_eq!(rig.token_client.balance(&rig.duel_contract_id), 0);
+}
+
+#[test]
+fn test_challenge5_dispute_unauthorized_caller_rejected() {
+    let rig = setup_duel_rig(0);
+    let script1 = Bytes::from_slice(&rig.env, b"p1");
+    let script1_hash = compute_sha256(&rig.env, &script1);
+    let script2 = Bytes::from_slice(&rig.env, b"p2");
+    let script2_hash = compute_sha256(&rig.env, &script2);
+    let content_hash = BytesN::from_array(&rig.env, &[0x01; 32]);
+
+    let duel_id = rig.duel_client.create_duel(
+        &rig.challenger,
+        &rig.wager_token,
+        &500,
+        &script1_hash,
+        &content_hash,
+        &1,
+        &50,
+        &30,
+    );
+
+    rig.duel_client
+        .accept_duel(&rig.opponent, &duel_id, &script2_hash);
+    rig.duel_client
+        .reveal_script(&rig.challenger, &duel_id, &script1);
+    rig.duel_client
+        .reveal_script(&rig.opponent, &duel_id, &script2);
+
+    rig.duel_client
+        .resolve_duel_optimistic(&rig.challenger, &duel_id, &rig.challenger, &10);
+
+    let outsider = Address::generate(&rig.env);
+    let res = rig.duel_client.try_dispute_duel(
+        &outsider,
+        &duel_id,
+        &Bytes::from_slice(&rig.env, b"fraud proof"),
+    );
+    assert!(res.is_err(), "Outsider calling dispute_duel must fail with InvalidParticipant");
+}
+
+#[test]
+fn test_challenge5_dispute_empty_proof_rejected() {
+    let rig = setup_duel_rig(0);
+    let script1 = Bytes::from_slice(&rig.env, b"p1");
+    let script1_hash = compute_sha256(&rig.env, &script1);
+    let script2 = Bytes::from_slice(&rig.env, b"p2");
+    let script2_hash = compute_sha256(&rig.env, &script2);
+    let content_hash = BytesN::from_array(&rig.env, &[0x01; 32]);
+
+    let duel_id = rig.duel_client.create_duel(
+        &rig.challenger,
+        &rig.wager_token,
+        &500,
+        &script1_hash,
+        &content_hash,
+        &1,
+        &50,
+        &30,
+    );
+
+    rig.duel_client
+        .accept_duel(&rig.opponent, &duel_id, &script2_hash);
+    rig.duel_client
+        .reveal_script(&rig.challenger, &duel_id, &script1);
+    rig.duel_client
+        .reveal_script(&rig.opponent, &duel_id, &script2);
+
+    rig.duel_client
+        .resolve_duel_optimistic(&rig.challenger, &duel_id, &rig.challenger, &10);
+
+    let empty_proof = Bytes::new(&rig.env);
+    let res = rig.duel_client.try_dispute_duel(
+        &rig.opponent,
+        &duel_id,
+        &empty_proof,
+    );
+    assert!(res.is_err(), "Empty fraud proof must fail with InvalidSimulationProof");
 }
 
 fn env_token_client<'a>(env: &'a Env, token: &Address) -> token::StellarAssetClient<'a> {

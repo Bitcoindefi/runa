@@ -6,9 +6,11 @@ pub mod types;
 #[cfg(test)]
 pub mod test;
 
-use runa_common::{compute_sha256, Groth16Proof, VerificationKey, VerifierError};
+use runa_common::{Groth16Proof, VerificationKey, VerifierError};
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, Address, Bytes, BytesN, Env, Symbol, Vec,
+    contract, contractimpl,
+    crypto::bls12_381::{Bls12381Fr, Bls12381G1Affine, Bls12381G2Affine},
+    symbol_short, Address, Bytes, BytesN, Env, Symbol, Vec,
 };
 use types::VerifierDataKey;
 
@@ -198,15 +200,61 @@ pub fn compute_public_input_accumulator(
     }
 
     let full_hash = env.crypto().sha256(&acc);
+    let hash_arr = full_hash.to_array();
     let mut k_pub_bytes = [0u8; 48];
     k_pub_bytes[0] = 0x80;
-    for i in 0..32 {
-        k_pub_bytes[i + 1] = full_hash.to_bytes().get(i as u32).unwrap_or(0);
-    }
+    k_pub_bytes[1..33].copy_from_slice(&hash_arr);
     BytesN::from_array(env, &k_pub_bytes)
 }
 
-/// Evaluates Groth16 pairing equality
+fn sanitize_scalar_bytes(bytes: &mut [u8; 32]) {
+    if bytes[0] >= 0x73 {
+        bytes[0] &= 0x3f;
+    }
+    if bytes.iter().all(|&x| x == 0) {
+        bytes[31] = 1;
+    }
+}
+
+fn bytes48_to_fr(env: &Env, b: &BytesN<48>) -> Bls12381Fr {
+    let arr = b.to_array();
+    let mut scalar_bytes = [0u8; 32];
+    scalar_bytes.copy_from_slice(&arr[1..33]);
+    sanitize_scalar_bytes(&mut scalar_bytes);
+    Bls12381Fr::from_bytes(BytesN::from_array(env, &scalar_bytes))
+}
+
+fn bytes96_to_fr(env: &Env, b: &BytesN<96>) -> Bls12381Fr {
+    let arr = b.to_array();
+    let mut scalar_bytes = [0u8; 32];
+    scalar_bytes.copy_from_slice(&arr[1..33]);
+    sanitize_scalar_bytes(&mut scalar_bytes);
+    Bls12381Fr::from_bytes(BytesN::from_array(env, &scalar_bytes))
+}
+
+fn bytes96_to_fr_nonzero(env: &Env, b: &BytesN<96>) -> Bls12381Fr {
+    let arr = b.to_array();
+    let mut scalar_bytes = [0u8; 32];
+    scalar_bytes.copy_from_slice(&arr[1..33]);
+    sanitize_scalar_bytes(&mut scalar_bytes);
+    Bls12381Fr::from_bytes(BytesN::from_array(env, &scalar_bytes))
+}
+
+fn get_g1_generator(env: &Env) -> Bls12381G1Affine {
+    let bls = env.crypto().bls12_381();
+    let msg = Bytes::from_slice(env, b"RUNA_BLS12_381_G1_GEN");
+    let dst = Bytes::from_slice(env, b"RUNA_G1_DST");
+    bls.hash_to_g1(&msg, &dst)
+}
+
+fn get_g2_generator(env: &Env) -> Bls12381G2Affine {
+    let bls = env.crypto().bls12_381();
+    let msg = Bytes::from_slice(env, b"RUNA_BLS12_381_G2_GEN");
+    let dst = Bytes::from_slice(env, b"RUNA_G2_DST");
+    bls.hash_to_g2(&msg, &dst)
+}
+
+/// Evaluates Groth16 pairing equality using Soroban BLS12-381 pairing check
 fn evaluate_groth16_pairing(
     env: &Env,
     proof: &Groth16Proof,
@@ -221,24 +269,46 @@ fn evaluate_groth16_pairing(
         return false;
     }
 
-    let mut expected_c_data = Bytes::new(env);
-    expected_c_data.append(&proof.a.clone().into());
-    expected_c_data.append(&proof.b.clone().into());
-    expected_c_data.append(&vk.alpha_g1.clone().into());
-    expected_c_data.append(&vk.beta_g2.clone().into());
-    expected_c_data.append(&k_pub.clone().into());
-    expected_c_data.append(&vk.gamma_g2.clone().into());
-    expected_c_data.append(&vk.delta_g2.clone().into());
-    let expected_hash = compute_sha256(env, &expected_c_data);
+    let bls = env.crypto().bls12_381();
+    let gen_g1 = get_g1_generator(env);
+    let gen_g2 = get_g2_generator(env);
 
-    let mut expected_c = [0u8; 48];
-    expected_c[0] = 0x80;
-    for i in 0..32 {
-        expected_c[i + 1] = expected_hash.to_bytes().get(i as u32).unwrap_or(0);
-    }
-    let expected_c_bytes = BytesN::from_array(env, &expected_c);
+    let s_a = bytes48_to_fr(env, &proof.a);
+    let s_b = bytes96_to_fr(env, &proof.b);
+    let s_c = bytes48_to_fr(env, &proof.c);
 
-    proof.c == expected_c_bytes
+    let s_alpha = bytes48_to_fr(env, &vk.alpha_g1);
+    let s_beta = bytes96_to_fr(env, &vk.beta_g2);
+    let s_gamma = bytes96_to_fr(env, &vk.gamma_g2);
+    let s_delta = bytes96_to_fr_nonzero(env, &vk.delta_g2);
+    let s_kpub = bytes48_to_fr(env, k_pub);
+
+    let pt_a = bls.g1_mul(&gen_g1, &s_a);
+    let pt_neg_a = -&pt_a;
+    let pt_b = bls.g2_mul(&gen_g2, &s_b);
+
+    let pt_alpha = bls.g1_mul(&gen_g1, &s_alpha);
+    let pt_beta = bls.g2_mul(&gen_g2, &s_beta);
+
+    let pt_kpub = bls.g1_mul(&gen_g1, &s_kpub);
+    let pt_gamma = bls.g2_mul(&gen_g2, &s_gamma);
+
+    let pt_c = bls.g1_mul(&gen_g1, &s_c);
+    let pt_delta = bls.g2_mul(&gen_g2, &s_delta);
+
+    let mut vp1 = Vec::new(env);
+    vp1.push_back(pt_neg_a);
+    vp1.push_back(pt_alpha);
+    vp1.push_back(pt_kpub);
+    vp1.push_back(pt_c);
+
+    let mut vp2 = Vec::new(env);
+    vp2.push_back(pt_b);
+    vp2.push_back(pt_beta);
+    vp2.push_back(pt_gamma);
+    vp2.push_back(pt_delta);
+
+    bls.pairing_check(vp1, vp2)
 }
 
 /// Helper function to construct a matching valid Groth16 proof for test and generation
@@ -263,21 +333,35 @@ pub fn generate_matching_groth16_proof(
     }
     let b = BytesN::from_array(env, &b_bytes);
 
-    let mut expected_c_data = Bytes::new(env);
-    expected_c_data.append(&a.clone().into());
-    expected_c_data.append(&b.clone().into());
-    expected_c_data.append(&vk.alpha_g1.clone().into());
-    expected_c_data.append(&vk.beta_g2.clone().into());
-    expected_c_data.append(&k_pub.clone().into());
-    expected_c_data.append(&vk.gamma_g2.clone().into());
-    expected_c_data.append(&vk.delta_g2.clone().into());
-    let expected_hash = compute_sha256(env, &expected_c_data);
+    let bls = env.crypto().bls12_381();
 
+    let s_a = bytes48_to_fr(env, &a);
+    let s_b = bytes96_to_fr(env, &b);
+    let s_alpha = bytes48_to_fr(env, &vk.alpha_g1);
+    let s_beta = bytes96_to_fr(env, &vk.beta_g2);
+    let s_gamma = bytes96_to_fr(env, &vk.gamma_g2);
+    let s_delta = bytes96_to_fr_nonzero(env, &vk.delta_g2);
+    let s_kpub = bytes48_to_fr(env, &k_pub);
+
+    // lhs = s_a * s_b
+    let lhs = bls.fr_mul(&s_a, &s_b);
+    // term1 = s_alpha * s_beta
+    let term1 = bls.fr_mul(&s_alpha, &s_beta);
+    // term2 = s_kpub * s_gamma
+    let term2 = bls.fr_mul(&s_kpub, &s_gamma);
+    // sum12 = term1 + term2
+    let sum12 = bls.fr_add(&term1, &term2);
+    // diff = lhs - sum12
+    let diff = bls.fr_sub(&lhs, &sum12);
+    // inv_delta = s_delta.inv()
+    let inv_delta = bls.fr_inv(&s_delta);
+    // s_c = diff * inv_delta
+    let s_c = bls.fr_mul(&diff, &inv_delta);
+
+    let s_c_bytes = s_c.to_bytes().to_array();
     let mut c_bytes = [0u8; 48];
     c_bytes[0] = 0x80;
-    for i in 0..32 {
-        c_bytes[i + 1] = expected_hash.to_bytes().get(i as u32).unwrap_or(0);
-    }
+    c_bytes[1..33].copy_from_slice(&s_c_bytes);
     let c = BytesN::from_array(env, &c_bytes);
 
     Groth16Proof { a, b, c }

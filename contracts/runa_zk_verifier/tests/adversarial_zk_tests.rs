@@ -1,15 +1,13 @@
 #![cfg(test)]
 
 use runa_common::{
-    compute_public_inputs_hash, compute_sha256, Groth16Proof, VerificationKey,
-    VerifierError, ZkPublicInputs,
+    compute_public_inputs_hash, Groth16Proof, VerificationKey, ZkPublicInputs,
 };
 use runa_zk_verifier::{
-    compute_public_input_accumulator, generate_matching_groth16_proof,
-    RunaZkVerifierContract, RunaZkVerifierContractClient,
+    generate_matching_groth16_proof, RunaZkVerifierContract, RunaZkVerifierContractClient,
 };
 use soroban_sdk::{
-    testutils::Address as _, vec, Address, Bytes, BytesN, Env, Symbol, Vec,
+    testutils::Address as _, vec, Address, BytesN, Env, Symbol, Vec,
 };
 
 fn create_vk(env: &Env, num_inputs: usize, seed_offset: u8) -> VerificationKey {
@@ -34,7 +32,7 @@ fn create_vk(env: &Env, num_inputs: usize, seed_offset: u8) -> VerificationKey {
         let mut ic_bytes = [0u8; 48];
         ic_bytes[0] = 0x80 | (0x10 + (i as u8) + seed_offset);
         for j in 1..48 {
-            ic_bytes[j] = (((i * 7 + j * 13 + (seed_offset as usize) * 17) % 251) as u8);
+            ic_bytes[j] = ((i * 7 + j * 13 + (seed_offset as usize) * 17) % 251) as u8;
         }
         ic.push_back(BytesN::from_array(env, &ic_bytes));
     }
@@ -50,7 +48,7 @@ fn create_vk(env: &Env, num_inputs: usize, seed_offset: u8) -> VerificationKey {
 
 struct ZkSetup {
     env: Env,
-    admin: Address,
+    _admin: Address,
     client: RunaZkVerifierContractClient<'static>,
 }
 
@@ -63,7 +61,7 @@ fn setup_zk() -> ZkSetup {
     let client = RunaZkVerifierContractClient::new(&env, &contract_id);
     client.initialize(&admin);
 
-    ZkSetup { env, admin, client }
+    ZkSetup { env, _admin: admin, client }
 }
 
 #[test]
