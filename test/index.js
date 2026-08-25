@@ -1098,6 +1098,40 @@ test('hitbox combat stays on the field and advances on attack input', (t) => {
   )
 })
 
+test('two excursions are never the same field (#3)', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game)
+
+  const openField = () => {
+    const gateTile = { x: 0, y: 0 }
+    // find the '>' exit and step on it via placeAt + enter
+    for (let y = 0; y < MAPS.city.rows.length; y++) {
+      const x = MAPS.city.rows[y].indexOf('>')
+      if (x !== -1) {
+        gateTile.x = x
+        gateTile.y = y
+        break
+      }
+    }
+    game.walker.placeAt('city', gateTile.x, gateTile.y)
+    press(game, 'e')
+  }
+
+  openField()
+  t.ok(game.field, 'first excursion opens the field')
+  const first = game.field.seed
+
+  press(game, 't')
+  t.absent(game.field, 't closes the excursion')
+  game.player.gold += 7
+
+  openField()
+  t.ok(game.field, 'second excursion opens a fresh field')
+  const second = game.field.seed
+
+  t.not(first, second, 'the seed differs between excursions')
+})
+
 test('t returns from the field to the city outside combat', (t) => {
   const game = new Runa({ presence: false })
   startGame(game)
