@@ -19,6 +19,7 @@ const {
 const render = require('../lib/render.js')
 
 require('./sage.test.js')
+require('./dungeon-content.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
