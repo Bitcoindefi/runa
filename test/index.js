@@ -1199,4 +1199,21 @@ test('the world boss animates powers with real field damage', (t) => {
   game.field.player.y = incoming.y
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
+test('e reaches the resident the header promises, two cells away (#8)', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game)
+
+  // The residents sit far apart, so a spot exactly two cells away belongs to
+  // this one NPC alone. That is the distance from which view() advertises
+  // `e hablar` in the header.
+  const npc = MAPS.city.npcs[0]
+  game.walker.placeAt('city', npc.x + 2, npc.y)
+
+  t.is(game.nearbyNpc(2) && game.nearbyNpc(2).name, npc.name, 'the header range spots the resident')
+
+  press(game, 'e')
+  t.ok(
+    !game.log.some((line) => String(line).includes('aca no hay nada')),
+    'pressing e interacts instead of denying the promised resident'
+  )
 })
