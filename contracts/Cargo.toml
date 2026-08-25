@@ -2,6 +2,15 @@
 resolver = "2"
 members = ["medicion", "jefe"]
 
+# `duel-arena` queda afuera a proposito, y conviene que se vea en vez de que
+# cargo lo ignore en silencio: ancla `soroban-sdk = "=26.1.1"` mientras estos dos
+# usan 27.0.6, que es la version del protocolo vivo en mainnet y testnet. Meter
+# las dos en el mismo workspace compilaria dos copias del SDK y le pisaria a
+# duel-arena su propio [profile.release], porque un workspace solo honra el de la
+# raiz. Unificar las versiones es trabajo aparte; mientras tanto, esta linea deja
+# dicho que la exclusion es una decision y no un olvido.
+exclude = ["duel-arena"]
+
 [workspace.dependencies]
 soroban-sdk = "27.0.6"
 
