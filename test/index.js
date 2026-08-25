@@ -1100,7 +1100,7 @@ test('hitbox combat stays on the field and advances on attack input', (t) => {
 
 test('el heroe y los NPCs no colapsan visualmente de cerca', (t) => {
   const game = new Runa({ presence: false })
-  game.start('tester')
+  startGame(game, 'tester')
   const alma = MAPS.city.npcs.find((n) => n.id === 'alma')
   for (let dx of [1, 2, 3, -1, -2, -3]) {
     game.walker.placeAt('city', alma.x + dx, alma.y)
