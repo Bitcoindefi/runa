@@ -1215,7 +1215,7 @@ test('city gardens are open and accessible from spawn', (t) => {
     const [x, y] = q.pop()
     const k = x + ',' + y
     if (seen.has(k)) continue
-    if (TILES[city.rows[y][x]].solid) continue
+    if ((TILES[city.rows[y][x]] || { solid: true }).solid) continue
     seen.add(k)
     if (x + 1 < city.width) q.push([x + 1, y])
     if (x - 1 >= 0) q.push([x - 1, y])
