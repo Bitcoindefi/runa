@@ -463,10 +463,17 @@ test('doors and the field gate activate when the player steps on them', (t) => {
   t.is(game.player.hp, game.player.maxHp, 'stepping on T rests at the tavern')
   t.is(game.player.gold, 27, 'the tavern charges its visible three-coin price')
 
-  const gate = MAPS.city.fieldGate
-  game.walker.placeAt('city', gate.x1, gate.y1 - 1)
+  const gate = find('>')
+  game.walker.placeAt('city', gate.x, gate.y - 1)
   press(game, 'down')
-  t.ok(game.field, 'touching the broad porton area enters the field before collision')
+  t.ok(game.field, 'stepping on > enters the field')
+
+  // Reset to city and verify walking against the gatehouse wall is blocked and does not teleport
+  game.field = null
+  game.walker.placeAt('city', 129, 184)
+  press(game, 'right')
+  t.absent(game.field, 'walking against the gatehouse wall does not enter the field')
+  t.is(game.walker.x, 129, 'the gatehouse wall blocks movement')
 })
 
 test('city art remains rectangular and walkable', (t) => {
