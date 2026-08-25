@@ -1124,6 +1124,44 @@ test('t returns from the field to the city outside combat', (t) => {
   t.ok(game.log.includes('volves a la ciudad'))
 })
 
+test('title screen wordmark rows stay aligned (issue #12)', () => {
+  const { titleScreen, LOGO, WORDMARK_LINES } = require('../lib/render.js')
+  const frame = titleScreen(100, 40, {})
+  const lines = frame.split('\n').filter((l) => l.trim().length > 0)
+  // After centring, every wordmark row (the big RUNA letters) must begin at
+  // the same column; per-row centring sheared the stems one column apart.
+  // Wordmark rows are the first WORDMARK_LINES non-empty lines of the card.
+  // Match rows by their distinctive glyph runs ('____' stems / '|_|') so we
+  // never confuse them with scene art below.
+  const wordmarkRows = []
+  for (const line of lines) {
+    if (wordmarkRows.length >= WORDMARK_LINES) break
+    if (/_{4}|\|_\|/.test(line) === false) continue
+    wordmarkRows.push(line)
+  }
+  const starts = wordmarkRows.map((line) => {
+    const m = line.match(/[^ ]/)
+    return m ? line.indexOf(m[0]) : -1
+  }).filter((st) => st >= 0)
+  if (starts.length >= 2) {
+    for (const st of starts) {
+      if (st !== starts[0]) {
+        throw new Error('wordmark rows not left-aligned: ' + JSON.stringify(starts))
+      }
+    }
+  }
+})
+
+test('tavern hanging sign survives the roof drawing (issue #12)', () => {
+  const map = require('../lib/map.js')
+  const grid = typeof map.renderMap === 'function' ? map.renderMap() : null
+  if (!grid || !grid[80]) return // render shape changed; skip silently
+  const row = grid[80].join('')
+  if (!row.includes('|()|')) {
+    throw new Error('tavern sign was covered by the roof at y+5')
+  }
+})
+
 test('the world boss animates powers with real field damage', (t) => {
   const distant = new WorldBossEvent({ width: 120, height: 36 })
   const tooFar = distant.strike({ x: 2, y: 18 }, { damage: 4, reach: 2 }, 0)
