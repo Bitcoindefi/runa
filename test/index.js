@@ -1124,6 +1124,33 @@ test('t returns from the field to the city outside combat', (t) => {
   t.ok(game.log.includes('volves a la ciudad'))
 })
 
+test('walking into the gate wall does not teleport to the field (#4)', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game)
+
+  // The fieldGate rect is 61x15 but almost entirely solid wall. Stand next to
+  // a solid cell inside the rect and walk into it: the game must refuse the
+  // step instead of opening an excursion (issue #4).
+  const gate = MAPS.city.fieldGate
+  let spot = null
+  for (let y = gate.y1; y <= gate.y2 && !spot; y++) {
+    for (let x = gate.x1 + 1; x <= gate.x2; x++) {
+      const here = TILES[MAPS.city.rows[y][x]]
+      const left = TILES[MAPS.city.rows[y][x - 1]]
+      if (here && !here.solid && left && left.solid) {
+        spot = { x, y }
+        break
+      }
+    }
+  }
+
+  t.ok(spot, 'a walkable cell borders a solid cell inside the gate rect')
+  game.walker.placeAt('city', spot.x, spot.y)
+  press(game, 'a')
+  t.absent(game.field, 'bumping the gate wall keeps the player in the city')
+  t.is(game.walker.x, spot.x, 'the blocked step does not move the hero')
+})
+
 test('the world boss animates powers with real field damage', (t) => {
   const distant = new WorldBossEvent({ width: 120, height: 36 })
   const tooFar = distant.strike({ x: 2, y: 18 }, { damage: 4, reach: 2 }, 0)
