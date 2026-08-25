@@ -1,0 +1,3 @@
+# Artefactos de Rust. Los regenera cargo, no son fuente.
+contracts/target/
+contracts/**/test_snapshots/
