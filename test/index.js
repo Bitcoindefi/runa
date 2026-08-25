@@ -19,6 +19,7 @@ const {
 const render = require('../lib/render.js')
 
 require('./sage.test.js')
+require('./sidebar-threshold.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
@@ -252,7 +253,8 @@ test('the larger city scrolls inside an 80-column console', (t) => {
     MAPS.city.rows.some((row) => row.includes('~~~~~~~~~~~~~~~~~~')),
     'the city keeps its detailed fountain'
   )
-  t.ok(screen.includes('hp 20/20'), 'compact stats remain visible in the title bar')
+  t.ok(screen.includes('ficha'), 'the character sheet stays in its sidebar (#7)')
+  t.ok(screen.includes('log'), 'the log panel survives narrow city terminals too (#7)')
   t.ok(!screen.includes('[#]'), 'a new hero does not display an unequipped shield')
   t.ok(!screen.includes('@'), 'the city no longer represents the hero with an at sign')
 
