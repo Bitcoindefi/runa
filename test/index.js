@@ -20,6 +20,7 @@ const render = require('../lib/render.js')
 
 require('./sage.test.js')
 require('./hero-clip.test.js')
+require('./npc-hero-separation.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
