@@ -1231,4 +1231,3 @@ test('city gardens are open and accessible from spawn', (t) => {
   t.ok(seen.has('251,6'), 'garden 2 top-left interior is reachable')
   t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
 })
-
