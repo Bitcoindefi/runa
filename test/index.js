@@ -1207,3 +1207,28 @@ test('the world boss animates powers with real field damage', (t) => {
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
 })
+test('city gardens are open and accessible from spawn', (t) => {
+  const city = MAPS.city
+  const seen = new Set()
+  const q = [[city.spawn.x, city.spawn.y]]
+  while (q.length) {
+    const [x, y] = q.pop()
+    const k = x + ',' + y
+    if (seen.has(k)) continue
+    if (TILES[city.rows[y][x]].solid) continue
+    seen.add(k)
+    if (x + 1 < city.width) q.push([x + 1, y])
+    if (x - 1 >= 0) q.push([x - 1, y])
+    if (y + 1 < city.height) q.push([x, y + 1])
+    if (y - 1 >= 0) q.push([x, y - 1])
+  }
+
+  // Check interior points in garden 1 (x: 5, y: 5, w: 65, h: 43)
+  t.ok(seen.has('6,6'), 'garden 1 top-left interior is reachable')
+  t.ok(seen.has('68,46'), 'garden 1 bottom-right interior is reachable')
+
+  // Check interior points in garden 2 (x: 250, y: 5, w: 65, h: 43)
+  t.ok(seen.has('251,6'), 'garden 2 top-left interior is reachable')
+  t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
+})
+
