@@ -8,7 +8,7 @@
   "scripts": {
     "format": "prettier . --write",
     "test": "brittle-bare test/index.js",
-    "lint": "prettier . --check && lunte",
+    "lint": "prettier . --check && lunte lib app.js index.js bin.mjs test workers scripts",
     "start": "bare bin.mjs --no-updates",
     "make": "node scripts/make.js",
     "make:darwin-arm64": "bare-build --name runa --standalone --host darwin-arm64 --out ./out/darwin-arm64 bin.mjs",
@@ -16,7 +16,8 @@
     "make:linux-arm64": "bare-build --name runa --standalone --host linux-arm64 --out ./out/linux-arm64 bin.mjs",
     "make:linux-x64": "bare-build --name runa --standalone --host linux-x64 --out ./out/linux-x64 bin.mjs",
     "make:win32-arm64": "bare-build --name runa --standalone --host win32-arm64 --out ./out/win32-arm64 bin.mjs",
-    "make:win32-x64": "bare-build --name runa --standalone --host win32-x64 --out ./out/win32-x64 bin.mjs"
+    "make:win32-x64": "bare-build --name runa --standalone --host win32-x64 --out ./out/win32-x64 bin.mjs",
+    "vendor:stellar": "esbuild scripts/stellar-entry.js --bundle --format=cjs --platform=browser --conditions=browser --outfile=vendor/stellar-base.bundle.js"
   },
   "dependencies": {
     "bare-crypto": "^1.15.3",
@@ -33,12 +34,15 @@
     "paparam": "^1.10.1",
     "pear-runtime": "^1.2.0",
     "ready-resource": "^1.2.0",
+    "text-encoding-polyfill": "^0.6.7",
     "which-runtime": "^1.4.0"
   },
   "devDependencies": {
+    "@stellar/stellar-base": "^15.0.0",
     "bare-build": "^1.0.2",
     "bare-runtime": "1.29.4",
     "brittle": "^3.19.0",
+    "esbuild": "^0.28.2",
     "lunte": "^1.2.0",
     "prettier": "^3.6.2",
     "prettier-config-holepunch": "^2.0.0"
