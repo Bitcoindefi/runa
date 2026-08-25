@@ -416,8 +416,7 @@ impl RunaDuelContract {
             duel.challenger.clone()
         };
 
-        // Cryptographic simulation verification:
-        // Build the deterministic simulation execution commitment over the verified duel parameters
+        // Cryptographic simulation & ZK verification:
         let mut sim_payload = Bytes::new(&env);
         sim_payload.append(&Bytes::from_array(&env, &duel_id.to_be_bytes()));
         sim_payload.append(&Bytes::from_array(&env, &duel.seed.to_be_bytes()));
@@ -429,12 +428,63 @@ impl RunaDuelContract {
 
         let expected_sim_hash = compute_sha256(&env, &sim_payload);
 
-        // Valid fraud proof must either match the deterministic simulation commitment or contain it
-        let proof_hash = compute_sha256(&env, &fraud_proof);
-        let direct_match = fraud_proof == expected_sim_hash.clone().into();
-        let hash_match = proof_hash == expected_sim_hash;
+        let mut verified = false;
 
-        if !direct_match && !hash_match {
+        // Mode A: Direct simulation execution hash match
+        if fraud_proof.len() == 32 && fraud_proof == expected_sim_hash.clone().into() {
+            verified = true;
+        }
+
+        // Mode B: Groth16 ZK Fraud Proof verification via verifier contract
+        if fraud_proof.len() == 384 {
+            let verifier: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::VerifierContract)
+                .ok_or(DuelError::NotInitialized)?;
+
+            let mut a_bytes = [0u8; 96];
+            let mut b_bytes = [0u8; 192];
+            let mut c_bytes = [0u8; 96];
+
+            for i in 0..96 {
+                a_bytes[i] = fraud_proof.get(i as u32).unwrap_or(0);
+            }
+            for i in 0..192 {
+                b_bytes[i] = fraud_proof.get((96 + i) as u32).unwrap_or(0);
+            }
+            for i in 0..96 {
+                c_bytes[i] = fraud_proof.get((288 + i) as u32).unwrap_or(0);
+            }
+
+            let proof = Groth16Proof {
+                a: BytesN::from_array(&env, &a_bytes),
+                b: BytesN::from_array(&env, &b_bytes),
+                c: BytesN::from_array(&env, &c_bytes),
+            };
+
+            let circuit_id = Symbol::new(&env, "duel_v1");
+            let chal_hash = duel.challenger_script_hash.clone();
+            let opp_hash = duel.opponent_script_hash.clone().unwrap_or(chal_hash.clone());
+            let public_inputs = vec![&env, chal_hash, opp_hash];
+
+            let zk_verified: bool = env.invoke_contract(
+                &verifier,
+                &Symbol::new(&env, "verify_proof"),
+                vec![
+                    &env,
+                    circuit_id.into_val(&env),
+                    proof.into_val(&env),
+                    public_inputs.into_val(&env),
+                ],
+            );
+
+            if zk_verified {
+                verified = true;
+            }
+        }
+
+        if !verified {
             return Err(DuelError::InvalidSimulationProof);
         }
 
@@ -527,8 +577,8 @@ impl RunaDuelContract {
             return Err(DuelError::InvalidWinner);
         }
 
-        // Format proof: 384 bytes (uncompressed: 96 + 192 + 96) or 192 bytes
-        if proof_data.len() < 192 {
+        // Format proof: require exact 384 bytes for uncompressed affine points (96 + 192 + 96)
+        if proof_data.len() != 384 {
             return Err(DuelError::ProofVerificationFailed);
         }
 
@@ -536,26 +586,14 @@ impl RunaDuelContract {
         let mut b_bytes = [0u8; 192];
         let mut c_bytes = [0u8; 96];
 
-        if proof_data.len() >= 384 {
-            for i in 0..96 {
-                a_bytes[i] = proof_data.get(i as u32).unwrap_or(0);
-            }
-            for i in 0..192 {
-                b_bytes[i] = proof_data.get((96 + i) as u32).unwrap_or(0);
-            }
-            for i in 0..96 {
-                c_bytes[i] = proof_data.get((288 + i) as u32).unwrap_or(0);
-            }
-        } else {
-            for i in 0..48 {
-                a_bytes[i] = proof_data.get(i as u32).unwrap_or(0);
-            }
-            for i in 0..96 {
-                b_bytes[i] = proof_data.get((48 + i) as u32).unwrap_or(0);
-            }
-            for i in 0..48 {
-                c_bytes[i] = proof_data.get((144 + i) as u32).unwrap_or(0);
-            }
+        for i in 0..96 {
+            a_bytes[i] = proof_data.get(i as u32).unwrap_or(0);
+        }
+        for i in 0..192 {
+            b_bytes[i] = proof_data.get((96 + i) as u32).unwrap_or(0);
+        }
+        for i in 0..96 {
+            c_bytes[i] = proof_data.get((288 + i) as u32).unwrap_or(0);
         }
 
         let proof = Groth16Proof {

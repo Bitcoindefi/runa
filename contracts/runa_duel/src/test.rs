@@ -527,8 +527,8 @@ fn test_zk_resolution_flow() {
         .duel_client
         .accept_duel(&setup.opponent, &duel_id, &script2_hash);
 
-    // Build 192 byte proof where first byte is 0x42 (accepted by MockZkVerifier)
-    let mut proof_bytes = [0u8; 192];
+    // Build 384 byte proof where first byte is 0x42 (accepted by MockZkVerifier)
+    let mut proof_bytes = [0u8; 384];
     proof_bytes[0] = 0x42;
     let proof_data = Bytes::from_slice(&setup.env, &proof_bytes);
 
@@ -575,7 +575,7 @@ fn test_zk_resolution_invalid_proof_rejected() {
         .accept_duel(&setup.opponent, &duel_id, &script2_hash);
 
     // Proof with first byte 0x00 (rejected by MockZkVerifier)
-    let proof_bytes = [0u8; 192];
+    let proof_bytes = [0u8; 384];
     let proof_data = Bytes::from_slice(&setup.env, &proof_bytes);
     let public_inputs = vec![&setup.env, script2_hash.clone()];
 
