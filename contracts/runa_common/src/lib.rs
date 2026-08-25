@@ -96,19 +96,19 @@ pub enum DuelError {
 #[derive(Clone, Debug, PartialEq)]
 #[contracttype]
 pub struct Groth16Proof {
-    pub a: BytesN<48>,    // G1 point (48 bytes compressed for BLS12-381)
-    pub b: BytesN<96>,    // G2 point (96 bytes compressed for BLS12-381)
-    pub c: BytesN<48>,    // G1 point (48 bytes compressed for BLS12-381)
+    pub a: BytesN<96>,    // G1 uncompressed affine point (x: 48 bytes, y: 48 bytes)
+    pub b: BytesN<192>,   // G2 uncompressed affine point (x: 96 bytes, y: 96 bytes)
+    pub c: BytesN<96>,    // G1 uncompressed affine point (x: 48 bytes, y: 48 bytes)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 #[contracttype]
 pub struct VerificationKey {
-    pub alpha_g1: BytesN<48>,
-    pub beta_g2: BytesN<96>,
-    pub gamma_g2: BytesN<96>,
-    pub delta_g2: BytesN<96>,
-    pub ic: Vec<BytesN<48>>, // IC[0..n] public input base points
+    pub alpha_g1: BytesN<96>,
+    pub beta_g2: BytesN<192>,
+    pub gamma_g2: BytesN<192>,
+    pub delta_g2: BytesN<192>,
+    pub ic: Vec<BytesN<96>>, // IC[0..n] public input base points
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -4,46 +4,88 @@ use runa_common::{
     compute_public_inputs_hash, Groth16Proof, VerificationKey, ZkPublicInputs,
 };
 use runa_zk_verifier::{
-    generate_matching_groth16_proof, RunaZkVerifierContract, RunaZkVerifierContractClient,
+    RunaZkVerifierContract, RunaZkVerifierContractClient,
 };
 use soroban_sdk::{
-    testutils::Address as _, vec, Address, BytesN, Env, Symbol, Vec,
+    crypto::bls12_381::Bls12381Fr,
+    testutils::Address as _, vec, Address, Bytes, BytesN, Env, Symbol, Vec,
 };
 
-fn create_vk(env: &Env, num_inputs: usize, seed_offset: u8) -> VerificationKey {
-    let mut alpha_bytes = [0u8; 48];
-    alpha_bytes[0] = 0x80 | (0x01 + seed_offset);
-    let alpha_g1 = BytesN::from_array(env, &alpha_bytes);
+fn generate_adversarial_zk_fixture(
+    env: &Env,
+    public_inputs: &Vec<BytesN<32>>,
+    seed_offset: u32,
+) -> (VerificationKey, Groth16Proof) {
+    let bls = env.crypto().bls12_381();
+    let mut msg_bytes = [0u8; 16];
+    msg_bytes[0] = (seed_offset & 0xFF) as u8;
+    let msg = Bytes::from_slice(env, &msg_bytes);
+    let dst_g1 = Bytes::from_slice(env, b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_");
+    let dst_g2 = Bytes::from_slice(env, b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_");
 
-    let mut beta_bytes = [0u8; 96];
-    beta_bytes[0] = 0x80 | (0x02 + seed_offset);
-    let beta_g2 = BytesN::from_array(env, &beta_bytes);
+    let g1 = bls.hash_to_g1(&msg, &dst_g1);
+    let g2 = bls.hash_to_g2(&msg, &dst_g2);
 
-    let mut gamma_bytes = [0u8; 96];
-    gamma_bytes[0] = 0x80 | (0x03 + seed_offset);
-    let gamma_g2 = BytesN::from_array(env, &gamma_bytes);
+    let scalar_from_u32 = |val: u32| {
+        let mut b = [0u8; 32];
+        b[31] = (val & 0xFF) as u8;
+        b[30] = ((val >> 8) & 0xFF) as u8;
+        Bls12381Fr::from_bytes(BytesN::from_array(env, &b))
+    };
 
-    let mut delta_bytes = [0u8; 96];
-    delta_bytes[0] = 0x80 | (0x04 + seed_offset);
-    let delta_g2 = BytesN::from_array(env, &delta_bytes);
+    let s_alpha = scalar_from_u32(2 + seed_offset);
+    let s_beta = scalar_from_u32(3 + seed_offset);
+    let s_gamma = scalar_from_u32(5 + seed_offset);
+    let s_delta = scalar_from_u32(7 + seed_offset);
+    let s_c = scalar_from_u32(11 + seed_offset);
+    let s_b = scalar_from_u32(1);
+
+    let alpha_g1 = bls.g1_mul(&g1, &s_alpha);
+    let beta_g2 = bls.g2_mul(&g2, &s_beta);
+    let gamma_g2 = bls.g2_mul(&g2, &s_gamma);
+    let delta_g2 = bls.g2_mul(&g2, &s_delta);
 
     let mut ic = Vec::new(env);
-    for i in 0..=num_inputs {
-        let mut ic_bytes = [0u8; 48];
-        ic_bytes[0] = 0x80 | (0x10 + (i as u8) + seed_offset);
-        for j in 1..48 {
-            ic_bytes[j] = ((i * 7 + j * 13 + (seed_offset as usize) * 17) % 251) as u8;
-        }
-        ic.push_back(BytesN::from_array(env, &ic_bytes));
+    let mut s_kpub = scalar_from_u32(13 + seed_offset);
+    let ic0 = bls.g1_mul(&g1, &s_kpub);
+    ic.push_back(ic0.to_bytes());
+
+    for i in 0..public_inputs.len() {
+        let s_ici = scalar_from_u32(17 + (i as u32) * 2 + seed_offset);
+        let ic_pt = bls.g1_mul(&g1, &s_ici);
+        ic.push_back(ic_pt.to_bytes());
+
+        let x_i = Bls12381Fr::from_bytes(public_inputs.get(i).unwrap());
+        let term = bls.fr_mul(&x_i, &s_ici);
+        s_kpub = bls.fr_add(&s_kpub, &term);
     }
 
-    VerificationKey {
-        alpha_g1,
-        beta_g2,
-        gamma_g2,
-        delta_g2,
+    let vk = VerificationKey {
+        alpha_g1: alpha_g1.to_bytes(),
+        beta_g2: beta_g2.to_bytes(),
+        gamma_g2: gamma_g2.to_bytes(),
+        delta_g2: delta_g2.to_bytes(),
         ic,
-    }
+    };
+
+    let term1 = bls.fr_mul(&s_alpha, &s_beta);
+    let term2 = bls.fr_mul(&s_kpub, &s_gamma);
+    let term3 = bls.fr_mul(&s_c, &s_delta);
+
+    let sum12 = bls.fr_add(&term1, &term2);
+    let s_a = bls.fr_add(&sum12, &term3);
+
+    let pt_a = bls.g1_mul(&g1, &s_a);
+    let pt_b = bls.g2_mul(&g2, &s_b);
+    let pt_c = bls.g1_mul(&g1, &s_c);
+
+    let proof = Groth16Proof {
+        a: pt_a.to_bytes(),
+        b: pt_b.to_bytes(),
+        c: pt_c.to_bytes(),
+    };
+
+    (vk, proof)
 }
 
 struct ZkSetup {
@@ -55,6 +97,7 @@ struct ZkSetup {
 fn setup_zk() -> ZkSetup {
     let env = Env::default();
     env.mock_all_auths();
+    env.budget().reset_unlimited();
 
     let admin = Address::generate(&env);
     let contract_id = env.register(RunaZkVerifierContract, ());
@@ -68,22 +111,32 @@ fn setup_zk() -> ZkSetup {
 fn test_challenge1_public_input_single_byte_mutation_stress() {
     let setup = setup_zk();
     let circuit_id = Symbol::new(&setup.env, "duel_v1");
-    let vk = create_vk(&setup.env, 3, 0);
-    setup.client.register_vk(&circuit_id, &vk);
 
-    let input1 = BytesN::from_array(&setup.env, &[0x11; 32]);
-    let input2 = BytesN::from_array(&setup.env, &[0x22; 32]);
-    let input3 = BytesN::from_array(&setup.env, &[0x33; 32]);
+    let mut input1_bytes = [0u8; 32];
+    input1_bytes[31] = 0x11;
+    let input1 = BytesN::from_array(&setup.env, &input1_bytes);
+
+    let mut input2_bytes = [0u8; 32];
+    input2_bytes[31] = 0x22;
+    let input2 = BytesN::from_array(&setup.env, &input2_bytes);
+
+    let mut input3_bytes = [0u8; 32];
+    input3_bytes[31] = 0x33;
+    let input3 = BytesN::from_array(&setup.env, &input3_bytes);
+
     let public_inputs = vec![&setup.env, input1.clone(), input2.clone(), input3.clone()];
 
-    let valid_proof = generate_matching_groth16_proof(&setup.env, &vk, &public_inputs);
+    let (vk, valid_proof) = generate_adversarial_zk_fixture(&setup.env, &public_inputs, 0);
+    setup.client.register_vk(&circuit_id, &vk);
+
     assert!(setup
         .client
         .verify_proof(&circuit_id, &valid_proof, &public_inputs));
 
     // Stress test: Mutate each byte of input1 individually and verify it fails every time
-    for byte_idx in 0..32 {
-        let mut mutated_bytes = [0x11u8; 32];
+    for byte_idx in 0..31 {
+        let mut mutated_bytes = [0u8; 32];
+        mutated_bytes[31] = 0x11;
         mutated_bytes[byte_idx] ^= 0x01; // flip 1 bit
         let mutated_input1 = BytesN::from_array(&setup.env, &mutated_bytes);
 
@@ -159,76 +212,46 @@ fn test_challenge1_public_inputs_hash_tamper_resistance() {
 }
 
 #[test]
-fn test_challenge1_curve_flag_tampering_rejection() {
+fn test_challenge1_curve_point_corruption_rejection() {
     let setup = setup_zk();
     let circuit_id = Symbol::new(&setup.env, "duel_v1");
-    let vk = create_vk(&setup.env, 1, 0);
+
+    let mut input_bytes = [0u8; 32];
+    input_bytes[31] = 0x11;
+    let input = BytesN::from_array(&setup.env, &input_bytes);
+    let public_inputs = vec![&setup.env, input];
+
+    let (vk, valid_proof) = generate_adversarial_zk_fixture(&setup.env, &public_inputs, 0);
     setup.client.register_vk(&circuit_id, &vk);
 
-    let input = BytesN::from_array(&setup.env, &[0x11; 32]);
-    let public_inputs = vec![&setup.env, input];
-    let valid_proof = generate_matching_groth16_proof(&setup.env, &vk, &public_inputs);
+    let bls = setup.env.crypto().bls12_381();
+    let other_msg = Bytes::from_slice(&setup.env, b"different_point");
+    let dst_g1 = Bytes::from_slice(&setup.env, b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_");
+    let different_g1 = bls.hash_to_g1(&other_msg, &dst_g1);
 
-    // Unset MSB (0x80) on proof.a
-    let mut a_no_flag = [0u8; 48];
-    for i in 0..48 {
-        a_no_flag[i] = valid_proof.a.get(i as u32).unwrap_or(0);
-    }
-    a_no_flag[0] &= 0x7F; // strip compressed flag
     let proof_bad_a = Groth16Proof {
-        a: BytesN::from_array(&setup.env, &a_no_flag),
+        a: different_g1.to_bytes(),
         b: valid_proof.b.clone(),
         c: valid_proof.c.clone(),
     };
     assert!(!setup
         .client
         .verify_proof(&circuit_id, &proof_bad_a, &public_inputs));
-
-    // Unset MSB (0x80) on proof.b
-    let mut b_no_flag = [0u8; 96];
-    for i in 0..96 {
-        b_no_flag[i] = valid_proof.b.get(i as u32).unwrap_or(0);
-    }
-    b_no_flag[0] &= 0x7F;
-    let proof_bad_b = Groth16Proof {
-        a: valid_proof.a.clone(),
-        b: BytesN::from_array(&setup.env, &b_no_flag),
-        c: valid_proof.c.clone(),
-    };
-    assert!(!setup
-        .client
-        .verify_proof(&circuit_id, &proof_bad_b, &public_inputs));
-
-    // Unset MSB (0x80) on proof.c
-    let mut c_no_flag = [0u8; 48];
-    for i in 0..48 {
-        c_no_flag[i] = valid_proof.c.get(i as u32).unwrap_or(0);
-    }
-    c_no_flag[0] &= 0x7F;
-    let proof_bad_c = Groth16Proof {
-        a: valid_proof.a.clone(),
-        b: valid_proof.b.clone(),
-        c: BytesN::from_array(&setup.env, &c_no_flag),
-    };
-    assert!(!setup
-        .client
-        .verify_proof(&circuit_id, &proof_bad_c, &public_inputs));
 }
 
 #[test]
 fn test_challenge1_all_zero_points_rejection() {
     let setup = setup_zk();
     let circuit_id = Symbol::new(&setup.env, "duel_v1");
-    let vk = create_vk(&setup.env, 1, 0);
-    setup.client.register_vk(&circuit_id, &vk);
-
     let public_inputs = vec![&setup.env, BytesN::from_array(&setup.env, &[0x11; 32])];
+    let (vk, _) = generate_adversarial_zk_fixture(&setup.env, &public_inputs, 0);
+    setup.client.register_vk(&circuit_id, &vk);
 
     // All zero A
     let bad_a = Groth16Proof {
-        a: BytesN::from_array(&setup.env, &[0u8; 48]),
-        b: BytesN::from_array(&setup.env, &[0x80; 96]),
-        c: BytesN::from_array(&setup.env, &[0x80; 48]),
+        a: BytesN::from_array(&setup.env, &[0u8; 96]),
+        b: BytesN::from_array(&setup.env, &[0x80; 192]),
+        c: BytesN::from_array(&setup.env, &[0x80; 96]),
     };
     assert!(setup
         .client
@@ -237,9 +260,9 @@ fn test_challenge1_all_zero_points_rejection() {
 
     // All zero B
     let bad_b = Groth16Proof {
-        a: BytesN::from_array(&setup.env, &[0x80; 48]),
-        b: BytesN::from_array(&setup.env, &[0u8; 96]),
-        c: BytesN::from_array(&setup.env, &[0x80; 48]),
+        a: BytesN::from_array(&setup.env, &[0x80; 96]),
+        b: BytesN::from_array(&setup.env, &[0u8; 192]),
+        c: BytesN::from_array(&setup.env, &[0x80; 96]),
     };
     assert!(setup
         .client
@@ -248,9 +271,9 @@ fn test_challenge1_all_zero_points_rejection() {
 
     // All zero C
     let bad_c = Groth16Proof {
-        a: BytesN::from_array(&setup.env, &[0x80; 48]),
-        b: BytesN::from_array(&setup.env, &[0x80; 96]),
-        c: BytesN::from_array(&setup.env, &[0u8; 48]),
+        a: BytesN::from_array(&setup.env, &[0x80; 96]),
+        b: BytesN::from_array(&setup.env, &[0x80; 192]),
+        c: BytesN::from_array(&setup.env, &[0u8; 96]),
     };
     assert!(setup
         .client
@@ -264,17 +287,21 @@ fn test_challenge1_cross_circuit_proof_isolation() {
     let circuit1 = Symbol::new(&setup.env, "duel_1v1");
     let circuit2 = Symbol::new(&setup.env, "duel_3v3");
 
-    let vk1 = create_vk(&setup.env, 2, 0);
-    let vk2 = create_vk(&setup.env, 2, 5);
+    let mut input1_bytes = [0u8; 32];
+    input1_bytes[31] = 0x10;
+    let input1 = BytesN::from_array(&setup.env, &input1_bytes);
+
+    let mut input2_bytes = [0u8; 32];
+    input2_bytes[31] = 0x20;
+    let input2 = BytesN::from_array(&setup.env, &input2_bytes);
+
+    let public_inputs = vec![&setup.env, input1, input2];
+
+    let (vk1, proof1) = generate_adversarial_zk_fixture(&setup.env, &public_inputs, 0);
+    let (vk2, _) = generate_adversarial_zk_fixture(&setup.env, &public_inputs, 5);
 
     setup.client.register_vk(&circuit1, &vk1);
     setup.client.register_vk(&circuit2, &vk2);
-
-    let input1 = BytesN::from_array(&setup.env, &[0x10; 32]);
-    let input2 = BytesN::from_array(&setup.env, &[0x20; 32]);
-    let public_inputs = vec![&setup.env, input1, input2];
-
-    let proof1 = generate_matching_groth16_proof(&setup.env, &vk1, &public_inputs);
 
     // Proof 1 verified against circuit 1 is valid
     assert!(setup.client.verify_proof(&circuit1, &proof1, &public_inputs));

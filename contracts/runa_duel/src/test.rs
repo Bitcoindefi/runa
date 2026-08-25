@@ -315,11 +315,20 @@ fn test_optimistic_dispute_and_finalize_flow() {
     let duel = setup.duel_client.get_duel(&duel_id);
     assert_eq!(duel.status, DuelStatus::Disputed);
 
-    // Opponent files dispute with fraud proof
-    let fraud_proof = Bytes::from_slice(&setup.env, b"simulation: opponent dealt fatal strike");
+    // Opponent files dispute with valid cryptographic simulation fraud proof
+    let mut sim_payload = Bytes::new(&setup.env);
+    sim_payload.append(&Bytes::from_array(&setup.env, &duel_id.to_be_bytes()));
+    sim_payload.append(&Bytes::from_array(&setup.env, &duel.seed.to_be_bytes()));
+    sim_payload.append(&script1);
+    sim_payload.append(&script2);
+    sim_payload.append(&content_hash.clone().into());
+    sim_payload.append(&duel.nonce.clone().into());
+    sim_payload.append(&Bytes::from_array(&setup.env, &1u32.to_be_bytes()));
+    let fraud_proof = compute_sha256(&setup.env, &sim_payload);
+
     setup
         .duel_client
-        .dispute_duel(&setup.opponent, &duel_id, &fraud_proof);
+        .dispute_duel(&setup.opponent, &duel_id, &fraud_proof.into());
 
     let resolved_duel = setup.duel_client.get_duel(&duel_id);
     assert_eq!(resolved_duel.status, DuelStatus::Resolved);

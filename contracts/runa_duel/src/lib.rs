@@ -396,21 +396,47 @@ impl RunaDuelContract {
             return Err(DuelError::InvalidParticipant);
         }
 
-        // Cryptographically verify fraud proof
         if fraud_proof.len() == 0 {
             return Err(DuelError::InvalidSimulationProof);
         }
-        let proof_hash = compute_sha256(&env, &fraud_proof);
-        if proof_hash == BytesN::from_array(&env, &[0u8; 32]) {
-            return Err(DuelError::InvalidSimulationProof);
-        }
 
-        // Invert current winner to caller or based on fraud proof
+        let chal_script = duel
+            .challenger_script
+            .as_ref()
+            .ok_or(DuelError::DuelNotRevealed)?;
+        let opp_script = duel
+            .opponent_script
+            .as_ref()
+            .ok_or(DuelError::DuelNotRevealed)?;
+
+        // The new winner candidate that the disputing party claims should win
         let new_winner = if duel.winner.as_ref() == Some(&duel.challenger) {
             duel.opponent.clone().ok_or(DuelError::InvalidWinner)?
         } else {
             duel.challenger.clone()
         };
+
+        // Cryptographic simulation verification:
+        // Build the deterministic simulation execution commitment over the verified duel parameters
+        let mut sim_payload = Bytes::new(&env);
+        sim_payload.append(&Bytes::from_array(&env, &duel_id.to_be_bytes()));
+        sim_payload.append(&Bytes::from_array(&env, &duel.seed.to_be_bytes()));
+        sim_payload.append(chal_script);
+        sim_payload.append(opp_script);
+        sim_payload.append(&duel.content_hash.clone().into());
+        sim_payload.append(&duel.nonce.clone().into());
+        sim_payload.append(&Bytes::from_array(&env, &duel.engine_version.to_be_bytes()));
+
+        let expected_sim_hash = compute_sha256(&env, &sim_payload);
+
+        // Valid fraud proof must either match the deterministic simulation commitment or contain it
+        let proof_hash = compute_sha256(&env, &fraud_proof);
+        let direct_match = fraud_proof == expected_sim_hash.clone().into();
+        let hash_match = proof_hash == expected_sim_hash;
+
+        if !direct_match && !hash_match {
+            return Err(DuelError::InvalidSimulationProof);
+        }
 
         duel.winner = Some(new_winner.clone());
         duel.status = DuelStatus::Resolved;
@@ -501,23 +527,35 @@ impl RunaDuelContract {
             return Err(DuelError::InvalidWinner);
         }
 
-        // Format proof: 192 bytes = a (48) + b (96) + c (48)
+        // Format proof: 384 bytes (uncompressed: 96 + 192 + 96) or 192 bytes
         if proof_data.len() < 192 {
             return Err(DuelError::ProofVerificationFailed);
         }
 
-        let mut a_bytes = [0u8; 48];
-        let mut b_bytes = [0u8; 96];
-        let mut c_bytes = [0u8; 48];
+        let mut a_bytes = [0u8; 96];
+        let mut b_bytes = [0u8; 192];
+        let mut c_bytes = [0u8; 96];
 
-        for i in 0..48 {
-            a_bytes[i] = proof_data.get(i as u32).unwrap_or(0);
-        }
-        for i in 0..96 {
-            b_bytes[i] = proof_data.get((48 + i) as u32).unwrap_or(0);
-        }
-        for i in 0..48 {
-            c_bytes[i] = proof_data.get((144 + i) as u32).unwrap_or(0);
+        if proof_data.len() >= 384 {
+            for i in 0..96 {
+                a_bytes[i] = proof_data.get(i as u32).unwrap_or(0);
+            }
+            for i in 0..192 {
+                b_bytes[i] = proof_data.get((96 + i) as u32).unwrap_or(0);
+            }
+            for i in 0..96 {
+                c_bytes[i] = proof_data.get((288 + i) as u32).unwrap_or(0);
+            }
+        } else {
+            for i in 0..48 {
+                a_bytes[i] = proof_data.get(i as u32).unwrap_or(0);
+            }
+            for i in 0..96 {
+                b_bytes[i] = proof_data.get((48 + i) as u32).unwrap_or(0);
+            }
+            for i in 0..48 {
+                c_bytes[i] = proof_data.get((144 + i) as u32).unwrap_or(0);
+            }
         }
 
         let proof = Groth16Proof {

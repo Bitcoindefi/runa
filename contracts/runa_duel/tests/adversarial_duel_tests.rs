@@ -36,7 +36,7 @@ impl RealZkVerifierContract {
         }
         let expected_hash = compute_sha256(&env, &expected_c_data);
 
-        let mut expected_c = [0u8; 48];
+        let mut expected_c = [0u8; 96];
         expected_c[0] = 0x80;
         for i in 0..32 {
             expected_c[i + 1] = expected_hash.to_bytes().get(i as u32).unwrap_or(0);
@@ -51,14 +51,14 @@ pub fn generate_matching_proof(
     env: &Env,
     public_inputs: &Vec<BytesN<32>>,
 ) -> Groth16Proof {
-    let mut a_bytes = [0u8; 48];
+    let mut a_bytes = [0u8; 96];
     a_bytes[0] = 0x80 | 0x11;
-    for i in 1..48 {
+    for i in 1..96 {
         a_bytes[i] = (i as u8).wrapping_mul(7);
     }
     let a = BytesN::from_array(env, &a_bytes);
 
-    let mut b_bytes = [0u8; 96];
+    let mut b_bytes = [0u8; 192];
     b_bytes[0] = 0x80 | 0x22;
     for i in 1..96 {
         b_bytes[i] = (i as u8).wrapping_mul(11);
@@ -74,7 +74,7 @@ pub fn generate_matching_proof(
     }
     let expected_hash = compute_sha256(env, &expected_c_data);
 
-    let mut c_bytes = [0u8; 48];
+    let mut c_bytes = [0u8; 96];
     c_bytes[0] = 0x80;
     for i in 0..32 {
         c_bytes[i + 1] = expected_hash.to_bytes().get(i as u32).unwrap_or(0);
@@ -173,21 +173,21 @@ fn test_challenge1_zk_proof_malleability_rejected_by_real_verifier() {
     let public_inputs = vec![&rig.env, script2_hash.clone(), content_hash.clone()];
     let valid_proof = generate_matching_proof(&rig.env, &public_inputs);
 
-    // 1. Pack valid proof into bytes
-    let mut valid_proof_bytes = [0u8; 192];
-    for i in 0..48 {
+    // 1. Pack valid proof into bytes (384 bytes = 96 + 192 + 96)
+    let mut valid_proof_bytes = [0u8; 384];
+    for i in 0..96 {
         valid_proof_bytes[i] = valid_proof.a.get(i as u32).unwrap_or(0);
     }
-    for i in 0..96 {
-        valid_proof_bytes[48 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
+    for i in 0..192 {
+        valid_proof_bytes[96 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
     }
-    for i in 0..48 {
-        valid_proof_bytes[144 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
+    for i in 0..96 {
+        valid_proof_bytes[288 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
     }
 
     // 2. Malleated Proof: Corrupt proof byte in C
     let mut corrupted_proof_bytes = valid_proof_bytes;
-    corrupted_proof_bytes[150] ^= 0xFF;
+    corrupted_proof_bytes[300] ^= 0xFF;
     let corrupted_proof_data = Bytes::from_slice(&rig.env, &corrupted_proof_bytes);
 
     let res = rig.duel_client.try_resolve_duel_zk(
@@ -291,15 +291,15 @@ fn test_challenge1_zk_initiated_status_drain_rejected() {
     // Duel is still in Initiated status (no opponent has accepted yet)
     let public_inputs = vec![&rig.env, script1_hash.clone(), content_hash.clone()];
     let valid_proof = generate_matching_proof(&rig.env, &public_inputs);
-    let mut valid_proof_bytes = [0u8; 192];
-    for i in 0..48 {
+    let mut valid_proof_bytes = [0u8; 384];
+    for i in 0..96 {
         valid_proof_bytes[i] = valid_proof.a.get(i as u32).unwrap_or(0);
     }
-    for i in 0..96 {
-        valid_proof_bytes[48 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
+    for i in 0..192 {
+        valid_proof_bytes[96 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
     }
-    for i in 0..48 {
-        valid_proof_bytes[144 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
+    for i in 0..96 {
+        valid_proof_bytes[288 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
     }
     let proof_data = Bytes::from_slice(&rig.env, &valid_proof_bytes);
 
@@ -341,15 +341,15 @@ fn test_challenge1_zk_unauthorized_caller_rejected() {
     let third_party = Address::generate(&rig.env);
     let public_inputs = vec![&rig.env, script2_hash.clone(), content_hash.clone()];
     let valid_proof = generate_matching_proof(&rig.env, &public_inputs);
-    let mut valid_proof_bytes = [0u8; 192];
-    for i in 0..48 {
+    let mut valid_proof_bytes = [0u8; 384];
+    for i in 0..96 {
         valid_proof_bytes[i] = valid_proof.a.get(i as u32).unwrap_or(0);
     }
-    for i in 0..96 {
-        valid_proof_bytes[48 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
+    for i in 0..192 {
+        valid_proof_bytes[96 + i] = valid_proof.b.get(i as u32).unwrap_or(0);
     }
-    for i in 0..48 {
-        valid_proof_bytes[144 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
+    for i in 0..96 {
+        valid_proof_bytes[288 + i] = valid_proof.c.get(i as u32).unwrap_or(0);
     }
     let proof_data = Bytes::from_slice(&rig.env, &valid_proof_bytes);
 
@@ -868,7 +868,19 @@ fn test_challenge5_concurrent_multi_duel_lifecycle_isolation() {
     rig.duel_client.reveal_script(&rig.challenger, &d2, &script1);
     rig.duel_client.reveal_script(&rig.opponent, &d2, &script2);
     rig.duel_client.resolve_duel_optimistic(&rig.challenger, &d2, &rig.challenger, &10);
-    rig.duel_client.dispute_duel(&rig.opponent, &d2, &Bytes::from_slice(&rig.env, b"sim proof"));
+
+    let d2_state = rig.duel_client.get_duel(&d2);
+    let mut sim_payload = Bytes::new(&rig.env);
+    sim_payload.append(&Bytes::from_array(&rig.env, &d2.to_be_bytes()));
+    sim_payload.append(&Bytes::from_array(&rig.env, &d2_state.seed.to_be_bytes()));
+    sim_payload.append(&script1);
+    sim_payload.append(&script2);
+    sim_payload.append(&ch.clone().into());
+    sim_payload.append(&d2_state.nonce.clone().into());
+    sim_payload.append(&Bytes::from_array(&rig.env, &1u32.to_be_bytes()));
+    let fraud_proof = compute_sha256(&rig.env, &sim_payload);
+
+    rig.duel_client.dispute_duel(&rig.opponent, &d2, &fraud_proof.into());
     assert_eq!(rig.duel_client.get_duel(&d2).status, DuelStatus::Resolved);
     assert_eq!(rig.duel_client.get_duel(&d2).winner, Some(rig.opponent.clone()));
 
@@ -997,6 +1009,14 @@ fn test_challenge5_dispute_empty_proof_rejected() {
         &empty_proof,
     );
     assert!(res.is_err(), "Empty fraud proof must fail with InvalidSimulationProof");
+
+    let garbage_proof = Bytes::from_slice(&rig.env, b"arbitrary non-empty garbage fraud proof");
+    let res_garbage = rig.duel_client.try_dispute_duel(
+        &rig.opponent,
+        &duel_id,
+        &garbage_proof,
+    );
+    assert!(res_garbage.is_err(), "Arbitrary non-empty fraud proof must fail with InvalidSimulationProof");
 }
 
 fn env_token_client<'a>(env: &'a Env, token: &Address) -> token::StellarAssetClient<'a> {

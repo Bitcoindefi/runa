@@ -10,7 +10,7 @@ use runa_common::{Groth16Proof, VerificationKey, VerifierError};
 use soroban_sdk::{
     contract, contractimpl,
     crypto::bls12_381::{Bls12381Fr, Bls12381G1Affine, Bls12381G2Affine},
-    symbol_short, Address, Bytes, BytesN, Env, Symbol, Vec,
+    symbol_short, Address, BytesN, Env, Symbol, Vec,
 };
 use types::VerifierDataKey;
 
@@ -134,7 +134,7 @@ impl RunaZkVerifierContract {
 
         // Check if fallback mode is active
         if Self::is_fallback_mode(env.clone(), circuit_id) {
-            return Ok(proof.a.len() == 48 && proof.b.len() == 96 && proof.c.len() == 48);
+            return Ok(proof.a.len() == 96 && proof.b.len() == 192 && proof.c.len() == 96);
         }
 
         // Validate public inputs length: IC count must equal public inputs + 1 (for IC_0)
@@ -143,7 +143,7 @@ impl RunaZkVerifierContract {
         }
 
         // Check for non-zero points in G1 and G2
-        if is_all_zeros_48(&proof.a) || is_all_zeros_96(&proof.b) || is_all_zeros_48(&proof.c) {
+        if is_all_zeros_96(&proof.a) || is_all_zeros_192(&proof.b) || is_all_zeros_96(&proof.c) {
             return Err(VerifierError::InvalidProofFormat);
         }
 
@@ -159,16 +159,6 @@ impl RunaZkVerifierContract {
 }
 
 /// Check if 48-byte array is all zeros
-fn is_all_zeros_48(b: &BytesN<48>) -> bool {
-    for i in 0..48 {
-        if b.get(i).unwrap_or(0) != 0 {
-            return false;
-        }
-    }
-    true
-}
-
-/// Check if 96-byte array is all zeros
 fn is_all_zeros_96(b: &BytesN<96>) -> bool {
     for i in 0..96 {
         if b.get(i).unwrap_or(0) != 0 {
@@ -178,123 +168,77 @@ fn is_all_zeros_96(b: &BytesN<96>) -> bool {
     true
 }
 
+/// Check if 96-byte array is all zeros
+fn is_all_zeros_192(b: &BytesN<192>) -> bool {
+    for i in 0..192 {
+        if b.get(i).unwrap_or(0) != 0 {
+            return false;
+        }
+    }
+    true
+}
+
 /// Compute linear combination / accumulator of public inputs with IC points
+/// K_pub = IC[0] + Σ(x_i * IC[i+1]) using native BLS12-381 multi-scalar multiplication
 pub fn compute_public_input_accumulator(
     env: &Env,
     vk: &VerificationKey,
     public_inputs: &Vec<BytesN<32>>,
-) -> BytesN<48> {
-    let mut acc = Bytes::new(env);
-    let ic0 = vk.ic.get(0).unwrap();
-    acc.append(&ic0.clone().into());
+) -> BytesN<96> {
+    let bls = env.crypto().bls12_381();
 
+    // Start with IC[0] as the base point
+    let ic0 = Bls12381G1Affine::from_bytes(vk.ic.get(0).unwrap());
+
+    if public_inputs.len() == 0 {
+        return ic0.to_bytes();
+    }
+
+    // Build vectors for multi-scalar multiplication: Σ(x_i * IC[i+1])
+    let mut points = Vec::new(env);
+    let mut scalars = Vec::new(env);
     for i in 0..public_inputs.len() {
-        let input = public_inputs.get(i).unwrap();
-        let ic_i = vk.ic.get(i + 1).unwrap();
-
-        let mut term = Bytes::new(env);
-        term.append(&input.into());
-        term.append(&ic_i.into());
-        let term_hash = env.crypto().sha256(&term);
-        acc.append(&term_hash.into());
+        let ic_point = Bls12381G1Affine::from_bytes(vk.ic.get(i + 1).unwrap());
+        let scalar = Bls12381Fr::from_bytes(public_inputs.get(i).unwrap());
+        points.push_back(ic_point);
+        scalars.push_back(scalar);
     }
 
-    let full_hash = env.crypto().sha256(&acc);
-    let hash_arr = full_hash.to_array();
-    let mut k_pub_bytes = [0u8; 48];
-    k_pub_bytes[0] = 0x80;
-    k_pub_bytes[1..33].copy_from_slice(&hash_arr);
-    BytesN::from_array(env, &k_pub_bytes)
+    // Compute Σ(x_i * IC[i+1]) via native MSM host function
+    let msm_result = bls.g1_msm(points, scalars);
+
+    // Add IC[0] + MSM result
+    let k_pub = bls.g1_add(&ic0, &msm_result);
+    k_pub.to_bytes()
 }
 
-fn sanitize_scalar_bytes(bytes: &mut [u8; 32]) {
-    if bytes[0] >= 0x73 {
-        bytes[0] &= 0x3f;
-    }
-    if bytes.iter().all(|&x| x == 0) {
-        bytes[31] = 1;
-    }
-}
-
-fn bytes48_to_fr(env: &Env, b: &BytesN<48>) -> Bls12381Fr {
-    let arr = b.to_array();
-    let mut scalar_bytes = [0u8; 32];
-    scalar_bytes.copy_from_slice(&arr[1..33]);
-    sanitize_scalar_bytes(&mut scalar_bytes);
-    Bls12381Fr::from_bytes(BytesN::from_array(env, &scalar_bytes))
-}
-
-fn bytes96_to_fr(env: &Env, b: &BytesN<96>) -> Bls12381Fr {
-    let arr = b.to_array();
-    let mut scalar_bytes = [0u8; 32];
-    scalar_bytes.copy_from_slice(&arr[1..33]);
-    sanitize_scalar_bytes(&mut scalar_bytes);
-    Bls12381Fr::from_bytes(BytesN::from_array(env, &scalar_bytes))
-}
-
-fn bytes96_to_fr_nonzero(env: &Env, b: &BytesN<96>) -> Bls12381Fr {
-    let arr = b.to_array();
-    let mut scalar_bytes = [0u8; 32];
-    scalar_bytes.copy_from_slice(&arr[1..33]);
-    sanitize_scalar_bytes(&mut scalar_bytes);
-    Bls12381Fr::from_bytes(BytesN::from_array(env, &scalar_bytes))
-}
-
-fn get_g1_generator(env: &Env) -> Bls12381G1Affine {
-    let bls = env.crypto().bls12_381();
-    let msg = Bytes::from_slice(env, b"RUNA_BLS12_381_G1_GEN");
-    let dst = Bytes::from_slice(env, b"RUNA_G1_DST");
-    bls.hash_to_g1(&msg, &dst)
-}
-
-fn get_g2_generator(env: &Env) -> Bls12381G2Affine {
-    let bls = env.crypto().bls12_381();
-    let msg = Bytes::from_slice(env, b"RUNA_BLS12_381_G2_GEN");
-    let dst = Bytes::from_slice(env, b"RUNA_G2_DST");
-    bls.hash_to_g2(&msg, &dst)
-}
-
-/// Evaluates Groth16 pairing equality using Soroban BLS12-381 pairing check
-fn evaluate_groth16_pairing(
+pub fn evaluate_groth16_pairing(
     env: &Env,
     proof: &Groth16Proof,
     vk: &VerificationKey,
-    k_pub: &BytesN<48>,
+    k_pub: &BytesN<96>,
 ) -> bool {
-    // 1. Verify G1 / G2 curve flags (BLS12-381 standard: 0x80 on MSB for compressed points)
-    if (proof.a.get(0).unwrap_or(0) & 0x80) == 0
-        || (proof.b.get(0).unwrap_or(0) & 0x80) == 0
-        || (proof.c.get(0).unwrap_or(0) & 0x80) == 0
-    {
-        return false;
-    }
-
     let bls = env.crypto().bls12_381();
-    let gen_g1 = get_g1_generator(env);
-    let gen_g2 = get_g2_generator(env);
 
-    let s_a = bytes48_to_fr(env, &proof.a);
-    let s_b = bytes96_to_fr(env, &proof.b);
-    let s_c = bytes48_to_fr(env, &proof.c);
+    let pt_a = Bls12381G1Affine::from_bytes(proof.a.clone());
+    let pt_alpha = Bls12381G1Affine::from_bytes(vk.alpha_g1.clone());
+    let pt_kpub = Bls12381G1Affine::from_bytes(k_pub.clone());
+    let pt_c = Bls12381G1Affine::from_bytes(proof.c.clone());
 
-    let s_alpha = bytes48_to_fr(env, &vk.alpha_g1);
-    let s_beta = bytes96_to_fr(env, &vk.beta_g2);
-    let s_gamma = bytes96_to_fr(env, &vk.gamma_g2);
-    let s_delta = bytes96_to_fr_nonzero(env, &vk.delta_g2);
-    let s_kpub = bytes48_to_fr(env, k_pub);
+    let pt_b = Bls12381G2Affine::from_bytes(proof.b.clone());
+    let pt_beta = Bls12381G2Affine::from_bytes(vk.beta_g2.clone());
+    let pt_gamma = Bls12381G2Affine::from_bytes(vk.gamma_g2.clone());
+    let pt_delta = Bls12381G2Affine::from_bytes(vk.delta_g2.clone());
 
-    let pt_a = bls.g1_mul(&gen_g1, &s_a);
-    let pt_neg_a = -&pt_a;
-    let pt_b = bls.g2_mul(&gen_g2, &s_b);
-
-    let pt_alpha = bls.g1_mul(&gen_g1, &s_alpha);
-    let pt_beta = bls.g2_mul(&gen_g2, &s_beta);
-
-    let pt_kpub = bls.g1_mul(&gen_g1, &s_kpub);
-    let pt_gamma = bls.g2_mul(&gen_g2, &s_gamma);
-
-    let pt_c = bls.g1_mul(&gen_g1, &s_c);
-    let pt_delta = bls.g2_mul(&gen_g2, &s_delta);
+    // In Groth16, e(A, B) = e(alpha, beta) * e(K_pub, gamma) * e(C, delta)
+    // For pairing_check (which checks product == 1 / sum == 0), negate point A:
+    // e(-A, B) * e(alpha, beta) * e(K_pub, gamma) * e(C, delta) == 1
+    let fr_zero = Bls12381Fr::from_bytes(BytesN::from_array(env, &[0u8; 32]));
+    let mut one_bytes = [0u8; 32];
+    one_bytes[31] = 1;
+    let fr_one = Bls12381Fr::from_bytes(BytesN::from_array(env, &one_bytes));
+    let fr_neg_one = bls.fr_sub(&fr_zero, &fr_one);
+    let pt_neg_a = bls.g1_mul(&pt_a, &fr_neg_one);
 
     let mut vp1 = Vec::new(env);
     vp1.push_back(pt_neg_a);
@@ -311,58 +255,4 @@ fn evaluate_groth16_pairing(
     bls.pairing_check(vp1, vp2)
 }
 
-/// Helper function to construct a matching valid Groth16 proof for test and generation
-pub fn generate_matching_groth16_proof(
-    env: &Env,
-    vk: &VerificationKey,
-    public_inputs: &Vec<BytesN<32>>,
-) -> Groth16Proof {
-    let k_pub = compute_public_input_accumulator(env, vk, public_inputs);
 
-    let mut a_bytes = [0u8; 48];
-    a_bytes[0] = 0x80 | 0x11;
-    for i in 1..48 {
-        a_bytes[i] = (i as u8).wrapping_mul(7);
-    }
-    let a = BytesN::from_array(env, &a_bytes);
-
-    let mut b_bytes = [0u8; 96];
-    b_bytes[0] = 0x80 | 0x22;
-    for i in 1..96 {
-        b_bytes[i] = (i as u8).wrapping_mul(11);
-    }
-    let b = BytesN::from_array(env, &b_bytes);
-
-    let bls = env.crypto().bls12_381();
-
-    let s_a = bytes48_to_fr(env, &a);
-    let s_b = bytes96_to_fr(env, &b);
-    let s_alpha = bytes48_to_fr(env, &vk.alpha_g1);
-    let s_beta = bytes96_to_fr(env, &vk.beta_g2);
-    let s_gamma = bytes96_to_fr(env, &vk.gamma_g2);
-    let s_delta = bytes96_to_fr_nonzero(env, &vk.delta_g2);
-    let s_kpub = bytes48_to_fr(env, &k_pub);
-
-    // lhs = s_a * s_b
-    let lhs = bls.fr_mul(&s_a, &s_b);
-    // term1 = s_alpha * s_beta
-    let term1 = bls.fr_mul(&s_alpha, &s_beta);
-    // term2 = s_kpub * s_gamma
-    let term2 = bls.fr_mul(&s_kpub, &s_gamma);
-    // sum12 = term1 + term2
-    let sum12 = bls.fr_add(&term1, &term2);
-    // diff = lhs - sum12
-    let diff = bls.fr_sub(&lhs, &sum12);
-    // inv_delta = s_delta.inv()
-    let inv_delta = bls.fr_inv(&s_delta);
-    // s_c = diff * inv_delta
-    let s_c = bls.fr_mul(&diff, &inv_delta);
-
-    let s_c_bytes = s_c.to_bytes().to_array();
-    let mut c_bytes = [0u8; 48];
-    c_bytes[0] = 0x80;
-    c_bytes[1..33].copy_from_slice(&s_c_bytes);
-    let c = BytesN::from_array(env, &c_bytes);
-
-    Groth16Proof { a, b, c }
-}
