@@ -1098,6 +1098,21 @@ test('hitbox combat stays on the field and advances on attack input', (t) => {
   )
 })
 
+test('el heroe y los NPCs no colapsan visualmente de cerca', (t) => {
+  const game = new Runa({ presence: false })
+  game.start('tester')
+  const alma = MAPS.city.npcs.find((n) => n.id === 'alma')
+  for (let dx of [1, 2, 3, -1, -2, -3]) {
+    game.walker.placeAt('city', alma.x + dx, alma.y)
+    const screen = style.stripAnsi(game.view())
+    t.ok(screen.includes('/T\\') || screen.includes('\\T-'), 'heroe presente (dx ' + dx + ')')
+    t.ok(screen.includes('._.'), 'heroe base presente (dx ' + dx + ')')
+    t.ok(screen.includes('.+.'), 'alma top presente (dx ' + dx + ')')
+    t.ok(screen.includes('(o o)'), 'alma cara presente (dx ' + dx + ')')
+    t.ok(screen.includes('/[+]\\'), 'alma torso presente (dx ' + dx + ')')
+  }
+})
+
 test('t returns from the field to the city outside combat', (t) => {
   const game = new Runa({ presence: false })
   startGame(game)
@@ -1206,4 +1221,19 @@ test('the world boss animates powers with real field damage', (t) => {
   game.field.player.y = incoming.y
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
+})
+
+test('el heroe y los NPCs no colapsan visualmente de cerca', (t) => {
+  const game = new Runa({ presence: false })
+  game.start('tester')
+  const alma = MAPS.city.npcs.find((n) => n.id === 'alma')
+  for (let dx of [1, 2, 3, -1, -2, -3]) {
+    game.walker.placeAt('city', alma.x + dx, alma.y)
+    const screen = style.stripAnsi(game.view())
+    t.ok(screen.includes('/T\\') || screen.includes('\\T-'), 'heroe presente (dx ' + dx + ')')
+    t.ok(screen.includes('._.'), 'heroe base presente (dx ' + dx + ')')
+    t.ok(screen.includes('.+.'), 'alma top presente (dx ' + dx + ')')
+    t.ok(screen.includes('(o o)'), 'alma cara presente (dx ' + dx + ')')
+    t.ok(screen.includes('/[+]\\'), 'alma torso presente (dx ' + dx + ')')
+  }
 })
