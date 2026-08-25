@@ -4,13 +4,13 @@ Trabajá sobre este repositorio de Windows:
 
 ```text
 C:\Users\usuario\Grantfox\runa
-origin: https://github.com/leocagli/runa.git
+origin: https://github.com/Bitcoindefi/runa.git
 ```
 
 Antes de modificar nada, actualizá desde `origin/main` y revisá el estado real
-del árbol. No uses `/root/runa-bd`: esa copia WSL apuntaba a otro remoto, quedó
-con objetos Git corruptos después de llenar el disco y no contiene la versión
-canónica del trabajo visual.
+del árbol. No uses `/root/runa-bd`: esa copia WSL quedó con objetos Git
+corruptos después de llenar el disco y no contiene la versión canónica del
+trabajo visual ya publicado en `main`.
 
 ## División de responsabilidades
 

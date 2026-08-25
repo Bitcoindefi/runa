@@ -169,5 +169,5 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Agregado `CLAUDE.md` en la raiz para que Claude lea automaticamente el estado canonico antes de trabajar.
 - La nota impide duplicar el Coliseo dentro de la ciudad y separa arte/mapas de infraestructura, red y contratos.
 - Detalla el flujo pendiente del duelo: conservar retorno, asignar lados, usar `duelSpawns`, bloquear `Q`, aislar PvP del jefe y regresar al finalizar.
-- Advierte que `/root/runa-bd` quedo corrupto y apuntaba a otro remoto; la fuente canonica es este repositorio de Windows con `origin` en `leocagli/runa`.
+- Advierte que `/root/runa-bd` quedo corrupto; la fuente canonica es este repositorio de Windows y el nuevo remoto transferido `Bitcoindefi/runa`.
 - Recuperados 13,7 GB al vaciar solamente la cache regenerable de npm; no se borraron fuentes ni dependencias instaladas.
