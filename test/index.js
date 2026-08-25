@@ -505,7 +505,8 @@ test('city art remains rectangular and walkable', (t) => {
   t.ok(cityText.includes('[== jarra ==]'), 'the tavern has its own half-timbered sign')
   t.ok(cityText.includes('fragua (())'), 'the smithy exposes a working forge bay')
   t.ok(cityText.includes('[]__[]__[]'), 'the armoury has a crenellated silhouette')
-  t.is(city.npcs.length, 9, 'the city has nine static residents')
+  // Issue #11 wired the sage NPC into the city, so the roster grew by one.
+  t.is(city.npcs.length, 10, 'the city has ten static residents (incl. the sage)')
   t.ok(NPC_MASTER_SPRITES.guard.length >= 20, 'the faithful high-resolution knight is preserved')
   t.ok(
     NPC_MASTER_SPRITES.guard.some((line) => line.includes('hjw')),
@@ -1206,4 +1207,36 @@ test('the world boss animates powers with real field damage', (t) => {
   game.field.player.y = incoming.y
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
+})
+
+
+test('el sabio traduce una frase y la agrega al script (issue #11)', (t) => {
+  const { SageSession } = require('../lib/sage-npc.js')
+  let written = null
+  const session = new SageSession(
+    null,
+    () => '?hp < 8\n use potion\n',
+    (next) => { written = next },
+    () => {}
+  ).start()
+
+  t.ok(session.active, 'session starts active')
+  session.ask('usa la ballesta si esta lejos')
+  t.ok(written !== null, 'script was written')
+  if (written) {
+    t.ok(written.includes('equip crossbow'), 'translated rule appended')
+    t.ok(written.startsWith('?hp < 8'), 'existing script preserved')
+  }
+})
+
+test('el sabio sobrevive a frases que no entiende (issue #11)', (t) => {
+  const { SageSession } = require('../lib/sage-npc.js')
+  let writes = 0
+  let closed = false
+  const session = new SageSession(null, () => '', () => { writes++ }, () => { closed = true }).start()
+  session.ask('xyzzy blorp quux')
+  t.is(writes, 0, 'nothing written for nonsense')
+  session.close('chau')
+  t.ok(closed, 'session closes')
+  t.not(session.active, 'inactive after close')
 })
