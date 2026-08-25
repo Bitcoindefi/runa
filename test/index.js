@@ -4,11 +4,13 @@ const fs = require('bare-fs')
 const os = require('bare-os')
 const path = require('bare-path')
 const { Runa, COMBAT_TURN_TICKS } = require('../lib/game.js')
-const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES } = require('../lib/map.js')
+const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES, tileAt } = require('../lib/map.js')
 const { Field } = require('../lib/field.js')
 const { Player, reward, xpToLeave, SAVE_VERSION } = require('../lib/shop.js')
 const { SaveStore } = require('../lib/saves.js')
 const { World } = require('../lib/world.js')
+const { WORLD_BOSS } = require('../lib/world-boss.js')
+const { WorldBossEvent } = require('../lib/world-boss-event.js')
 const {
   BEGIN_SYNCHRONIZED_UPDATE,
   END_SYNCHRONIZED_UPDATE,
@@ -516,6 +518,71 @@ test('city art remains rectangular and walkable', (t) => {
   t.is(TILES[';'].solid, false)
   t.is(TILES.O.solid, true)
   t.is(TILES.T.enter.kind, 'tavern')
+})
+
+test('the coliseum is a high-resolution duel map with mirrored safe spawns', (t) => {
+  const arena = MAPS.coliseum
+  const [west, east] = arena.duelSpawns
+  const art = arena.rows.join('\n').toLowerCase()
+
+  t.is(arena.width, 128)
+  t.is(arena.height, 52)
+  t.ok(
+    arena.rows.every((row) => row.length === arena.width),
+    'the arena art is rectangular'
+  )
+  t.ok(art.includes('coliseo de runa'), 'the grandstand identifies the venue')
+  t.ok(art.includes('puerta sur'), 'the public entrance is visible without blocking its tunnel')
+  t.is(arena.duelReady, true, 'the map advertises its multiplayer integration contract')
+  t.is(arena.duelSpawns.length, 2)
+  t.is(west.y, east.y, 'both contenders start on one combat line')
+  t.is(west.x + east.x, arena.width - 1, 'the two starts are mirrored around center')
+  t.is(west.facing, 'east')
+  t.is(east.facing, 'west')
+  t.is(tileAt(arena, west.x, west.y).solid, false, 'the west player starts on open ground')
+  t.is(tileAt(arena, east.x, east.y).solid, false, 'the east player starts on open ground')
+  t.is(
+    tileAt(arena, arena.refereeSpawn.x, arena.refereeSpawn.y).solid,
+    false,
+    'the reserved referee point is open'
+  )
+  t.is(tileAt(arena, arena.arrive.x, arena.arrive.y).solid, false, 'arrival is in the tunnel')
+  t.is(arena.rows[41][arena.arrive.x], '.', 'the entrance label cannot close the tunnel')
+  t.ok(art.split('%').length > 1000, 'the duel floor leaves ample space to move and dodge')
+
+  const pending = [{ ...arena.arrive }]
+  const reached = new Set([`${arena.arrive.x},${arena.arrive.y}`])
+  while (pending.length) {
+    const point = pending.shift()
+    for (const [dx, dy] of [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1]
+    ]) {
+      const x = point.x + dx
+      const y = point.y + dy
+      const key = `${x},${y}`
+      if (reached.has(key) || tileAt(arena, x, y).solid) continue
+      reached.add(key)
+      pending.push({ x, y })
+    }
+  }
+  t.ok(reached.has(`${west.x},${west.y}`), 'the west spawn is reachable from the tunnel')
+  t.ok(reached.has(`${east.x},${east.y}`), 'the east spawn is reachable from the tunnel')
+})
+
+test('the coliseum exit returns safely to the city', (t) => {
+  const game = new Runa({ presence: false })
+  const arena = MAPS.coliseum
+  game.title = false
+  game.walker.placeAt('coliseum', arena.exit.x, arena.exit.y)
+
+  t.is(game.walker.action().to, 'city')
+  press(game, 'e')
+  t.is(game.walker.mapId, 'city')
+  t.is(game.walker.x, MAPS.city.arrive.x)
+  t.is(game.walker.y, MAPS.city.arrive.y)
 })
 
 test('city NPCs block movement and provide their services', (t) => {
@@ -1048,4 +1115,88 @@ test('t returns from the field to the city outside combat', (t) => {
   t.absent(game.field, 't closes the excursion')
   t.is(game.walker.mapId, 'city')
   t.ok(game.log.includes('volves a la ciudad'))
+})
+
+test('the world boss animates powers with real field damage', (t) => {
+  const distant = new WorldBossEvent({ width: 120, height: 36 })
+  const tooFar = distant.strike({ x: 2, y: 18 }, { damage: 4, reach: 2 }, 0)
+  t.is(tooFar[0].type, 'boss-miss')
+  t.is(distant.active, false, 'pressing f at the gate cannot wake a distant boss')
+
+  const boss = new WorldBossEvent({ width: 120, height: 36 })
+  const player = { x: boss.x - 20, y: boss.y, hp: 20 }
+
+  const awake = boss.activate(0)
+  t.is(awake[0].type, 'boss-awake', 'approaching wakes one persistent boss')
+
+  const onda = WORLD_BOSS.phases[0].attacks.find((attack) => attack.id === 'onda')
+  boss.release(onda, player, 1)
+  t.is(boss.hazards.length, 8, 'the runic wave leaves in eight visible directions')
+  t.ok(boss.hazards.every((hazard) => hazard.glyph === '~'))
+
+  const hazard = boss.hazards[0]
+  player.x = hazard.x
+  player.y = hazard.y
+  const hit = boss.touch(player, 2)
+  t.is(hit[0].type, 'boss-hit')
+  t.is(hit[0].damage, 6)
+  t.is(player.hp, 14, 'touching the visible wave removes real life')
+  t.ok(!boss.hazards.some((candidate) => candidate.id === hazard.id), 'the hit is consumed once')
+
+  const frames = WORLD_BOSS.fieldSprite.frames
+  t.ok(Object.keys(frames).includes('slamImpact'), 'the ground strike has an impact pose')
+  t.ok(Object.keys(frames).includes('idlePulse'), 'the face and rune pulse while awake')
+  t.ok(
+    Object.values(frames).every(
+      (frame) =>
+        frame.length === WORLD_BOSS.fieldSprite.height &&
+        frame.every((line) => line.length === WORLD_BOSS.fieldSprite.width)
+    ),
+    'every moving pose keeps one stable terminal footprint'
+  )
+
+  const field = new Field({ seed: 17, width: 120, height: 36 })
+  field.player.x = field.boss.x - 23
+  field.player.y = field.boss.y
+  field.boss.activate(0)
+  const snap = field.snapshot()
+  const pane = style.stripAnsi(
+    render.fieldPane(
+      {
+        rows: field.render(64, 25, false),
+        width: snap.width,
+        height: snap.height,
+        player: { ...snap.player, sprite: render.heroSprite() },
+        foes: [],
+        boss: snap.boss
+      },
+      64,
+      25
+    )
+  )
+  t.ok(pane.includes('[###]---\\_'), 'the camera keeps the complete left arm')
+  t.ok(pane.includes('_/---[###]'), 'the camera keeps the complete right arm')
+  t.ok(pane.includes('/T\\'), 'the hero remains visible while dodging')
+  t.ok(
+    pane.split('\n').every((line) => line.length === 64),
+    'boss animation cannot widen a terminal row'
+  )
+
+  const game = new Runa({ presence: false })
+  startGame(game)
+  game.field = new Field({ player: game.player })
+  game.field.player.x = game.field.boss.x - 12
+  game.field.player.y = game.field.boss.y
+  const bossHp = game.field.boss.hp
+  press(game, 'f')
+  t.ok(game.field.boss.hp < bossHp, 'f damages the boss without freezing movement')
+  t.absent(game.field.combat, 'world boss attacks do not open the rigid duel combat state')
+
+  const life = game.player.hp
+  game.field.boss.spawnHazard('wave', -1, 0, 6, '~', game.field.time, 10, 3)
+  const incoming = game.field.boss.hazards[game.field.boss.hazards.length - 1]
+  game.field.player.x = incoming.x
+  game.field.player.y = incoming.y
+  game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
+  t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
 })
