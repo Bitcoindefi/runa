@@ -69,6 +69,21 @@ npm.cmd run lint
 git diff --check
 ```
 
-El estado publicado por Codex parte de 65 pruebas y 515 aserciones verdes. Si
+El estado publicado por Codex parte de 98 pruebas y 708 aserciones verdes. Si
 una integración cambia ese número, documentá por qué y probá el recorrido
 completo: aceptar desafío, entrar al Coliseo, combatir, finalizar y regresar.
+
+## Estado actual del PvP
+
+- `lib/duel.js` ya contiene `Duel` y `DuelCombat`: lados deterministas, retorno,
+  límites, vida, equipo, alcance, defensa, enfriamiento, rendición y resultado.
+- `Runa.startDuel()` entra al mapa y `Runa.duelInput()` es el borde para inputs
+  locales o remotos ordenados. No dupliques estas reglas en `net.js`.
+- La interfaz dibuja ambos stickmans, vida, dirección, alcance y recarga; `R`
+  rinde y la salida `Q` queda bloqueada mientras la sesión vive.
+- El guardado conserva la ubicación anterior al duelo y el daño PvP no modifica
+  la vida persistente de PvE.
+- Pendiente para la capa de Claude: desafío/aceptación P2P, transporte ordenado
+  de inputs, detección de desconexión y publicación del resultado en Soroban.
+- `contracts/duel-arena` liquida commit-reveal y consenso; no ejecuta ni debe
+  fingir que ejecuta cada cuadro del combate visual.

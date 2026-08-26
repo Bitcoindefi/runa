@@ -183,3 +183,18 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Revision visual real: fase `furia` y preparacion de `colapso` inspeccionadas en una consola 120x32; las advertencias quedan sobre el terreno y no pisan cara, brazos ni nucleo.
 - Verificado: 73/73 pruebas (546 aserciones), lint limpio y filas estables.
 - TODO: cuando se integre `contrato-jefe`, sincronizar `phase` y `revision` sin replicar cuadros ni advertencias transitorias.
+
+## Primera sesion PvP jugable en el Coliseo
+
+- Integrada la sesion de `origin/duelos-sesion` sin perder las pruebas de Stellar.
+- `DuelCombat` resuelve vida, ataque, defensa, alcance, enfriamiento, rendicion y ganador mediante entradas ordenadas y reproducibles.
+- El equipo real del personaje alimenta el bloque PvP; espada, ballesta y escudo ya cambian las reglas y tambien se ven en el actor.
+- La distancia descuenta el ancho visible de los stickmans para que los cuerpos no tengan que pisarse antes de un golpe corto.
+- `Runa.startDuel()` conserva el punto de regreso, asigna los spawns del mapa y abre el Coliseo; `duelInput()` queda como borde para el transporte P2P.
+- La vista muestra ambos combatientes, sus iniciales/equipo, vida, direccion del rival, distancia/alcance y recarga.
+- `WASD` mueve, `F`/Espacio/Enter ataca y `R`/Escape rinde; la salida `Q` y las gradas quedan bloqueadas durante la pelea.
+- Ganar, perder o rendirse devuelve al punto exacto anterior. El autoguardado usa ese punto seguro y el dano PvP nunca contamina la vida persistente de PvE.
+- El resultado local queda separado de `contracts/duel-arena`: Soroban sigue encargado de commit-reveal, consenso y pago.
+- Revision visual real: duelo con espada y escudo contra un stickman rival inspeccionado en 80x24; ambos cuerpos y el terreno conservan filas estables.
+- Verificado: 98/98 pruebas (708 aserciones), render 80x24 y filas de ancho exacto.
+- TODO: conectar desafio/aceptacion P2P, transportar inputs ordenados, finalizar por desconexion y publicar el resultado acordado en Soroban.

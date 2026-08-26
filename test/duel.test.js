@@ -1,11 +1,17 @@
 const { test } = require('brittle')
 const { MAPS } = require('../lib/map.js')
-const { Duel, sideFor, otherSide } = require('../lib/duel.js')
+const { Duel, DuelCombat, combatStats, sideFor, otherSide } = require('../lib/duel.js')
 
 const arena = MAPS.coliseum
 
 function nuevo(self = 'ana', rival = 'beto') {
   return new Duel({ arena, self, rival })
+}
+
+function combate(selfStats = {}, rivalStats = {}) {
+  const session = nuevo()
+  session.begin({ mapId: 'city', x: 12, y: 34 })
+  return new DuelCombat({ session, selfStats, rivalStats })
 }
 
 test('los lados se calculan igual desde las dos puntas', (t) => {
@@ -170,4 +176,77 @@ test('un duelo no se puede empezar dos veces', (t) => {
   t.exception(() => d.begin({ mapId: 'city', x: 2, y: 2 }), /ya empezo/)
   d.end()
   t.exception(() => d.begin({ mapId: 'city', x: 3, y: 3 }), /ya termino/)
+})
+
+test('las estadisticas PvP tienen valores seguros y portables', (t) => {
+  t.alike(combatStats({ hp: 30, maxhp: 25, atk: 5, defense: 2, reach: 4, cooldown: 8 }), {
+    hp: 25,
+    maxHp: 25,
+    atk: 5,
+    defense: 2,
+    reach: 4,
+    cooldown: 8,
+    items: []
+  })
+  t.is(combatStats({ reach: -20 }).reach, 1, 'un alcance roto nunca atraviesa la formula')
+  t.is(combatStats({ cooldown: 0 }).cooldown, 1, 'todo ataque tiene al menos un tick')
+})
+
+test('el combate usa alcance, defensa y enfriamiento visibles', (t) => {
+  const fight = combate(
+    { hp: 20, maxHp: 20, atk: 5, reach: 2, cooldown: 4, items: ['sword'] },
+    { hp: 20, maxHp: 20, defense: 2, reach: 1, cooldown: 5, items: ['shield'] }
+  )
+
+  const miss = fight.attack('ana')
+  t.is(miss.type, 'duel-miss')
+  t.ok(miss.distance > miss.reach, 'la espada no pega desde la otra punta del Coliseo')
+  t.is(fight.attack('ana').type, 'duel-cooldown', 'no se puede cancelar el enfriamiento')
+
+  fight.tick(4)
+  const rival = fight.fighter('beto')
+  fight.place('ana', rival.x - 2, rival.y)
+  const hit = fight.attack('ana')
+  t.is(hit.type, 'duel-hit')
+  t.is(hit.damage, 3, 'el escudo descuenta dos al golpe de cinco')
+  t.is(fight.fighter('beto').hp, 17)
+})
+
+test('los limites del Coliseo tambien encierran al motor de combate', (t) => {
+  const fight = combate()
+  const b = arena.arenaBounds
+  fight.place('ana', -999, 999)
+  t.is(fight.fighter('ana').x, b.x1)
+  t.is(fight.fighter('ana').y, b.y2)
+})
+
+test('una misma secuencia de entradas produce el mismo ganador', (t) => {
+  const play = () => {
+    const fight = combate(
+      { hp: 9, maxHp: 9, atk: 5, reach: 2, cooldown: 2 },
+      { hp: 9, maxHp: 9, atk: 4, reach: 2, cooldown: 2 }
+    )
+    const east = fight.fighter('beto')
+    fight.place('ana', east.x - 1, east.y)
+    fight.attack('ana')
+    fight.attack('beto')
+    fight.tick(2)
+    fight.attack('ana')
+    return fight.snapshot()
+  }
+
+  const first = play()
+  const replay = play()
+  t.alike(replay, first, 'el replay no depende del reloj ni de Math.random')
+  t.is(first.result.winner, 'ana')
+  t.is(first.result.reason, 'vida')
+})
+
+test('rendirse resuelve una sola vez y congela el daño', (t) => {
+  const fight = combate()
+  const result = fight.surrender('ana')
+  t.is(result.winner, 'beto')
+  t.is(result.reason, 'rendicion')
+  t.is(fight.attack('beto').type, 'duel-over')
+  t.alike(fight.surrender('beto'), result, 'el primer resultado es definitivo')
 })

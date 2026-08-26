@@ -594,6 +594,96 @@ test('the coliseum exit returns safely to the city', (t) => {
   t.is(game.walker.y, MAPS.city.arrive.y)
 })
 
+test('an accepted PvP duel uses the Coliseum, equipment and exact return point', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.name = 'Ayla'
+  game.walker.placeAt('city', 160, 130)
+  game.player.gold = 100
+  game.player.buy('sword', 'weapons')
+  game.player.buy('shield', 'armor')
+
+  const started = game.startDuel('Borin', {
+    selfId: 'peer-a',
+    rivalId: 'peer-b',
+    rivalStats: { hp: 8, maxHp: 8, atk: 3, defense: 1, reach: 2, cooldown: 8 }
+  })
+  t.ok(started)
+  t.is(game.walker.mapId, 'coliseum')
+  t.ok(game.duel.inside(game.walker.x, game.walker.y))
+  t.is(started.self.atk, 5, 'the equipped sword contributes to PvP attack')
+  t.is(started.self.defense, 2, 'the equipped shield contributes to PvP defence')
+  t.is(started.self.reach, 2)
+
+  const rival = game.duelCombat.fighter('peer-b')
+  game.walker.placeAt('coliseum', rival.x - 7, rival.y)
+  game.duelCombat.place('peer-a', rival.x - 7, rival.y)
+  const screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('COLISEO'))
+  t.ok(screen.includes('Borin 8/8 hp'))
+  t.ok(screen.includes('/|A\\'), 'the local initial remains on the equipped hero')
+  t.ok(screen.includes('/B\\'), 'the opponent has a full transparent stickman sprite')
+  t.ok(screen.includes('r rendirse'))
+  t.ok(screen.split('\n').every((line) => line.length === game.width))
+
+  const saved = game.saveState()
+  t.alike(
+    saved.location,
+    { kind: 'map', mapId: 'city', x: 160, y: 130 },
+    'autosave records the pre-duel position instead of an orphaned arena'
+  )
+
+  press(game, 'r')
+  t.absent(game.duel)
+  t.is(game.walker.mapId, 'city')
+  t.is(game.walker.x, 160)
+  t.is(game.walker.y, 130)
+  t.is(game.lastDuelResult.winner, 'peer-b')
+})
+
+test('PvP movement stays in bounds and ordered attacks finish deterministically', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.name = 'Ana'
+  game.walker.placeAt('city', 160, 130)
+  game.startDuel('Beto', {
+    selfId: 'ana',
+    rivalId: 'beto',
+    rivalStats: { hp: 1, maxHp: 1, atk: 1, defense: 0, reach: 1, cooldown: 30 }
+  })
+  t.absent(game.duelInput('intruso', { attack: true }), 'unknown network input is ignored')
+
+  const b = MAPS.coliseum.arenaBounds
+  game.walker.placeAt('coliseum', b.x1, b.y1)
+  game.duelCombat.place('ana', b.x1, b.y1)
+  press(game, 'left')
+  press(game, 'up')
+  t.is(game.walker.x, b.x1)
+  t.is(game.walker.y, b.y1)
+
+  const rival = game.duelCombat.fighter('beto')
+  game.walker.placeAt('coliseum', rival.x - 1, rival.y)
+  game.duelCombat.place('ana', rival.x - 1, rival.y)
+  press(game, 'right')
+  t.is(game.walker.x, rival.x - 1, 'fighters cannot occupy the same anchor cell')
+  press(game, 'f')
+  t.absent(game.duel, 'lethal damage closes the ephemeral session')
+  t.is(game.walker.mapId, 'city')
+  t.is(game.lastDuelResult.winner, 'ana')
+  t.is(game.player.hp, game.player.maxHp, 'PvP damage never leaks into persistent PvE life')
+})
+
+test('the Coliseum safety exit is blocked only by a live duel', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.startDuel('Beto', { selfId: 'ana', rivalId: 'beto' })
+  game.walker.placeAt('coliseum', MAPS.coliseum.exit.x, MAPS.coliseum.exit.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'coliseum')
+  t.ok(game.duel.active)
+  t.ok(game.log.some((line) => String(line).includes('porton queda cerrado')))
+})
+
 test('city NPCs block movement and provide their services', (t) => {
   const game = new Runa({ presence: false })
   game.title = false
