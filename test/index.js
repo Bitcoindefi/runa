@@ -1110,6 +1110,7 @@ test('el heroe y los NPCs no colapsan visualmente de cerca', (t) => {
     t.ok(screen.match(/\(o[\\., ]o\)/), 'alma cara presente (dx ' + dx + ')')
     t.ok(screen.includes('/[+]\\'), 'alma torso presente (dx ' + dx + ')')
   }
+  t.end()
 })
 
 test('t returns from the field to the city outside combat', (t) => {
