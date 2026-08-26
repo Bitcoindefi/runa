@@ -250,7 +250,7 @@ test('the larger city scrolls inside an 80-column console', (t) => {
     MAPS.city.rows.some((row) => row.includes('~~~~~~~~~~~~~~~~~~')),
     'the city keeps its detailed fountain'
   )
-  t.ok(screen.includes('hp 20/20'), 'compact stats remain visible in the title bar')
+  t.ok(screen.includes('ficha'), 'sidebar remains visible instead of dropping to compact stats')
   t.ok(!screen.includes('[#]'), 'a new hero does not display an unequipped shield')
   t.ok(!screen.includes('@'), 'the city no longer represents the hero with an at sign')
 
@@ -1048,4 +1048,42 @@ test('t returns from the field to the city outside combat', (t) => {
   t.absent(game.field, 't closes the excursion')
   t.is(game.walker.mapId, 'city')
   t.ok(game.log.includes('volves a la ciudad'))
+})
+
+test('mapScreen renders sidebar (ficha and log) between 64 and 90 columns', (t) => {
+  for (const width of [64, 72, 80, 90, 91, 100]) {
+    const screen = style.stripAnsi(
+      render.mapScreen({
+        width,
+        height: 20,
+        map: { tiles: MAPS.city.rows, hero: { x: 26, y: 130 } },
+        stats: { name: 'Tomas', level: 1, hp: 10, maxhp: 10, gold: 5 },
+        log: ['hermana Alma te cura']
+      })
+    )
+    t.ok(
+      screen.includes('ficha') && screen.includes('log'),
+      `sidebar panels (ficha and log) render at width ${width}`
+    )
+    t.ok(screen.includes('hermana Alma te cura'), `log message is visible at width ${width}`)
+  }
+
+  const explicitNoSidebar = style.stripAnsi(
+    render.mapScreen({
+      width: 80,
+      height: 20,
+      sidebar: false,
+      map: { tiles: MAPS.city.rows, hero: { x: 26, y: 130 } },
+      stats: { name: 'Tomas', level: 1, hp: 10, maxhp: 10, gold: 5 },
+      log: ['hermana Alma te cura']
+    })
+  )
+  t.ok(
+    !explicitNoSidebar.includes('ficha') && !explicitNoSidebar.includes('log'),
+    'explicit sidebar: false drops the sidebar'
+  )
+  t.ok(
+    explicitNoSidebar.includes('hp 10/10'),
+    'explicit sidebar: false shows compact stats in subtitle'
+  )
 })
