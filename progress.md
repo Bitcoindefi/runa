@@ -152,3 +152,22 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Resultado final: 62/62 pruebas (473 aserciones), lint limpio y smoke del mapa `TODO OK`.
 - Las seis capturas quedaron recortadas al borde real de la terminal, sin el lienzo exterior de `1280x800`.
 - TODO: ninguno para este ajuste.
+
+## Mapa del Coliseo preparado para duelos
+
+- Pedido actual: los duelos deben ocurrir en un Coliseo propio, no en la pradera ni en el mapa del jefe mundial.
+- Hecho: mapa eliptico de alta resolucion (128x52), con arena de grava, marcas runicas, gradas, publico, muros y tunel sur.
+- Integracion: `MAPS.coliseum` publica dos `duelSpawns` simetricos, `refereeSpawn`, `arenaBounds` y `duelReady`.
+- Seguridad: la baldosa `Q` permite volver a la ciudad durante pruebas; la futura logica PvP puede bloquearla mientras el duelo este activo.
+- Documentado: `docs/coliseum.md` deja el contrato exacto para que el agente de duelos conecte transporte, limites y retorno.
+- Revision visual: comprobados el punto de duelo oeste y el recorrido completo del tunel en vistas reales de 100x30 y 120x32.
+- Verificado: 65/65 pruebas (515 aserciones) y lint limpio.
+- TODO: conectar el desafio multijugador con `walker.placeAt('coliseum', spawn.x, spawn.y)` cuando llegue la logica de duelos.
+
+## Traspaso para Claude
+
+- Agregado `CLAUDE.md` en la raiz para que Claude lea automaticamente el estado canonico antes de trabajar.
+- La nota impide duplicar el Coliseo dentro de la ciudad y separa arte/mapas de infraestructura, red y contratos.
+- Detalla el flujo pendiente del duelo: conservar retorno, asignar lados, usar `duelSpawns`, bloquear `Q`, aislar PvP del jefe y regresar al finalizar.
+- Advierte que `/root/runa-bd` quedo corrupto; la fuente canonica es este repositorio de Windows y el nuevo remoto transferido `Bitcoindefi/runa`.
+- Recuperados 13,7 GB al vaciar solamente la cache regenerable de npm; no se borraron fuentes ni dependencias instaladas.
