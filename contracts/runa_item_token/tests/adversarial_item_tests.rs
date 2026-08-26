@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use runa_common::ItemMetadata;
+use runa_item_token::types::ItemMetadata;
 use runa_item_token::{RunaItemTokenContract, RunaItemTokenContractClient};
 use soroban_sdk::{testutils::Address as _, token, Address, Env, Symbol};
 

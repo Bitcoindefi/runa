@@ -6,7 +6,8 @@ pub mod types;
 #[cfg(test)]
 pub mod test;
 
-use runa_common::{InventorySummary, ItemError, ItemMetadata};
+use crate::errors::ItemError;
+use crate::types::{InventorySummary, ItemMetadata};
 use soroban_sdk::{
     contract, contractimpl, symbol_short, token, Address, Env, Symbol,
 };
@@ -40,6 +41,7 @@ impl RunaItemTokenContract {
         admin: Address,
         game_contract: Address,
     ) -> Result<(), ItemError> {
+        admin.require_auth();
         if env.storage().instance().has(&ItemDataKey::Admin) {
             return Err(ItemError::AlreadyInitialized);
         }
@@ -231,10 +233,6 @@ impl RunaItemTokenContract {
     ) -> Result<(), ItemError> {
         from.require_auth();
 
-        if from == to {
-            return Ok(());
-        }
-
         // Verify item exists
         let item_key = ItemDataKey::Item(item_id.clone());
         if !env.storage().persistent().has(&item_key) {
@@ -250,6 +248,10 @@ impl RunaItemTokenContract {
 
         if from_balance == 0 {
             return Err(ItemError::InsufficientBalance);
+        }
+
+        if from == to {
+            return Ok(());
         }
 
         let to_balance_key = ItemDataKey::PlayerBalance(to.clone(), item_id.clone());
