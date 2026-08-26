@@ -69,7 +69,7 @@ npm.cmd run lint
 git diff --check
 ```
 
-El estado publicado por Codex parte de 98 pruebas y 708 aserciones verdes. Si
+El estado publicado por Codex parte de 103 pruebas y 745 aserciones verdes. Si
 una integración cambia ese número, documentá por qué y probá el recorrido
 completo: aceptar desafío, entrar al Coliseo, combatir, finalizar y regresar.
 
@@ -83,7 +83,13 @@ completo: aceptar desafío, entrar al Coliseo, combatir, finalizar y regresar.
   rinde y la salida `Q` queda bloqueada mientras la sesión vive.
 - El guardado conserva la ubicación anterior al duelo y el daño PvP no modifica
   la vida persistente de PvE.
-- Pendiente para la capa de Claude: desafío/aceptación P2P, transporte ordenado
-  de inputs, detección de desconexión y publicación del resultado en Soroban.
+- `lib/net.js` ya transporta desafío/aceptación, inputs ordenados, resultado y
+  desconexión. El peer con id menor es la autoridad de orden; no agregues un
+  segundo reloj ni apliques predicción de daño del lado invitado.
+- `V` abre la interfaz de wallet. `lib/wallet.js` guarda solo la dirección
+  pública y acepta un firmante externo inyectado; nunca agregues una seed
+  secreta al guardado. Detalles en `docs/wallet.md`.
+- Pendiente: desplegar/configurar el id de `contracts/duel-arena`, construir el
+  XDR de sus llamadas y conectar Wallets Kit/WalletConnect o SEP-7 para firmar.
 - `contracts/duel-arena` liquida commit-reveal y consenso; no ejecuta ni debe
   fingir que ejecuta cada cuadro del combate visual.

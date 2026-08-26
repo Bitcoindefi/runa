@@ -20,7 +20,9 @@ const render = require('../lib/render.js')
 
 require('./sage.test.js')
 require('./stellar.test.js')
+require('./wallet.test.js')
 require('./duel.test.js')
+require('./net.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
@@ -1160,6 +1162,32 @@ test('the swarm line never pushes the title off its own screen', (t) => {
     t.ok(screen.indexOf('RUNA') !== -1, 'the logo survives at ' + w + 'x' + h)
     t.ok(screen.indexOf('ENTER / ESPACIO') !== -1, 'and so does the prompt')
   }
+})
+
+test('the wallet screen is visible, stable and saves only the public address', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 80, height: 24 })
+  startGame(game, 'Luna')
+
+  const secret = game.chain.create()
+  const address = game.chain.address
+  t.ok(game.wallet.link(address))
+  game.walletOpen = true
+
+  const screen = style.stripAnsi(game.view())
+  const lines = screen.split('\n')
+  t.ok(screen.includes('WALLET Y PVP'))
+  t.ok(screen.includes('firma externa: no configurada'))
+  t.ok(screen.includes('v / esc volver'))
+  t.is(lines.length, 24, 'wallet UI keeps the terminal height')
+  t.ok(
+    lines.every((line) => line.length === 80),
+    'wallet UI keeps every terminal row stable'
+  )
+
+  const saved = JSON.stringify(game.saveState())
+  t.ok(saved.includes(address), 'the public identity persists with the slot')
+  t.absent(saved.includes(secret), 'a secret seed never reaches save data')
 })
 
 test('hitbox combat stays on the field and advances on attack input', (t) => {

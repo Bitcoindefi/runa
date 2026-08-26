@@ -50,13 +50,23 @@ La vista muestra vida de ambos, direccion del rival, distancia/alcance y estado
 del enfriamiento. Los dos participantes usan el stickman compacto con su
 inicial y el equipo que realmente llevan.
 
-## Limite de la integracion
+## Transporte P2P conectado
 
-`startDuel()` y `duelInput()` son el borde que debe usar el transporte. Falta
-que la capa de red implemente desafio/aceptacion y entregue esos inputs en el
-mismo orden a ambos peers. El resultado local no paga apuestas por si solo: el
-contrato Soroban de `contracts/duel-arena` recibe las revelaciones y el ganador
-publicado, resuelve consenso y liquida la apuesta por separado.
+Un jugador cercano se desafia con `E`. El receptor acepta con Enter o rechaza
+con `N`. Los mensajes son dirigidos por id de sesion, tienen proteccion contra
+repeticiones y se descartan si llegan desde otra conexion o para otro peer.
+
+El peer cuyo id es menor actua como reloj y ordena `intent` en pasos numerados.
+Solo esa secuencia modifica `DuelCombat`; el invitado no predice dano ni
+movimiento. Ticks, desplazamiento, ataque y rendicion cruzan el mismo camino,
+por lo que ambos extremos reproducen el mismo resultado. El silencio de un peer
+libera al otro del Coliseo y lo devuelve a su posicion anterior.
+
+El resultado local no paga apuestas por si solo. El contrato Soroban de
+`contracts/duel-arena` recibe revelaciones y declaraciones de ganador, resuelve
+consenso y liquida la apuesta por separado. Para esa etapa falta desplegar el
+contrato y conectar un firmante externo; la interfaz actual nunca almacena una
+clave secreta. Ver `docs/wallet.md`.
 
 ## Arte y colisiones
 

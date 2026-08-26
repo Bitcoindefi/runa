@@ -198,3 +198,22 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Revision visual real: duelo con espada y escudo contra un stickman rival inspeccionado en 80x24; ambos cuerpos y el terreno conservan filas estables.
 - Verificado: 98/98 pruebas (708 aserciones), render 80x24 y filas de ancho exacto.
 - TODO: conectar desafio/aceptacion P2P, transportar inputs ordenados, finalizar por desconexion y publicar el resultado acordado en Soroban.
+
+## Duelo P2P conectado e interfaz de wallet
+
+- `E` sobre un jugador cercano envia un desafio; Enter acepta y `N` rechaza.
+- El peer con id menor ordena movimientos, ataques, rendicion y ticks; el rival
+  reproduce pasos numerados sin prediccion local.
+- Los mensajes son dirigidos, saneados, acotados y protegidos contra replay; la
+  desconexion libera el Coliseo con un resultado consistente.
+- `V` abre `WALLET Y PVP`; permite vincular y persistir una direccion publica
+  Stellar validada, o desvincularla con `X`.
+- `WalletSession` rechaza seeds secretas y separa la identidad publica del
+  firmante externo. La pantalla no llama "conectada" a una cuenta que no puede
+  firmar.
+- Revision visual real en 80x24: pantalla completa, ficha y log estables; el
+  pie expone el acceso desde la ciudad.
+- Verificado: 103/103 pruebas (745 aserciones), incluida una simulacion completa
+  de dos partidas, y lint limpio tras corregir reglas de estilo.
+- TODO: desplegar el contrato, configurar su id y sumar el companion
+  Wallets Kit/WalletConnect o SEP-7 que firme y envie el XDR.

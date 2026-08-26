@@ -107,6 +107,11 @@ El escudo solo aparece junto al personaje cuando está equipado y reduce en `2` 
 | Nombre           | escribir, `Enter`, `Esc`     | Editar, confirmar o volver          |
 | Ciudad y pradera | `WASD` / flechas             | Moverse                             |
 | Mundo            | `E` / `Enter` / `Espacio`    | Hablar o interactuar                |
+| Jugador cercano  | `E`                          | Enviar un desafío PvP               |
+| Invitación PvP   | `Enter` / `N`                | Aceptar o rechazar                  |
+| Coliseo PvP      | `WASD`, `F`, `R`             | Moverse, atacar o rendirse          |
+| Ciudad           | `V`                          | Abrir Wallet y PvP                  |
+| Wallet           | `A` / `Enter`, `X`, `Esc`    | Vincular, desvincular o volver      |
 | Pradera          | `T`                          | Volver a la ciudad fuera de combate |
 | Combate          | `F` / `Espacio` / `Enter`    | Resolver un intercambio             |
 | Tienda           | flechas, `Enter`, `X`, `Esc` | Elegir, equipar, quitar o salir     |
@@ -115,6 +120,12 @@ El escudo solo aparece junto al personaje cuando está equipado y reduce en `2` 
 | Juego            | `Q` / `Ctrl+C`               | Salir                               |
 
 La terminal mínima es de **64x16**. Para apreciar el mapa y la ficha lateral se recomienda **120x34** o más.
+
+La pantalla de wallet acepta únicamente una dirección pública Stellar `G...` y
+la guarda con la ranura. No acepta ni almacena seeds secretas `S...`. Vincular
+una dirección identifica al jugador, pero las apuestas on-chain seguirán
+marcadas como pendientes hasta configurar el contrato desplegado y un firmante
+externo. Consulta [docs/wallet.md](docs/wallet.md).
 
 ## Ejecutar desde el repositorio
 

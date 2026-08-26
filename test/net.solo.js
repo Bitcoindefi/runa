@@ -153,7 +153,8 @@ bo.beat()
 ok(bo.others('city').length === 1 && bo.others('city')[0].name === 'ana', 'bo ve a ana')
 ok(ana.others('city').length === 1 && ana.others('city')[0].name === 'bo', 'ana ve a bo')
 ok(
-  JSON.stringify(ana.others('city')[0]) === JSON.stringify({ x: 9, y: 2, glyph: 'B', name: 'bo' }),
+  JSON.stringify(ana.others('city')[0]) ===
+    JSON.stringify({ id: bo.id, x: 9, y: 2, glyph: 'B', name: 'bo' }),
   'con la posicion y el glifo que bo dijo tener'
 )
 
