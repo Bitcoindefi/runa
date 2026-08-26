@@ -3,8 +3,8 @@ extern crate std;
 
 use crate::{DuelArena, DuelArenaClient};
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, testutils::Address as _, testutils::Ledger as _, Address, BytesN, Env, MuxedAddress, String,
-    Symbol,
+    contract, contractimpl, symbol_short, testutils::Address as _, testutils::Ledger as _, Address,
+    BytesN, Env, MuxedAddress, String, Symbol,
 };
 use stellar_tokens::fungible::{Base, FungibleToken};
 
@@ -20,7 +20,9 @@ impl MockToken {
             String::from_str(env, "Stake"),
             String::from_str(env, "STK"),
         );
-        env.storage().instance().set(&symbol_short!("ADMIN"), &admin);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("ADMIN"), &admin);
     }
 
     pub fn faucet(env: &Env, to: Address, amount: i128) {
@@ -40,7 +42,9 @@ impl FungibleToken for MockToken {
 }
 
 fn sha(env: &Env, s: &str) -> BytesN<32> {
-    env.crypto().sha256(&String::from_str(env, s).to_bytes()).to_bytes()
+    env.crypto()
+        .sha256(&String::from_str(env, s).to_bytes())
+        .to_bytes()
 }
 
 fn setup() -> (
@@ -57,10 +61,7 @@ fn setup() -> (
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
 
-    let token_id = env.register(
-        MockToken,
-        (admin.clone(),),
-    );
+    let token_id = env.register(MockToken, (admin.clone(),));
     let token = soroban_sdk::token::Client::new(&env, &token_id);
     let token_admin_client = MockTokenClient::new(&env, &token_id);
     token_admin_client.faucet(&alice, &10_000);
@@ -82,7 +83,11 @@ fn happy_path_commit_reveal_settle() {
     let h_b = script_hash(&env, "script B");
 
     arena.create_duel(
-        &1, &alice, &bob, &500, &h_a,
+        &1,
+        &alice,
+        &bob,
+        &500,
+        &h_a,
         &String::from_str(&env, "engine-1"),
         &sha(&env, "content-v1"),
     );
@@ -111,8 +116,13 @@ fn happy_path_commit_reveal_settle() {
 fn rival_never_reveals_refunds_both() {
     let (env, _admin, alice, bob, arena, token) = setup();
     arena.create_duel(
-        &2, &alice, &bob, &300, &script_hash(&env, "A"),
-        &String::from_str(&env, "engine-1"), &sha(&env, "c"),
+        &2,
+        &alice,
+        &bob,
+        &300,
+        &script_hash(&env, "A"),
+        &String::from_str(&env, "engine-1"),
+        &sha(&env, "c"),
     );
     arena.accept_duel(&2, &script_hash(&env, "B"), &bob);
     arena.reveal_challenger(&2, &String::from_str(&env, "A"));
@@ -128,8 +138,13 @@ fn rival_never_reveals_refunds_both() {
 fn reveal_with_wrong_plaintext_is_rejected() {
     let (env, _admin, alice, bob, arena, _t) = setup();
     arena.create_duel(
-        &3, &alice, &bob, &100, &script_hash(&env, "real script"),
-        &String::from_str(&env, "e"), &sha(&env, "c"),
+        &3,
+        &alice,
+        &bob,
+        &100,
+        &script_hash(&env, "real script"),
+        &String::from_str(&env, "e"),
+        &sha(&env, "c"),
     );
     arena.accept_duel(&3, &script_hash(&env, "B"), &bob);
 
@@ -143,8 +158,13 @@ fn reveal_with_wrong_plaintext_is_rejected() {
 fn double_settle_is_impossible() {
     let (env, _admin, alice, bob, arena, token) = setup();
     arena.create_duel(
-        &4, &alice, &bob, &200, &script_hash(&env, "A"),
-        &String::from_str(&env, "e"), &sha(&env, "c"),
+        &4,
+        &alice,
+        &bob,
+        &200,
+        &script_hash(&env, "A"),
+        &String::from_str(&env, "e"),
+        &sha(&env, "c"),
     );
     arena.accept_duel(&4, &script_hash(&env, "B"), &bob);
     arena.reveal_challenger(&4, &String::from_str(&env, "A"));
@@ -163,15 +183,20 @@ fn double_settle_is_impossible() {
 fn contested_window_requires_consensus() {
     let (env, _admin, alice, bob, arena, token) = setup();
     arena.create_duel(
-        &5, &alice, &bob, &150, &script_hash(&env, "A"),
-        &String::from_str(&env, "e"), &sha(&env, "c"),
+        &5,
+        &alice,
+        &bob,
+        &150,
+        &script_hash(&env, "A"),
+        &String::from_str(&env, "e"),
+        &sha(&env, "c"),
     );
     arena.accept_duel(&5, &script_hash(&env, "B"), &bob);
     arena.reveal_challenger(&5, &String::from_str(&env, "A"));
     arena.reveal_opponent(&5, &String::from_str(&env, "B"));
 
-    arena.publish_result(&5, &alice);   // challenger claims the pot
-    arena.publish_result(&5, &bob);     // opponent disputes
+    arena.publish_result(&5, &alice); // challenger claims the pot
+    arena.publish_result(&5, &bob); // opponent disputes
 
     env.ledger().with_mut(|l| l.timestamp += 10 * 60 + 1);
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| arena.settle(&5)));
