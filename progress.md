@@ -171,3 +171,15 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Detalla el flujo pendiente del duelo: conservar retorno, asignar lados, usar `duelSpawns`, bloquear `Q`, aislar PvP del jefe y regresar al finalizar.
 - Advierte que `/root/runa-bd` quedo corrupto; la fuente canonica es este repositorio de Windows y el nuevo remoto transferido `Bitcoindefi/runa`.
 - Recuperados 13,7 GB al vaciar solamente la cache regenerable de npm; no se borraron fuentes ni dependencias instaladas.
+
+## Segunda formacion del jefe mundial
+
+- Las fases ahora cambian el cuerpo completo: coraza agrietada desde 66 % y nucleo `***` expuesto desde 30 %.
+- Todos los ataques y todas las fases conservan exactamente el lienzo 43x13 para no romper el render diferencial.
+- Cada ataque fija el objetivo al comenzar; esquivar durante la preparacion funciona y el poder ya no corrige su trayectoria al lanzarse.
+- Las trayectorias futuras se dibujan con marcas sin dano antes de convertirse en ondas, barridos, punos o runas reales.
+- Las fases avanzadas conservan los ataques anteriores y agregan los nuevos, en vez de reemplazar todo el repertorio.
+- Al cruzar 66 % o 30 % se emite el anuncio de fase correspondiente.
+- Revision visual real: fase `furia` y preparacion de `colapso` inspeccionadas en una consola 120x32; las advertencias quedan sobre el terreno y no pisan cara, brazos ni nucleo.
+- Verificado: 73/73 pruebas (546 aserciones), lint limpio y filas estables.
+- TODO: cuando se integre `contrato-jefe`, sincronizar `phase` y `revision` sin replicar cuadros ni advertencias transitorias.

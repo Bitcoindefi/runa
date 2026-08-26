@@ -51,8 +51,10 @@ Si el jugador se aleja del altar, el Coloso deja de lanzar ataques y limpia los 
 ## Lectura del combate
 
 - `Piedra dormida` enseña tres ataques: ambos puños cercanos y una onda lenta de largo alcance.
-- `Runa fracturada`, desde 66 % de vida, pierde defensa y agrega un barrido de alcance medio.
-- `Núcleo expuesto`, desde 30 %, pega más fuerte y prepara un colapso muy visible de tres turnos.
+- `Runa fracturada`, desde 66 % de vida, abre grietas visibles en cara, coraza, cintura y piernas; conserva los ataques aprendidos y agrega un barrido de alcance medio.
+- `Núcleo expuesto`, desde 30 %, sustituye la runa del pecho por un núcleo `***`, pega más fuerte y agrega un colapso muy visible de tres turnos.
+- Cada ataque fija la posición objetivo cuando empieza su animación. Los signos `!` y líneas `=` del suelo son advertencias sin daño: si el héroe sale de ahí antes del lanzamiento, el poder no vuelve a apuntarle mágicamente.
+- Al cruzar un umbral se anuncia la nueva fase y el cuerpo cambia inmediatamente, sin alterar el lienzo estable de 43 × 13.
 - Los ataques avanzan con turnos de entrada, no con redibujados temporizados. Esto conserva la solución usada para evitar que el movimiento rompa las líneas de la consola.
 - El jefe permanece anclado. Su tamaño es visual; su punto lógico está en el centro de los pies.
 

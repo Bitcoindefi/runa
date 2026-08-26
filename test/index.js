@@ -1163,6 +1163,80 @@ test('the world boss animates powers with real field damage', (t) => {
     'every moving pose keeps one stable terminal footprint'
   )
 
+  const phaseFrames = WORLD_BOSS.fieldSprite.phaseFrames
+  t.ok(
+    Object.values(phaseFrames).every((family) =>
+      Object.values(family).every(
+        (frame) =>
+          frame.length === WORLD_BOSS.fieldSprite.height &&
+          frame.every((line) => line.length === WORLD_BOSS.fieldSprite.width)
+      )
+    ),
+    'damage skins keep the same footprint in every pose and phase'
+  )
+  t.not(
+    phaseFrames.despertar.idle.join('\n'),
+    phaseFrames.fractura.idle.join('\n'),
+    'the fractured phase visibly cracks the body'
+  )
+  t.ok(phaseFrames.furia.idle.join('\n').includes('***'), 'the final phase exposes a visible core')
+
+  const aimed = new WorldBossEvent({ width: 120, height: 36 })
+  const dodger = { x: aimed.x - 20, y: aimed.y + 3, hp: 20 }
+  aimed.activate(0)
+  aimed.nextAttackAt = 0
+  const warning = aimed.tick(dodger, 1)
+  const locked = { ...aimed.action.target }
+  t.is(warning[0].type, 'boss-telegraph')
+  t.ok(aimed.snapshot().telegraphs.length > 0, 'the locked trajectory is visible before release')
+  t.is(dodger.hp, 20, 'warning cells never deal damage')
+
+  dodger.y -= 8
+  for (let time = 2; time < 30 && aimed.action; time++) aimed.tick(dodger, time)
+  t.ok(aimed.hazards.length > 0, 'the warning eventually becomes a real power')
+  t.is(aimed.hazards[0].y, locked.y, 'moving after the warning does not retarget the cast')
+  t.is(aimed.snapshot().telegraphs.length, 0, 'the warning clears when the power launches')
+
+  const warningPane = style.stripAnsi(
+    render.fieldPane(
+      {
+        rows: Array(36).fill(' '.repeat(120)),
+        width: 120,
+        height: 36,
+        player: { ...dodger, sprite: render.heroSprite() },
+        foes: [],
+        boss: {
+          ...aimed.snapshot(),
+          hp: 100,
+          phase: 'furia',
+          frame: 'idle',
+          telegraphs: aimed.telegraph({ id: 'colapso', reach: 10 }, locked)
+        }
+      },
+      90,
+      25
+    )
+  )
+  t.ok(warningPane.includes('/___/|.[*].[*].|\\___\\'), 'warnings never overwrite the face')
+  t.ok(warningPane.includes('<***>'), 'warnings never overwrite the exposed core')
+
+  const phased = new WorldBossEvent({ width: 120, height: 36 })
+  const close = { x: phased.x - 12, y: phased.y, hp: 20 }
+  phased.hp = 110
+  const changed = phased.strike(close, { damage: 10, reach: 3 }, 0)
+  t.ok(changed.some((event) => event.type === 'boss-phase' && event.phase === 'furia'))
+
+  const repertoire = new WorldBossEvent({ width: 120, height: 36 })
+  repertoire.hp = 100
+  const attacks = new Set()
+  for (let turn = 0; turn < 5; turn++) {
+    repertoire.startAttack(close, turn, [])
+    attacks.add(repertoire.action.attack.id)
+    repertoire.action = null
+  }
+  t.ok(attacks.has('punio_izquierdo'), 'the final phase preserves learned attacks')
+  t.ok(attacks.has('colapso'), 'the final phase also adds its new attack')
+
   const field = new Field({ seed: 17, width: 120, height: 36 })
   field.player.x = field.boss.x - 23
   field.player.y = field.boss.y
