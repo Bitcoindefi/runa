@@ -2139,6 +2139,8 @@ test('the world boss animates powers with real field damage', (t) => {
   game.field.player.y = incoming.y
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
+})
+
 test('every character in all maps is defined in the TILES table', (t) => {
   for (const [id, map] of Object.entries(MAPS)) {
     const missing = new Set()
@@ -2251,4 +2253,3 @@ test('city gardens are open and accessible from spawn', (t) => {
   t.ok(seen.has('251,6'), 'garden 2 top-left interior is reachable')
   t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
 })
-
