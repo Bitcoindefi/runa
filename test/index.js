@@ -773,15 +773,24 @@ test('inventory equips five slots and the home chest deposits persistent items',
   t.ok(screen.includes('[I INVENTARIO]'), 'the city footer announces the inventory key')
   press(game, 'i')
   screen = style.stripAnsi(game.view())
-  t.ok(screen.includes('INVENTARIO'))
+  t.ok(screen.includes('EQUIPO Y MOCHILA'))
   t.ok(screen.includes('[I / ESC CERRAR]'), 'the inventory shows how to close it')
-  t.ok(screen.includes('ENTER equipar'), 'the inventory shows how to equip selected gear')
-  t.ok(screen.includes('X quitar'), 'the inventory shows how to remove equipped gear')
-  t.ok(screen.includes('izq / espada'))
-  t.ok(screen.includes('der 0 escudo'))
-  t.ok(screen.includes('pecho { cuero liviano'))
-  t.ok(screen.includes('casco ( capucha de cuero'))
-  t.ok(screen.includes('botas ^ botas'))
+  t.ok(screen.includes('EQUIPO ACTIVO'), 'the five equipped slots have their own panel')
+  t.ok(screen.includes('[MANO IZQUIERDA]   / espada'))
+  t.ok(screen.includes('[MANO DERECHA]     0 escudo'))
+  t.ok(screen.includes('[PECHO]            { cuero liviano'))
+  t.ok(screen.includes('[CASCO]            ( capucha de cuero'))
+  t.ok(screen.includes('[BOTAS]            ^ botas'))
+  t.ok(screen.includes('ATAQUE 5   DEFENSA 4'), 'the loadout displays its combined combat stats')
+  t.ok(screen.includes('MOCHILA'), 'owned items are presented as a separate backpack')
+  t.ok(screen.includes('[E] / espada'), 'equipped backpack entries are visibly marked')
+  t.ok(screen.includes('DETALLE'), 'the selected item has a dedicated detail panel')
+  t.ok(screen.includes('ataque +4'), 'item bonuses are visible before equipping')
+  press(game, 'x')
+  t.is(game.player.equipped.left_hand, null, 'x unequips the selected backpack item')
+  t.ok(style.stripAnsi(game.view()).includes('[MANO IZQUIERDA]   -'))
+  press(game, 'enter')
+  t.is(game.player.equipped.left_hand, 'sword', 'enter equips the selected backpack item again')
   for (const [width, height] of [
     [64, 16],
     [80, 24]
@@ -970,7 +979,7 @@ test('city art remains rectangular and walkable', (t) => {
   t.ok(cityText.includes('[== jarra ==]'), 'the tavern has its own half-timbered sign')
   t.ok(cityText.includes('fragua (())'), 'the smithy exposes a working forge bay')
   t.ok(cityText.includes('[]__[]__[]'), 'the armoury has a crenellated silhouette')
-  t.ok(city.npcs.length >= 13, 'the rebuilt capital has residents for its new civic spaces')
+  t.ok(city.npcs.length >= 17, 'the rebuilt capital has residents beyond its service counters')
   t.ok(
     city.npcs.some((npc) => npc.role.includes('pregonero')),
     'the avenue has a royal herald'
@@ -979,6 +988,19 @@ test('city art remains rectangular and walkable', (t) => {
     city.npcs.some((npc) => npc.role.includes('cartografo')),
     'the field routes have a cartographer'
   )
+  for (const role of ['herbolaria', 'farolero', 'escriba', 'aprendiz']) {
+    t.ok(
+      city.npcs.some((npc) => npc.role.includes(role)),
+      `${role} gives a secondary district its own resident`
+    )
+  }
+  const npcAnchors = new Set()
+  for (const npc of city.npcs) {
+    t.is(tileAt(city, npc.x, npc.y).solid, false, `${npc.name} stands on walkable city ground`)
+    const anchor = `${npc.x},${npc.y}`
+    t.is(npcAnchors.has(anchor), false, `${npc.name} has a unique city anchor`)
+    npcAnchors.add(anchor)
+  }
   t.ok(cityText.includes('jardines del alba'), 'the western garden names its district')
   t.ok(cityText.includes('jardines de la corona'), 'the eastern garden names its district')
   const civicBuildings = RUNA_BUILDINGS.filter((building) => building.id !== 'castle')

@@ -641,3 +641,30 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Capturas de RUNA, centro de NOX, palacio y forja regeneradas e inspeccionadas.
 - Resultado final: 140/140 pruebas, 1264/1264 aserciones, smoke y lint limpios.
 - TODO: ninguno para la limpieza de fondos urbanos.
+
+## Inventario y equipo legibles
+
+- La pantalla abierta con `I` separa ahora el equipo activo de la mochila.
+- Las cinco ranuras aparecen en vertical con nombre completo: mano izquierda,
+  mano derecha, pecho, casco y botas; cada una indica `EQUIPADO` o `VACIO`.
+- Un resumen calcula ataque, defensa y alcance del conjunto actualmente activo.
+- La mochila marca las piezas equipadas con `[E]` y el panel de detalle muestra
+  ranura, ataque, defensa, alcance, velocidad y descripción del objeto elegido.
+- Se verificó desde la propia pantalla que `X` quite la pieza seleccionada y que
+  `Enter` vuelva a equiparla sin perderla de la mochila.
+- Captura real `docs/screens/inventario.png` regenerada e inspeccionada.
+- Resultado final: 140/140 pruebas, 1271/1271 aserciones y lint limpio.
+- TODO: ninguno para esta revisión visual del inventario.
+
+## Barrios secundarios habitados en RUNA
+
+- Cuatro habitantes ambientales reparten vida cotidiana fuera de tiendas y
+  misiones: Ines, herbolaria; Tadeo, farolero; Olmo, escriba; y Sira, aprendiz.
+- Sus posiciones cubren ambos jardines, el eje entre consejo y archivo y el
+  barrio de oficios sin agrandar edificios ni bloquear puertas.
+- Cada oficio enlaza mediante dialogo los espacios civiles con servicios ya
+  existentes, haciendo legible la funcion de cada barrio al conversar con `E`.
+- La regresion exige los cuatro oficios, anclas unicas y suelo transitable para
+  todos los habitantes de la capital.
+- Resultado final: 140/140 pruebas, 1309/1309 aserciones y smoke de mapas limpio.
+- TODO: ninguno para esta primera ampliacion de habitantes ambientales.

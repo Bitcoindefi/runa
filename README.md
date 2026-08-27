@@ -78,7 +78,7 @@ sin equipo       espada          espada + escudo
 
 RUNA usa una cámara desplazable sobre una capital de `320x200`, pero sus edificios civiles tienen ahora una escala media de calle: entre `31x21` y `45x24` celdas. El castillo conserva la silueta dominante sin cubrir el distrito completo. La avenida de la corona une castillo, mercado del alba, plaza de los héroes y gran portón; calles transversales y callejones conectan iglesia, hogar, taberna, alquimia y barrio de oficios.
 
-Cada fachada mantiene identidad propia sin parecer una fortaleza: campanario y rosetón para la iglesia, entramado y jarra colgante para la taberna, fragua abierta para la herrería y bastidores defensivos para la armería. El suelo caminable se renderiza limpio y solo conserva una textura dispersa —aproximadamente `5%` de las celdas— para que edificios, monumentos y NPC no compitan contra un fondo de puntuación continua. Los jardines del alba y de la corona, el pregonero, la panadera y el cartógrafo hacen que RUNA funcione como capital habitada. La investigación y sus decisiones están documentadas en [docs/runa-design.md](docs/runa-design.md).
+Cada fachada mantiene identidad propia sin parecer una fortaleza: campanario y rosetón para la iglesia, entramado y jarra colgante para la taberna, fragua abierta para la herrería y bastidores defensivos para la armería. El suelo caminable se renderiza limpio y solo conserva una textura dispersa —aproximadamente `5%` de las celdas— para que edificios, monumentos y NPC no compitan contra un fondo de puntuación continua. Los jardines del alba y de la corona, el pregonero, la panadera, el cartógrafo, la herbolaria, el farolero, el escriba y la aprendiz hacen que RUNA funcione como capital habitada. La investigación y sus decisiones están documentadas en [docs/runa-design.md](docs/runa-design.md).
 
 ![Ciudad e iglesia](docs/screens/ciudad.png)
 
@@ -143,7 +143,7 @@ En una tienda:
 
 El escudo solo aparece junto al personaje cuando está equipado y reduce en `2` el daño de cada golpe, con un daño mínimo de `1`.
 
-El botón `[I INVENTARIO]` permanece visible en ciudad, pradera, dungeon y world boss. La tecla `I` abre la mochila para equipar o quitar objetos; dentro, `Enter` equipa el arma o armadura seleccionada y `X` la quita. Al interactuar con `C`, el hogar abre un cofre personal: izquierda/derecha cambia entre mochila y depósito, y `Enter` deposita o retira. Depositar una pieza equipada la quita de su ranura de forma segura; el objeto y el contenido del cofre persisten en el autoguardado.
+El botón `[I INVENTARIO]` permanece visible en ciudad, pradera, dungeon y world boss. La tecla `I` abre una pantalla separada de equipo y mochila: muestra las cinco ranuras activas, ataque, defensa y alcance combinados, marca cada pieza equipada y detalla los atributos del objeto seleccionado. `Enter` equipa el arma o armadura seleccionada y `X` la quita. Al interactuar con `C`, el hogar abre un cofre personal: izquierda/derecha cambia entre mochila y depósito, y `Enter` deposita o retira. Depositar una pieza equipada la quita de su ranura de forma segura; el objeto y el contenido del cofre persisten en el autoguardado.
 
 La daga y el cuero liviano cuestan `15` de oro cada uno, así que una partida nueva puede probar inmediatamente arma y pecho con sus `30` de oro iniciales. Las piezas posteriores intercambian alcance, daño, defensa y velocidad; no son mejoras lineales.
 
@@ -223,8 +223,8 @@ npx bare test/map.smoke.js
 
 Estado revisado de esta versión:
 
-- `139/139` pruebas correctas.
-- `1264/1264` aserciones correctas.
+- `140/140` pruebas correctas.
+- `1309/1309` aserciones correctas.
 - Formato y lint limpios.
 - RUNA, NOX, fronteras, puertas, portón, pradera y dungeon validados por el smoke test.
 - Capturas inspeccionadas y recortadas al borde exacto de la terminal.

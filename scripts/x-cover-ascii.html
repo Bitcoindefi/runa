@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RUNA 0.2.0 — portada ASCII</title>
+    <style>
+      :root {
+        --ink: #d8dee9;
+        --dim: #657184;
+        --cyan: #56d4dd;
+        --gold: #f2c94c;
+        --violet: #c678dd;
+        --lava: #ff6b35;
+        --panel: #10151e;
+        --void: #070a0f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1600px;
+        height: 900px;
+        margin: 0;
+        overflow: hidden;
+        background: var(--void);
+        color: var(--ink);
+        font-family: Consolas, 'Cascadia Mono', 'Lucida Console', monospace;
+      }
+
+      body {
+        position: relative;
+        padding: 44px 52px 34px;
+        background:
+          linear-gradient(rgba(86, 212, 221, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(86, 212, 221, 0.025) 1px, transparent 1px),
+          radial-gradient(circle at 72% 26%, rgba(255, 107, 53, 0.09), transparent 30%), var(--void);
+        background-size:
+          6px 6px,
+          6px 6px,
+          auto,
+          auto;
+      }
+
+      body::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.16;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0,
+          transparent 3px,
+          rgba(0, 0, 0, 0.38) 4px
+        );
+        z-index: 20;
+      }
+
+      header {
+        height: 218px;
+        display: grid;
+        grid-template-columns: 235px 1fr 350px;
+        align-items: center;
+        border-top: 1px solid var(--cyan);
+        border-bottom: 1px solid #303947;
+        position: relative;
+      }
+
+      .release {
+        align-self: start;
+        margin-top: 28px;
+        color: var(--cyan);
+        font-size: 18px;
+        line-height: 1.55;
+        letter-spacing: 0.08em;
+      }
+
+      .release b {
+        color: var(--gold);
+        font-weight: 400;
+      }
+
+      .logo {
+        margin: 0;
+        color: var(--ink);
+        font-size: 24px;
+        line-height: 0.92;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-shadow: 0 0 12px rgba(216, 222, 233, 0.18);
+        white-space: pre;
+      }
+
+      .edition {
+        justify-self: end;
+        text-align: right;
+      }
+
+      .edition strong {
+        display: block;
+        color: var(--gold);
+        font-size: 26px;
+        font-weight: 400;
+        letter-spacing: 0.12em;
+      }
+
+      .edition span {
+        display: block;
+        margin-top: 12px;
+        color: var(--dim);
+        font-size: 15px;
+        letter-spacing: 0.08em;
+      }
+
+      main {
+        height: 518px;
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: 935px 1fr;
+        gap: 26px;
+      }
+
+      .panel {
+        position: relative;
+        overflow: hidden;
+        background: var(--panel);
+        border: 1px solid #354050;
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.025) inset,
+          0 16px 42px rgba(0, 0, 0, 0.34);
+      }
+
+      .hero-panel {
+        border-color: rgba(86, 212, 221, 0.68);
+      }
+
+      .hero-panel img {
+        width: 1200px;
+        height: auto;
+        position: absolute;
+        left: -112px;
+        top: -42px;
+      }
+
+      .panel-label {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 3;
+        padding: 9px 13px 8px;
+        color: #070a0f;
+        background: var(--gold);
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      .hero-panel .panel-label {
+        background: var(--cyan);
+      }
+
+      .hero-note {
+        position: absolute;
+        left: 22px;
+        bottom: 21px;
+        z-index: 3;
+        padding: 9px 12px;
+        border-left: 2px solid var(--cyan);
+        background: rgba(7, 10, 15, 0.9);
+        color: #baf8fb;
+        font-size: 16px;
+        letter-spacing: 0.06em;
+      }
+
+      .stack {
+        display: grid;
+        grid-template-rows: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .crop img {
+        position: absolute;
+        width: 1200px;
+        height: auto;
+        max-width: none;
+      }
+
+      .boss img {
+        width: 1040px;
+        left: -252px;
+        top: -82px;
+      }
+
+      .nox img {
+        left: -350px;
+        top: -53px;
+      }
+
+      .dungeon img {
+        width: 1014px;
+        left: -295px;
+        top: -76px;
+      }
+
+      .nox {
+        border-color: rgba(198, 120, 221, 0.56);
+      }
+
+      .nox .panel-label {
+        background: var(--violet);
+      }
+
+      .dungeon {
+        border-color: rgba(242, 201, 76, 0.5);
+      }
+
+      .boss {
+        border-color: rgba(255, 107, 53, 0.68);
+      }
+
+      .boss .panel-label {
+        background: var(--lava);
+      }
+
+      footer {
+        height: 40px;
+        margin-top: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid #303947;
+        color: var(--dim);
+        font-size: 15px;
+        letter-spacing: 0.06em;
+      }
+
+      footer .features {
+        color: var(--ink);
+      }
+
+      footer .features span {
+        color: var(--cyan);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="release">// NUEVA_VERSION<br /><b>BUILD 0.2.0</b><br />ASCII RPG</div>
+      <pre class="logo">
+ ____  _   _ _   _    _
+|  _ \| | | | \ | |  / \
+| |_) | | | |  \| | / _ \
+|  _ &lt;| |_| | |\  |/ ___ \
+|_| \_\\___/|_| \_/_/   \_\</pre
+      >
+      <div class="edition">
+        <strong>EQUIPO E INVENTARIO</strong>
+        <span>LA INTERFAZ REAL. DIBUJADA EN TERMINAL.</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel hero-panel">
+        <div class="panel-label">[ INVENTARIO // EQUIPO ACTIVO + 5 RANURAS ]</div>
+        <img src="../docs/screens/inventario.png" alt="Inventario ASCII real de RUNA" />
+        <div class="hero-note">ENTER EQUIPAR // X QUITAR // ATAQUE + DEFENSA + ALCANCE</div>
+      </section>
+
+      <section class="stack">
+        <div class="panel crop boss">
+          <div class="panel-label">[ WORLD BOSS // COLOSO RUNICO ]</div>
+          <img src="../docs/screens/world-boss.png" alt="World Boss ASCII real de RUNA" />
+        </div>
+        <div class="panel crop nox">
+          <div class="panel-label">[ NOX // REINO ELFICO OSCURO ]</div>
+          <img src="../docs/screens/nox.png" alt="NOX en ASCII" />
+        </div>
+        <div class="panel crop dungeon">
+          <div class="panel-label">[ CRIPTA // 3 NIVELES ]</div>
+          <img src="../docs/screens/dungeon.png" alt="Cripta ASCII" />
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="features">
+        <span>&gt;</span> DOS REINOS / PRADERA 260x72 / CAMPAMENTOS / RANKINGS / MISIONES
+      </div>
+      <div>github.com/Bitcoindefi/runa</div>
+    </footer>
+  </body>
+</html>
