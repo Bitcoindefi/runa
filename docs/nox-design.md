@@ -19,23 +19,32 @@ jugable.
 
 ## Traducción al mapa
 
-- El **Palacio del Eclipse** domina el norte con una silueta vertical, cuatro
-  torres, arcos apuntados, una corte interior y un trono lunar explorable.
-- La **Corte del Eclipse** es el núcleo cívico. Su estanque creciente, obelisco
-  y avenida norte-sur conectan palacio, plaza y barrio de los linajes.
-- El **Jardín Luminiscente** ocupa el oeste central. Tiene hongos, dos estanques
-  con puentes transitables y una animación de tres fases.
-- El **Mercado Velado** llena el este central con seis puestos bajo galerías,
-  evitando el gran vacío de grava del plano anterior.
-- Alquimia micelial, santuario lunar, forja umbría, armería de obsidiana y casa
-  del linaje conservan los servicios de juego, ahora como distritos del reino.
+- NOX se reconstruye desde cero sobre una grilla exterior de `320x200`, la misma
+  escala y modalidad de la capital de RUNA. No hay recintos gigantes que hagan
+  parecer que el jugador camina dentro de una fachada.
+- El **Palacio del Eclipse** de `96x42` domina el norte como el castillo del reino
+  original, pero usa cubierta de obsidiana, cuatro torres, lunas y galerías.
+- Una avenida vertical y tres calles transversales dividen manzanas de escala
+  normal. El paseo de la luna, el mercado nocturno y la plaza del eclipse forman
+  un eje cívico continuo.
+- Los **jardines de esporas y amatista** ocupan las esquinas septentrionales con
+  estanques, puentes y hongos animados en tres fases.
+- Santuario, casa del linaje, posada, alquimia, forja y armería son fachadas
+  exteriores de `31x21` a `45x24`, orientadas a las calles como los edificios de
+  RUNA. Cada una conserva una silueta y decoración oscura propia.
+- Consejo del velo, archivo de sombras, puestos nocturnos, obelisco y portón sur
+  completan el tejido urbano sin convertir cada punto de interés en una tienda.
+- El pavimento lógico usa una celda caminable invisible y solo muestra cerca de
+  `5%` de textura dispersa. Las calles siguen marcadas con puntos, pero desaparece
+  la alfombra continua de `;` que interfería con fachadas, arte y habitantes.
 - Seis habitantes explican el lugar desde dentro: centinela, micólogo,
   mercader, sacerdotisa, forjador y armera.
 
 ## Navegación
 
-Dos avenidas principales, una galería transversal y caminos de tres celdas
-conectan la frontera `R`, los cinco servicios y todos los distritos públicos.
-Los jardines tienen cuatro aperturas y los estanques incorporan puentes reales.
-Las pruebas recorren el mapa desde la plaza y exigen que cada puerta, el patio
-del palacio, el jardín y el mercado permanezcan alcanzables.
+El mapa de `320x200` usa la misma jerarquía que RUNA: avenida central de seis
+celdas, calles transversales en `Y:58`, `Y:118` y `Y:178`, y callejones que
+conectan las manzanas. La frontera occidental `R`, las seis puertas de servicio,
+el acceso al palacio, los jardines y el mercado son alcanzables desde el punto
+de nacimiento. Las pruebas comparan explícitamente las dimensiones de ambas
+capitales y recorren todos esos destinos.

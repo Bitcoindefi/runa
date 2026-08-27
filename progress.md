@@ -531,3 +531,113 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
   animación. Verificado con 134/134 pruebas, 1166/1166 aserciones, lint y smoke
   test de mapas limpios.
 - TODO: ninguno para esta primera reconstrucción del reino.
+
+## Capital compacta de RUNA y camino real
+
+- Investigación previa documentada en `docs/runa-design.md`: plazas de mercado,
+  ejes procesionales, recintos fortificados, caminos hundidos, parcelas y lindes
+  tomados de fuentes de Historic England, English Heritage y UNESCO.
+- La ciudad mantiene su grilla `320x200` y las coordenadas de cada puerta, pero
+  los edificios civiles bajaron a `31x21`–`45x24`; el castillo ahora ocupa
+  `96x42` y sigue dominando la avenida sin cubrir todo el distrito.
+- RUNA incorpora paseo de la corona, mercado del alba, consejo, archivo y dos
+  jardines identificables. Pregonero, panadera y cartógrafo elevan la población
+  a trece NPC con oficios y diálogos ligados a cada barrio.
+- La pradera se organiza con un camino real entre ambos reinos, ramales a la
+  cripta y al portal, parcelas cercadas, surcos, claros y yermo pedregoso.
+- Eira, guardabosques del camino real, aparece en un puesto propio, bloquea su
+  celda como cualquier NPC y explica las cuatro rutas al interactuar con `E`.
+- Capturas de ciudad y campo regeneradas desde el renderer real. Verificado con
+  135/135 pruebas y 1180/1180 aserciones.
+- Correccion final: los umbrales cierran sobre mamposteria real; el smoke test
+  ya no encuentra celdas `nowhere` inmediatamente detras de las puertas.
+- TODO: seguir poblando los barrios secundarios sin ampliar las fachadas.
+
+## Escala monumental y fachadas de NOX
+
+- El mapa de NOX pasa de `180x100` a `240x120` para ampliar edificios sin
+  solaparlos ni sacrificar calles, mercado o jardín.
+- Palacio del Eclipse `128x43`; alquimia, santuario, forja, casa y armería entre
+  `48x30` y `64x30`, con agujas, contrafuertes, arcos y relieves por oficio.
+- Puertas, NPC, animación bioluminiscente, spawn y caminos fueron reubicados en
+  el nuevo plano manteniendo todos los servicios conectados.
+- Captura real revisada en el santuario oriental y revisión textual del palacio:
+  las fachadas ocupan la escala prevista y el jugador permanece fuera del muro.
+- Resultado: 135/135 pruebas, 1193/1193 aserciones, smoke y lint limpios.
+- TODO: ninguno para la corrección de escala de NOX.
+
+## Pradera ampliada y asentamientos bárbaros
+
+- Pradera ampliada a `260x72` con tres empalizadas separadas y zonas de
+  exclusión para los monstruos errantes.
+- Cada `J` abre un mapa interior `108x46` con tiendas, casa del caudillo,
+  almacenes, corral, forja, fogata y tres clases de bárbaros.
+- Salir antes de limpiar conserva el asentamiento. Limpiarlo y cruzar `U`
+  acredita `45`, `70` o `100` de oro, elimina la fachada y persiste el resultado.
+- Diseño contrastado con Old Oswestry, High Knowes, Maiden Castle y Bratton Camp;
+  fuentes y traducción documentadas en `docs/barbarian-settlements.md`.
+- Capturas reales revisadas: la empalizada exterior muestra su puerta `J` y el
+  interior enseña casa del caudillo, tiendas, fogata, almacenes y patrullas.
+- Resultado final: 139/139 pruebas, 1243/1243 aserciones, smoke y lint limpios.
+- TODO: ninguno para los asentamientos bárbaros.
+
+## Fondo de pradera menos invasivo
+
+- La densidad de símbolos del terreno bajó aproximadamente del `38%` al `19%`,
+  conservando diferencias regionales sin tapar edificios, monstruos ni portales.
+- La hierba secundaria usa verde tenue y las piedras gris; el amarillo queda
+  reservado principalmente para los caminos y mantiene clara la navegación.
+- El interior de los asentamientos también usa una textura de suelo espaciada,
+  por lo que tiendas, fogata, patrullas y salidas dominan visualmente la escena.
+- Se añadió una prueba de densidad para evitar que futuras iteraciones vuelvan a
+  saturar el fondo y se regeneraron las tres capturas de la pradera.
+- Resultado final: 139/139 pruebas, 1245/1245 aserciones, smoke y lint limpios.
+- TODO: ninguno para esta mejora de legibilidad.
+
+## Fachadas monumentales de NOX
+
+- Alquimia y santuario pasan a `52x38`; forja, casa del linaje y armería crecen
+  a `72x31`–`76x31`, sin solaparse con avenidas ni distritos públicos.
+- Las superficies antes vacías ahora contienen motivos completos por oficio:
+  portal lunar, laboratorio micelial, hojas y braseros, galería de linajes y
+  caparazones de obsidiana.
+- Las fachadas orientadas al norte dibujan el motivo principal junto a la
+  entrada para que aparezca realmente en la cámara al acercarse desde la calle.
+- El Palacio del Eclipse reemplaza el relleno uniforme por cuatro torres largas,
+  dos niveles de ventanales, portal central y galerías laterales.
+- Se regeneraron e inspeccionaron capturas del santuario, palacio y barrio de
+  oficios. Las pruebas exigen ahora escala y al menos 900 marcas arquitectónicas
+  dentro de cada fachada.
+- Resultado final: 139/139 pruebas, 1255/1255 aserciones, smoke y lint limpios.
+- TODO: ninguno para este rediseño de NOX.
+
+## Reconstrucción total de NOX con la modalidad urbana de RUNA
+
+- El plano anterior de `240x120` y sus recintos gigantes dejó de ser el mapa
+  activo y se eliminó su generador legado de `lib/map.js`.
+- El nuevo `lib/nox.js` construye desde cero una capital exterior de `320x200`,
+  igualando a RUNA en escala, avenida central, tres calles transversales,
+  callejones, manzanas, jardines, plaza, mercado y edificios a pie de calle.
+- Palacio `96x42` y seis servicios de `31x21` a `45x24`: santuario, hogar,
+  posada, alquimia, forja y armería. Todos conservan arte y función propios.
+- Spawn, frontera `R`, NPC, animación de hongos y rutas fueron reubicados en la
+  nueva grilla. Las siete puertas quedan conectadas desde la plaza.
+- Se sustituyeron las pruebas de gigantismo por comprobaciones de equivalencia
+  urbana con RUNA, escala exterior, tres avenidas completas y accesibilidad.
+- Capturas del centro cívico, palacio y forja regeneradas e inspeccionadas.
+- Resultado final: 139/139 pruebas, 1258/1258 aserciones, smoke y lint limpios.
+- TODO: ninguno para la reconstrucción del mapa de NOX.
+
+## Fondos urbanos menos invasivos
+
+- RUNA y NOX incorporan una celda de suelo caminable que el renderer representa
+  vacía; las colisiones conservan terreno real sin llenar la pantalla de signos.
+- El adoquín, la hierba y las flores quedan como textura irregular dispersa. La
+  densidad visible final es `5.7%` en RUNA y `5.0%` en NOX.
+- Patios, jardines, plazas y márgenes de edificios usan el mismo criterio; las
+  avenidas continúan dibujadas con puntos para sostener la navegación.
+- Se añadió una prueba que exige más de la mitad del fondo silencioso, menos de
+  `12%` de textura y confirma que las celdas visualmente vacías son caminables.
+- Capturas de RUNA, centro de NOX, palacio y forja regeneradas e inspeccionadas.
+- Resultado final: 140/140 pruebas, 1264/1264 aserciones, smoke y lint limpios.
+- TODO: ninguno para la limpieza de fondos urbanos.

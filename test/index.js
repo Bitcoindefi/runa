@@ -13,7 +13,15 @@ const {
   LEGACY_DEFAULT_SCRIPT,
   isLegacyDefaultScript
 } = require('../lib/game.js')
-const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES, tileAt } = require('../lib/map.js')
+const {
+  MAPS,
+  TILES,
+  RUNA_BUILDINGS,
+  NOX_BUILDINGS,
+  NPC_MASTER_SPRITES,
+  NPC_SPRITES,
+  tileAt
+} = require('../lib/map.js')
 const {
   Field,
   RUNA_GATE_ART,
@@ -23,10 +31,16 @@ const {
   DUNGEON_CLEARANCE,
   WORLD_BOSS_PORTAL_ART,
   WORLD_BOSS_PORTAL_CLEARANCE,
-  WORLD_BOSS_PORTAL_CADENCE
+  WORLD_BOSS_PORTAL_CADENCE,
+  BARBARIAN_SETTLEMENTS,
+  BARBARIAN_SETTLEMENT_CLEARANCE,
+  barbarianSettlementArt,
+  FIELD_GUIDES,
+  fieldGroundAt
 } = require('../lib/field.js')
 const { Dungeon, DUNGEON, FLOOR_ROSTERS, floorRows } = require('../lib/dungeon.js')
 const { BossZone, BOSS_ZONE } = require('../lib/boss-zone.js')
+const { BarbarianCamp, BARBARIAN_CAMP } = require('../lib/barbarian-camp.js')
 const CONTENT = require('../lib/content.js')
 const { Player, reward, xpToLeave, SAVE_VERSION, EQUIPMENT_SLOTS } = require('../lib/shop.js')
 const { SaveStore } = require('../lib/saves.js')
@@ -333,17 +347,47 @@ test('the two enemy kingdoms are joined by visible two-way frontier gates', (t) 
 test('NOX is a connected dark-elf capital with distinct living districts', (t) => {
   const nox = MAPS.nox
   const art = nox.rows.join('\n')
+  t.is(nox.width, MAPS.city.width, 'NOX uses the same scrolling city width as RUNA')
+  t.is(nox.height, MAPS.city.height, 'NOX uses the same scrolling city depth as RUNA')
+  t.is(
+    NOX_BUILDINGS.length,
+    RUNA_BUILDINGS.length,
+    'both capitals have the same exterior-building urban grammar'
+  )
+  const palace = NOX_BUILDINGS.find((building) => building.id === 'palace')
+  t.ok(
+    palace.w >= 90 && palace.w <= 110 && palace.h >= 40,
+    'the eclipse palace dominates without becoming an interior-sized map'
+  )
+  for (const building of NOX_BUILDINGS.filter((candidate) => candidate.id !== 'palace')) {
+    t.ok(building.w >= 31 && building.w <= 45, `${building.name} occupies a normal city block`)
+    t.ok(building.h >= 21 && building.h <= 24, `${building.name} reads as an exterior facade`)
+    const facade = nox.rows
+      .slice(Math.max(0, building.y - 5), Math.min(nox.height, building.y + building.h + 2))
+      .map((row) => row.slice(Math.max(0, building.x - 2), building.x + building.w + 2))
+      .join('')
+    const architecturalMarks = facade
+      .split('')
+      .filter((glyph) => ![' ', '%', ',', '*', '.', ';'].includes(glyph)).length
+    t.ok(architecturalMarks >= 250, `${building.name} keeps detailed street-facing ASCII art`)
+  }
   for (const label of [
     'palacio del eclipse',
-    'corte de sombras',
-    'jardin luminiscente',
-    'mercado velado',
-    'santuario lunar',
-    'casa del linaje'
+    'jardin de esporas',
+    'jardin de amatista',
+    'mercado nocturno',
+    'plaza del eclipse',
+    'santuario de la luna',
+    'posada del velo'
   ]) {
     t.ok(art.includes(label), `${label} gives NOX a readable district`)
   }
-  t.ok((art.match(/\^/g) || []).length >= 20, 'pointed spires establish a vertical skyline')
+  for (const streetY of [58, 118, 178]) {
+    t.ok(
+      (nox.rows[streetY].match(/\./g) || []).length >= 280,
+      `street ${streetY} crosses the capital like RUNA's transverse avenues`
+    )
+  }
   t.ok((art.match(/~/g) || []).length >= 20, 'luminous pools break up the volcanic stone')
   t.ok(nox.npcs.length >= 6, 'the kingdom is inhabited instead of being an empty service map')
   t.ok(
@@ -366,16 +410,29 @@ test('NOX is a connected dark-elf capital with distinct living districts', (t) =
     reached.add(key_)
     queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1])
   }
-  for (const glyph of ['C', 'I', 'P', 'A', 'D', 'R']) {
+  for (const glyph of ['C', 'I', 'P', 'A', 'D', 'T', 'R']) {
     const point = locateGlyph(nox, glyph)
     t.ok(point && reached.has(`${point.x},${point.y}`), `${glyph} is reachable from the plaza`)
   }
   for (const point of [
-    { x: 90, y: 31, name: 'palace court' },
-    { x: 32, y: 44, name: 'luminous garden bridge' },
-    { x: 130, y: 50, name: 'veiled market' }
+    { x: 160, y: 58, name: 'palace approach' },
+    { x: 37, y: 26, name: 'spore-garden bridge' },
+    { x: 184, y: 130, name: 'night market' }
   ]) {
     t.ok(reached.has(`${point.x},${point.y}`), `${point.name} belongs to the public route`)
+  }
+})
+
+test('capital ground stays quiet behind buildings and actors', (t) => {
+  const visibleTerrain = new Set([';', ',', '%', '*', '"'])
+  for (const map of [MAPS.city, MAPS.nox]) {
+    const cells = map.rows.join('')
+    const quietCells = cells.split('').filter((glyph) => glyph === '`').length
+    const visibleCells = cells.split('').filter((glyph) => visibleTerrain.has(glyph)).length
+    t.ok(quietCells / cells.length > 0.5, `${map.id} keeps most background cells visually empty`)
+    t.ok(visibleCells / cells.length < 0.12, `${map.id} uses only a sparse terrain texture`)
+    const quiet = locateGlyph(map, '`')
+    t.ok(quiet && !tileAt(map, quiet.x, quiet.y).solid, `${map.id} quiet ground remains walkable`)
   }
 })
 
@@ -903,7 +960,7 @@ test('city art remains rectangular and walkable', (t) => {
   t.ok(cityText.includes('armaduras'))
   t.ok(cityText.includes('castillo'), 'the northern district has a castle')
   t.ok(cityText.includes('porton'), 'the meadow exit has a visible gatehouse')
-  t.ok(!cityText.includes('mercado'), 'the market has been completely removed from the city')
+  t.ok(cityText.includes('mercado del alba'), 'a compact market gives the civic centre a purpose')
   t.ok(cityText.includes('yunque'), 'the smithy has its own detailed facade')
   t.ok(cityText.includes('elixires'), 'the alchemist facade keeps unique bottlework')
   t.ok(
@@ -913,7 +970,27 @@ test('city art remains rectangular and walkable', (t) => {
   t.ok(cityText.includes('[== jarra ==]'), 'the tavern has its own half-timbered sign')
   t.ok(cityText.includes('fragua (())'), 'the smithy exposes a working forge bay')
   t.ok(cityText.includes('[]__[]__[]'), 'the armoury has a crenellated silhouette')
-  t.is(city.npcs.length, 10, 'the city has ten static residents')
+  t.ok(city.npcs.length >= 13, 'the rebuilt capital has residents for its new civic spaces')
+  t.ok(
+    city.npcs.some((npc) => npc.role.includes('pregonero')),
+    'the avenue has a royal herald'
+  )
+  t.ok(
+    city.npcs.some((npc) => npc.role.includes('cartografo')),
+    'the field routes have a cartographer'
+  )
+  t.ok(cityText.includes('jardines del alba'), 'the western garden names its district')
+  t.ok(cityText.includes('jardines de la corona'), 'the eastern garden names its district')
+  const civicBuildings = RUNA_BUILDINGS.filter((building) => building.id !== 'castle')
+  t.ok(
+    civicBuildings.every((building) => building.w <= 45 && building.h <= 24),
+    'ordinary city buildings use a medium footprint instead of monumental blocks'
+  )
+  const castle = RUNA_BUILDINGS.find((building) => building.id === 'castle')
+  t.ok(
+    castle.w <= 100 && castle.h <= 42,
+    'the castle remains dominant without filling the district'
+  )
   t.ok(NPC_MASTER_SPRITES.guard.length >= 20, 'the faithful high-resolution knight is preserved')
   t.ok(
     NPC_MASTER_SPRITES.guard.some((line) => line.includes('hjw')),
@@ -1441,6 +1518,10 @@ test('moving actors restore every terrain cell they leave behind', (t) => {
 test('field combat starts only when actor hitboxes touch', (t) => {
   const field = new Field({ seed: 17 })
   const foe = field.foes[0]
+  for (const other of field.foes.slice(1)) {
+    other.dead = true
+    other.respawnAt = Infinity
+  }
   foe.nextStep = Infinity
   field.player.x = foe.x > 3 ? foe.x - 3 : foe.x + 3
   field.player.y = foe.y
@@ -2062,10 +2143,227 @@ test('city gardens are open and accessible from spawn', (t) => {
   t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
 })
 
+test('the meadow is organized by roads, fields, groves and a talking guide', (t) => {
+  const field = new Field({ seed: 27 })
+  const guide = FIELD_GUIDES[0]
+  t.ok(guide && guide.role.includes('guardabosques'), 'the road has an identifiable guide')
+
+  const road = []
+  for (let x = 2; x < field.width - 2; x++) road.push(fieldGroundAt(field, x, field.gate.y))
+  t.ok(
+    road.filter((glyph) => glyph === ':' || glyph === '%').length > 90,
+    'the royal road visibly links most of the two borders'
+  )
+  t.ok(
+    [8, 17, 33, 41].every((y) => fieldGroundAt(field, 40, y) === '"'),
+    'hedged field boundaries divide the western meadow'
+  )
+
+  let paintedGround = 0
+  for (let y = 0; y < field.height; y++) {
+    for (let x = 0; x < field.width; x++) {
+      if (fieldGroundAt(field, x, y) !== ' ') paintedGround++
+    }
+  }
+  const terrainDensity = paintedGround / (field.width * field.height)
+  t.ok(terrainDensity < 0.23, 'quiet terrain leaves landmarks and actors readable')
+  t.ok(terrainDensity > 0.1, 'the meadow still has visible regional texture')
+
+  field.player.x = 66
+  field.player.y = field.gate.y
+  const crossroads = field.render(48, 14, false).join('\n')
+  t.ok(crossroads.includes('runa <---+---> nox'), 'the crossroads labels both kingdoms')
+  t.ok(crossroads.includes('portal|cripta'), 'the branch sign labels both expeditions')
+
+  field.player.x = guide.x
+  field.player.y = guide.y + 2
+  const conversation = field.interact()
+  t.ok(conversation[0].text.includes('al norte esta el portal'))
+
+  field.player.x = guide.x - 1
+  field.player.y = guide.y
+  const blocked = field.walk(1, 0)
+  t.is(field.player.x, guide.x - 1, 'the hero cannot occupy the guide anchor')
+  t.ok(
+    blocked.some((event) => event.type === 'field-guide'),
+    'walking into Eira invites dialogue'
+  )
+})
+
+test('the larger meadow contains three removable barbarian settlements', (t) => {
+  const field = new Field({ seed: 27 })
+  t.is(field.width, 260)
+  t.is(field.height, 72)
+  t.is(field.settlements.length, 3, 'three settlements occupy different meadow sectors')
+  t.alike(
+    field.settlements.map((settlement) => settlement.id),
+    BARBARIAN_SETTLEMENTS.map((settlement) => settlement.id)
+  )
+
+  const first = field.settlements[0]
+  field.player.x = first.x - 2
+  field.player.y = first.y
+  const landmark = field.render(60, 18, false).join('\n')
+  t.ok(landmark.includes(first.name), 'the palisade names its clan')
+  t.ok(landmark.includes('J'), 'the settlement has a visible interactive entrance')
+  t.ok(barbarianSettlementArt(first.name).length >= 9, 'the entrance is a full facade')
+  t.ok(
+    field.foes.every(
+      (foe) =>
+        Math.max(Math.abs(foe.x - first.x), Math.abs(foe.y - first.y)) >=
+        BARBARIAN_SETTLEMENT_CLEARANCE
+    ),
+    'roaming monsters do not spawn inside the palisade'
+  )
+
+  const art = barbarianSettlementArt(first.name)
+  const entryRow = art.findIndex((row) => row.includes('J'))
+  const entryCol = art[entryRow].indexOf('J')
+  const left = first.x - entryCol
+  const top = first.y - entryRow
+  const firstWall = art[0].indexOf('/')
+  field.player.x = left + firstWall - 1
+  field.player.y = top
+  const wall = field.walk(1, 0)
+  t.ok(wall.some((event) => event.type === 'barbarian-wall'))
+  t.is(field.player.x, left + firstWall - 1, 'the palisade is collision, not only decoration')
+
+  field.player.x = first.x - 1
+  field.player.y = first.y
+  const events = field.walk(1, 0)
+  t.ok(events.some((event) => event.type === 'barbarian-enter' && event.campId === first.id))
+  t.ok(field.clearSettlement(first.id), 'a conquered settlement can be removed from the meadow')
+  t.absent(field.settlementAt(first.x, first.y), 'its entrance disappears after conquest')
+})
+
+test('a barbarian settlement is a traversable no-respawn mini dungeon', (t) => {
+  const camp = new BarbarianCamp({ campId: 'colmillo-rojo', seed: 31 })
+  t.is(camp.mode, 'barbarian-camp')
+  t.is(camp.width, BARBARIAN_CAMP.width)
+  t.is(camp.height, BARBARIAN_CAMP.height)
+  t.is(camp.remaining, 5)
+  t.ok(camp.layout.rows.some((row) => row.includes('casa del caudillo')))
+  t.ok(
+    camp.layout.rows.some((row) => row.includes('U')),
+    'the camp has a visible exit'
+  )
+
+  const seen = new Set()
+  const queue = [[camp.layout.spawn.x, camp.layout.spawn.y]]
+  while (queue.length) {
+    const [x, y] = queue.shift()
+    const key_ = `${x},${y}`
+    if (seen.has(key_) || !camp.isWalkable(x, y)) continue
+    seen.add(key_)
+    queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1])
+  }
+  t.ok(seen.has(`${camp.layout.exit.x},${camp.layout.exit.y}`), 'the exit is reachable')
+  for (const foe of camp.foes) {
+    t.ok(seen.has(`${foe.x},${foe.y}`), `${foe.kind} stands in the traversable camp`)
+  }
+
+  const target = camp.foes[camp.foes.length - 1]
+  for (const foe of camp.foes.slice(0, -1)) {
+    foe.dead = true
+    camp.state.defeated.push(String(foe.id))
+  }
+  const fightEvents = []
+  camp.startFight(target, 1, fightEvents)
+  camp.combat.world.over = 'ganaste'
+  camp.endFight(fightEvents)
+  t.is(camp.remaining, 0)
+  t.ok(camp.state.completed, 'defeating the last barbarian marks the camp complete')
+  t.ok(fightEvents.some((event) => event.type === 'win' && event.kind === target.kind))
+
+  camp.player.x = camp.layout.exit.x
+  camp.player.y = camp.layout.exit.y - 1
+  const exitEvents = camp.walk(0, 1)
+  t.ok(
+    exitEvents.some(
+      (event) => event.type === 'barbarian-exit' && event.cleared && event.reward === 45
+    ),
+    'the bonus is offered only through the exit after the full clear'
+  )
+  const reopened = new BarbarianCamp({
+    campId: camp.camp.id,
+    seed: 31,
+    state: camp.toJSON()
+  })
+  t.is(reopened.remaining, 0, 'defeated barbarians never respawn in the mini dungeon')
+})
+
+test('leaving a cleared camp pays gold and permanently removes its meadow entrance', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game, 'Freya')
+  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
+  const settlement = game.field.settlements[0]
+  game.field.player.x = settlement.x - 1
+  game.field.player.y = settlement.y
+  game.move(1, 0)
+  t.is(game.field.mode, 'barbarian-camp', 'walking into J opens the interior map')
+
+  for (const foe of game.field.foes) foe.dead = true
+  game.field.state.defeated = game.field.foes.map((foe) => String(foe.id))
+  game.field.state.completed = true
+  const before = game.player.gold
+  game.field.player.x = game.field.layout.exit.x
+  game.field.player.y = game.field.layout.exit.y - 1
+  game.move(0, 1)
+
+  t.is(game.field.mode, 'field')
+  t.is(game.player.gold, before + settlement.reward, 'the clear bonus enters persistent gold')
+  t.absent(
+    game.field.settlements.find((candidate) => candidate.id === settlement.id),
+    'the palisade disappears when the hero returns to the meadow'
+  )
+  const saved = game.saveState()
+  t.ok(saved.barbarianState.cleared.includes(settlement.id), 'the removed camp enters save data')
+  const restored = new Field({
+    seed: game.fieldSeed(),
+    clearedSettlements: saved.barbarianState.cleared
+  })
+  t.absent(restored.settlementAt(settlement.x, settlement.y), 'loading cannot resurrect it')
+})
+
+test('a cleared barbarian settlement stays gone after loading its save slot', (t) => {
+  const dir = path.join(
+    os.tmpdir(),
+    `runa-barbarian-save-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+  )
+  const saves = new SaveStore(dir)
+  try {
+    const game = new Runa({ presence: false, saves })
+    startGame(game, 'Brynja')
+    game.field = new Field({ player: game.player, seed: game.fieldSeed() })
+    const settlement = game.field.settlements[1]
+    game.field.player.x = settlement.x - 1
+    game.field.player.y = settlement.y
+    game.move(1, 0)
+    for (const foe of game.field.foes) foe.dead = true
+    game.field.state.defeated = game.field.foes.map((foe) => String(foe.id))
+    game.field.state.completed = true
+    game.field.player.x = game.field.layout.exit.x
+    game.field.player.y = game.field.layout.exit.y - 1
+    game.move(0, 1)
+    t.ok(game.saveCurrent())
+
+    const loaded = new Runa({ presence: false, saves })
+    t.ok(loaded.loadSlot(1))
+    t.is(loaded.field.mode, 'field')
+    t.ok(loaded.barbarianState.cleared.includes(settlement.id))
+    t.absent(
+      loaded.field.settlements.find((candidate) => candidate.id === settlement.id),
+      'the loaded meadow keeps the conquered space empty'
+    )
+  } finally {
+    removeSaveFixture(dir)
+  }
+})
+
 test('the expanded meadow exposes a visible entrance to the crypt', (t) => {
   const field = new Field({ seed: 27 })
-  t.ok(field.width >= 160, 'the meadow is substantially wider than before')
-  t.ok(field.height >= 48, 'the meadow gained room in both axes')
+  t.ok(field.width >= 260, 'the meadow is substantially wider than before')
+  t.ok(field.height >= 72, 'the meadow gained room in both axes')
   t.ok(
     field.noxGate.x - field.dungeonEntrance.x > KINGDOM_GATE_CLEARANCE.x + 10,
     'the crypt is in the southern interior, not beside NOX'

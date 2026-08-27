@@ -11,7 +11,7 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 ## Novedades de la versión 0.2.0
 
 - El mundo ahora une los reinos rivales de RUNA y NOX mediante portones completos en los extremos de la pradera; el reino natal se elige al crear el personaje.
-- NOX fue reconstruido como una capital élfica oscura explorable, con Palacio del Eclipse, corte lunar, jardín bioluminiscente animado, Mercado Velado, servicios y habitantes propios.
+- NOX fue reconstruido desde cero como una capital exterior de `320x200`, con la misma modalidad urbana de RUNA: avenidas, manzanas, plaza, jardines y edificios orientados hacia la calle.
 - La nueva cripta tiene tres niveles consecutivos, escaleras ASCII, slimes, cuatro clases de esqueletos y un Rey Esqueleto final.
 - El Coloso Rúnico fue reubicado en un mapa independiente de ruinas volcánicas, lava y puentes, al que se entra por un portal monumental del yermo.
 - El inventario incorpora mano izquierda, mano derecha, pecho, casco y botas. Armas, escudo y armaduras pueden equiparse simultáneamente y guardarse en el cofre del hogar.
@@ -19,6 +19,10 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 - El combate conserva el arma elegida —lanza, arco, ballesta, daga o martillo— y la ficha muestra coordenadas `X/Y` para ubicar cualquier punto del mundo.
 
 ![Capital élfica oscura de NOX](docs/screens/nox.png)
+
+![Palacio del Eclipse](docs/screens/nox-palacio.png)
+
+![Forja y barrio de oficios de NOX](docs/screens/nox-oficios.png)
 
 ![Nivel 2 de la cripta](docs/screens/dungeon.png)
 
@@ -32,7 +36,7 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 - Dos reinos rivales, RUNA y NOX, con elección de origen y portones monumentales en extremos opuestos de la pradera.
 - Salón del trono con rey, mobiliario real y una escalera propia hacia las ruinas.
 - Portón funcional que transporta al jugador a la pradera.
-- Pradera ampliada con una cripta de tres niveles, escalinatas ASCII monumentales y un portal al world boss.
+- Pradera de `260x72` con tres asentamientos bárbaros, una cripta de tres niveles, escalinatas ASCII monumentales y un portal al world boss.
 - Arena volcánica independiente con lava, ruinas y el Coloso Rúnico.
 - NPC con arte y oficios diferenciados.
 - Monstruos que patrullan el mapa sin detener el movimiento del mundo.
@@ -52,7 +56,7 @@ El menú principal separa claramente `Continuar`, `Nueva partida`, `Cargar parti
 
 La creación permite elegir con izquierda/derecha si el personaje nace en RUNA o en el reino enemigo de NOX. Cada origen tiene su propio punto de inicio y templo de reaparición. La frontera oriental de RUNA conecta con la frontera occidental de NOX, y se puede cruzar caminando en ambos sentidos.
 
-NOX es una capital élfica oscura excavada en una caverna volcánica. El Palacio del Eclipse, la corte lunar, un jardín de hongos bioluminiscentes, el Mercado Velado y los barrios de artesanos sustituyen la antigua explanada vacía. Seis habitantes propios explican su cultura y sus servicios; las dos avenidas principales mantienen todas las puertas y distritos conectados. Las decisiones visuales y sus [fuentes de inspiración están documentadas](docs/nox-design.md).
+NOX fue rehecho desde cero como una capital exterior de `320x200`, igualando la modalidad del reino original sin copiar su decoración. Una avenida central, tres calles transversales y callejones laterales conectan el Palacio del Eclipse, el paseo lunar, el mercado nocturno, la plaza del eclipse, dos jardines y seis edificios de servicio. Las fachadas de `31x21` a `45x24` tienen la misma escala urbana legible de RUNA; el palacio de `96x42` domina el norte sin convertirse en un mapa interior. Santuario, hogar, posada, alquimia, forja y armería conservan puertas funcionales y arte oscuro propio. Seis habitantes explican la cultura y servicios del reino. Las decisiones visuales y sus [fuentes de inspiración están documentadas](docs/nox-design.md).
 
 El juego autoguarda después de cada acción y al salir. Conserva nombre, reino natal, nivel, vida, oro, experiencia, pociones, inventario, equipo, depósito del hogar y posición en la ciudad, NOX, el castillo, las ruinas, la pradera, la cripta o la arena volcánica. También conserva el progreso de la mazmorra y la vida del world boss. La ranura activa aparece en el pie de la pantalla como `autoguardado R1`, `R2` o `R3`.
 
@@ -72,7 +76,9 @@ sin equipo       espada          espada + escudo
 
 ## La ciudad
 
-La ciudad usa una cámara desplazable para mantener edificios grandes y detallados sin reducir al jugador. Cada fachada tiene su propio diseño: la iglesia no comparte el arte de la taberna, la herrería o la armería. La plaza de los héroes incorpora una fuente monumental alrededor de la estatua, jardines, bancos y estandartes; sus chorros y ondas se animan con el reloj del mundo sin alterar las colisiones.
+RUNA usa una cámara desplazable sobre una capital de `320x200`, pero sus edificios civiles tienen ahora una escala media de calle: entre `31x21` y `45x24` celdas. El castillo conserva la silueta dominante sin cubrir el distrito completo. La avenida de la corona une castillo, mercado del alba, plaza de los héroes y gran portón; calles transversales y callejones conectan iglesia, hogar, taberna, alquimia y barrio de oficios.
+
+Cada fachada mantiene identidad propia sin parecer una fortaleza: campanario y rosetón para la iglesia, entramado y jarra colgante para la taberna, fragua abierta para la herrería y bastidores defensivos para la armería. El suelo caminable se renderiza limpio y solo conserva una textura dispersa —aproximadamente `5%` de las celdas— para que edificios, monumentos y NPC no compitan contra un fondo de puntuación continua. Los jardines del alba y de la corona, el pregonero, la panadera y el cartógrafo hacen que RUNA funcione como capital habitada. La investigación y sus decisiones están documentadas en [docs/runa-design.md](docs/runa-design.md).
 
 ![Ciudad e iglesia](docs/screens/ciudad.png)
 
@@ -80,13 +86,19 @@ Las puertas se activan al pisarlas. El gran portón del sur conecta con la prade
 
 ## La pradera
 
-La pradera combina caminos, vegetación, agua y zonas de distinta dificultad. Mosquitos, espectros y gólems tienen sprites compactos y se mueven por su cuenta. El borde oeste contiene el portón completo de RUNA, cuyo paso `<` vuelve a la ciudad; en la punta opuesta, contra el borde este, el portón oscuro `N` entra al reino de NOX. Ambos accesos tienen fachada, nombre y una zona despejada de monstruos. Lejos de esa frontera, la entrada `X` abre una cripta de tres niveles en el sur interior y el portal `O` espera en el norte-central del yermo para llevar a las ruinas volcánicas del Coloso Rúnico.
+La pradera ahora mide `260x72` y combina caminos, parcelas, setos, surcos, claros boscosos y zonas de distinta dificultad. Su textura de suelo es deliberadamente tenue y espaciada para que edificios, criaturas y entradas sean fáciles de leer; los caminos conservan el contraste principal. El camino real une los portones de RUNA y NOX y un cruce señalizado abre ramales hacia la cripta y el portal. Eira, guardabosques del camino, explica esas rutas al hablarle con `E`. Mosquitos, espectros y gólems tienen sprites compactos y se mueven por su cuenta sin invadir puestos, monumentos ni campamentos. El borde oeste contiene el portón completo de RUNA, cuyo paso `<` vuelve a la ciudad; en la punta opuesta, contra el borde este, el portón oscuro `N` entra al reino de NOX. Lejos de esa frontera, la entrada `X` abre una cripta de tres niveles y el portal `O` lleva a las ruinas volcánicas del Coloso Rúnico.
+
+Tres empalizadas bárbaras aparecen en sectores separados de la pradera. La puerta `J` abre un mapa interior con casa del caudillo, tiendas, almacenes, corral, forja, fogata y patrullas de saqueadores, lanzadores y un jefe. Se puede abandonar por `U`, pero el asentamiento permanece si quedan enemigos. Al derrotarlos a todos y salir, se cobra un botín adicional de `45`, `70` o `100` monedas y la entrada desaparece permanentemente. La estructura y sus [referencias arqueológicas están documentadas](docs/barbarian-settlements.md).
 
 La ficha muestra siempre la posición actual como `X:n Y:n` junto al mapa o zona. Las coordenadas cambian con cada paso y distinguen RUNA, NOX, castillo, ruinas, coliseo, pradera, yermo, cada nivel del dungeon y el mapa del world boss. Podés usar esa referencia para señalar un lugar concreto al reportar un problema o pedir un cambio.
 
 La arena del world boss es un mapa independiente de ceniza, edificios destruidos y ríos de lava. La lava bloquea el paso: hay que cruzar por los puentes de piedra y conservar espacio para esquivar los poderes del Coloso. El mismo portal `O` permite volver al yermo.
 
 ![Pradera y monstruos](docs/screens/campo.png)
+
+![Interior de un asentamiento bárbaro](docs/screens/barbaros.png)
+
+![Pradera después de eliminar Colmillo Rojo](docs/screens/campo-limpio.png)
 
 Los espacios internos de todos los sprites son transparentes: el pasto y los caminos siguen visibles entre brazos, piernas y equipo.
 
@@ -151,6 +163,7 @@ o `Enter` la cierran y devuelven a la pantalla anterior.
 | Nombre y reino   | escribir, ←/→, `Enter`, `Esc` | Editar, elegir origen o volver       |
 | Ciudad y pradera | `WASD` / flechas              | Moverse                              |
 | Mundo            | `E` / `Enter` / `Espacio`     | Hablar o interactuar                 |
+| Pradera          | `E` cerca de Eira             | Consultar las rutas del camino real  |
 | Jugador cercano  | `E`                           | Enviar un desafío PvP                |
 | Estatua central  | `E`                           | Abrir rankings de nivel y PvP        |
 | Rankings         | izquierda/derecha / `Tab`     | Cambiar clasificación                |
@@ -160,6 +173,7 @@ o `Enter` la cierran y devuelven a la pantalla anterior.
 | Wallet           | `A` / `Enter`, `X`, `Esc`     | Vincular, desvincular o volver       |
 | Pradera          | `T`                           | Volver a la ciudad fuera de combate  |
 | Bordes pradera   | caminar sobre `<` / `N`       | Entrar a RUNA o al reino de NOX      |
+| Asentamientos    | caminar sobre `J` / `U`       | Entrar o salir del campamento        |
 | Combate          | `F` / `Espacio` / `Enter`     | Resolver un intercambio              |
 | Tienda           | flechas, `Enter`, `X`, `Esc`  | Elegir, equipar, quitar o salir      |
 | Inventario       | `I`, flechas, `Enter`, `X`    | Abrir, elegir, equipar o quitar      |
@@ -209,8 +223,8 @@ npx bare test/map.smoke.js
 
 Estado revisado de esta versión:
 
-- `134/134` pruebas correctas.
-- `1166/1166` aserciones correctas.
+- `139/139` pruebas correctas.
+- `1264/1264` aserciones correctas.
 - Formato y lint limpios.
 - RUNA, NOX, fronteras, puertas, portón, pradera y dungeon validados por el smoke test.
 - Capturas inspeccionadas y recortadas al borde exacto de la terminal.

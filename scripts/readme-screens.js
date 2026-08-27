@@ -14,6 +14,7 @@ const { Runa } = require('../lib/game.js')
 const { Field } = require('../lib/field.js')
 const { Dungeon } = require('../lib/dungeon.js')
 const { BossZone } = require('../lib/boss-zone.js')
+const { BarbarianCamp } = require('../lib/barbarian-camp.js')
 
 const WIDTH = 120
 const HEIGHT = 34
@@ -190,14 +191,30 @@ function frames() {
   for (const ch of 'Ayla') name.onKey(type(ch))
 
   const city = equippedGame()
-  const churchY = city.walker.map.rows.findIndex((row) => row.includes('I'))
-  const churchX = city.walker.map.rows[churchY].indexOf('I')
-  city.walker.placeAt('city', churchX, churchY)
+  city.walker.placeAt('city', 160, 102)
 
   const field = equippedGame()
   field.field = new Field({ seed: 17, player: field.player })
-  field.field.player.x = 40
-  field.field.player.y = 12
+  field.field.player.x = 111
+  field.field.player.y = 10
+
+  const clearedField = equippedGame()
+  clearedField.field = new Field({
+    seed: 17,
+    player: clearedField.player,
+    clearedSettlements: ['colmillo-rojo']
+  })
+  clearedField.field.player.x = 111
+  clearedField.field.player.y = 10
+
+  const barbarians = equippedGame()
+  barbarians.field = new BarbarianCamp({
+    campId: 'hachas-negras',
+    seed: 17,
+    player: barbarians.player
+  })
+  barbarians.field.player.x = 54
+  barbarians.field.player.y = 20
 
   const combat = equippedGame()
   combat.field = new Field({ seed: 17, player: combat.player })
@@ -213,7 +230,15 @@ function frames() {
 
   const nox = namedGame('Nyra', 'nox')
   nox.animationTick = 12
-  nox.walker.placeAt('nox', 90, 32)
+  nox.walker.placeAt('nox', 160, 103)
+
+  const noxPalace = namedGame('Nyra', 'nox')
+  noxPalace.animationTick = 12
+  noxPalace.walker.placeAt('nox', 160, 10)
+
+  const noxWorkshops = namedGame('Nyra', 'nox')
+  noxWorkshops.animationTick = 12
+  noxWorkshops.walker.placeAt('nox', 42, 148)
 
   const dungeon = equippedGame('Ayla')
   dungeon.field = new Dungeon({
@@ -243,9 +268,13 @@ function frames() {
     nombre: { title: 'nueva partida', frame: name.view() },
     ciudad: { title: 'ciudad', frame: city.view() },
     campo: { title: 'pradera', frame: field.view() },
+    'campo-limpio': { title: 'pradera conquistada', frame: clearedField.view() },
+    barbaros: { title: 'asentamiento barbaro', frame: barbarians.view() },
     combate: { title: 'combate en el mapa', frame: combat.view() },
     equipo: { title: 'armaduras y equipo', frame: equipment.view() },
     nox: { title: 'reino elfico oscuro de nox', frame: nox.view() },
+    'nox-palacio': { title: 'palacio del eclipse', frame: noxPalace.view() },
+    'nox-oficios': { title: 'barrio de oficios de nox', frame: noxWorkshops.view() },
     dungeon: { title: 'cripta - nivel 2', frame: dungeon.view() },
     'world-boss': { title: 'ruinas volcanicas del coloso', frame: worldBoss.view() },
     inventario: { title: 'inventario y equipo', frame: inventory.view() }
