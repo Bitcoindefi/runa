@@ -60,7 +60,10 @@ fn el_jugador_no_dice_cuanto_dano_hizo() {
     let despues = c.hit(&jugador, &4242u32, &300u32).hp;
     let dano = antes - despues;
 
-    assert!(dano > 0, "una pelea de 300 ticks tiene que hacer algo de dano");
+    assert!(
+        dano > 0,
+        "una pelea de 300 ticks tiene que hacer algo de dano"
+    );
     assert_eq!(
         dano,
         c.contribution(&1u32, &jugador),
@@ -111,7 +114,10 @@ fn el_jefe_muere_y_no_se_le_puede_pegar_mas() {
 
     let s = c.state();
     assert_eq!(s.hp, 0, "la vida no puede quedar negativa");
-    assert_eq!(c.try_hit(&jugador, &9999u32, &100u32), Err(Ok(Error::YaMurio)));
+    assert_eq!(
+        c.try_hit(&jugador, &9999u32, &100u32),
+        Err(Ok(Error::YaMurio))
+    );
 }
 
 #[test]
@@ -164,7 +170,10 @@ fn dos_jugadores_le_pegan_al_mismo_jefe() {
     let tras_a = c.hit(&a, &101u32, &250u32).hp;
     let tras_b = c.hit(&b, &202u32, &250u32).hp;
 
-    assert!(tras_b < tras_a, "el dano de los dos se acumula sobre la misma vida");
+    assert!(
+        tras_b < tras_a,
+        "el dano de los dos se acumula sobre la misma vida"
+    );
     assert!(c.contribution(&1u32, &a) > 0);
     assert!(c.contribution(&1u32, &b) > 0);
     assert_eq!(

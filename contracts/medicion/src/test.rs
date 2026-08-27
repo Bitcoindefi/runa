@@ -44,7 +44,13 @@ fn el_peor_caso_entra_en_el_presupuesto() {
         if t == 0 {
             base = cpu;
         }
-        std::println!("  {:>4}  {:>10}  {:>8}  {:>4}%", t, cpu, mem, (cpu * 100) / CPU_MAX);
+        std::println!(
+            "  {:>4}  {:>10}  {:>8}  {:>4}%",
+            t,
+            cpu,
+            mem,
+            (cpu * 100) / CPU_MAX
+        );
     }
 
     let (cpu, mem, _) = medir(FIGHT_CAP);
@@ -52,12 +58,21 @@ fn el_peor_caso_entra_en_el_presupuesto() {
     std::println!("");
     std::println!("  invocar sin ticks : {}", base);
     std::println!("  cada tick cuesta  : {}", por_tick);
-    std::println!("  pelea de {} ticks: {} cpu ({}%), {} mem ({}%)",
-        FIGHT_CAP, cpu, (cpu * 100) / CPU_MAX, mem, (mem * 100) / MEM_MAX);
+    std::println!(
+        "  pelea de {} ticks: {} cpu ({}%), {} mem ({}%)",
+        FIGHT_CAP,
+        cpu,
+        (cpu * 100) / CPU_MAX,
+        mem,
+        (mem * 100) / MEM_MAX
+    );
     std::println!("  peleas por invocacion: {}", CPU_MAX / cpu.max(1));
 
     assert!(cpu < CPU_MAX, "la pelea no entra en el presupuesto de cpu");
-    assert!(mem < MEM_MAX, "la pelea no entra en el presupuesto de memoria");
+    assert!(
+        mem < MEM_MAX,
+        "la pelea no entra en el presupuesto de memoria"
+    );
 }
 
 #[test]
@@ -67,7 +82,10 @@ fn el_costo_crece_con_los_ticks() {
     let (poco, _, _) = medir(10);
     let (mucho, _, _) = medir(900);
     std::println!("  10 ticks: {}   900 ticks: {}", poco, mucho);
-    assert!(mucho > poco * 2, "el medidor no ve el bucle: la medicion no sirve");
+    assert!(
+        mucho > poco * 2,
+        "el medidor no ve el bucle: la medicion no sirve"
+    );
 }
 
 #[test]
@@ -83,15 +101,29 @@ fn un_duelo_son_dos_peleas_y_tambien_entra() {
     let ganador = c.bench_duel(&12345u32, &999u32, &FIGHT_CAP);
     let cpu = env.cost_estimate().budget().cpu_instruction_cost();
     let mem = env.cost_estimate().budget().memory_bytes_cost();
-    std::println!("  duelo, dos peleas de {} ticks en UNA invocacion:", FIGHT_CAP);
-    std::println!("    cpu     {} ({}% del maximo)", cpu, (cpu * 100) / CPU_MAX);
-    std::println!("    memoria {} ({}% del maximo)", mem, (mem * 100) / MEM_MAX);
+    std::println!(
+        "  duelo, dos peleas de {} ticks en UNA invocacion:",
+        FIGHT_CAP
+    );
+    std::println!(
+        "    cpu     {} ({}% del maximo)",
+        cpu,
+        (cpu * 100) / CPU_MAX
+    );
+    std::println!(
+        "    memoria {} ({}% del maximo)",
+        mem,
+        (mem * 100) / MEM_MAX
+    );
     std::println!("    gano    {}", ganador);
 
     // Y tiene que costar bastante mas que una pelea sola, o no las corrio a las
     // dos y el numero no vale.
     let (una, _, _) = medir(FIGHT_CAP);
-    assert!(cpu > una + (una / 2), "un duelo tiene que costar casi el doble que una pelea");
+    assert!(
+        cpu > una + (una / 2),
+        "un duelo tiene que costar casi el doble que una pelea"
+    );
     assert!(cpu < CPU_MAX, "un duelo entero no entra");
     assert!(mem < MEM_MAX, "un duelo entero no entra en memoria");
 }
