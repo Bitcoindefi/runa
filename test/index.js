@@ -256,7 +256,7 @@ test('the larger city scrolls inside an 80-column console', (t) => {
     MAPS.city.rows.some((row) => row.includes('~~~~~~~~~~~~~~~~~~')),
     'the city keeps its detailed fountain'
   )
-  t.ok(screen.includes('hp 20/20'), 'compact stats remain visible in the title bar')
+  t.ok(screen.includes('ficha'), 'sidebar remains visible instead of dropping to compact stats')
   t.ok(!screen.includes('[#]'), 'a new hero does not display an unequipped shield')
   t.ok(!screen.includes('@'), 'the city no longer represents the hero with an at sign')
 
@@ -1218,6 +1218,21 @@ test('hitbox combat stays on the field and advances on attack input', (t) => {
   )
 })
 
+test('el heroe y los NPCs no colapsan visualmente de cerca', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game, 'tester')
+  const alma = MAPS.city.npcs.find((n) => n.id === 'alma')
+  for (let dx of [1, 2, 3, -1, -2, -3]) {
+    game.walker.placeAt('city', alma.x + dx, alma.y)
+    const screen = style.stripAnsi(game.view())
+    t.ok(screen.includes('/T\\') || screen.includes('\\T-'), 'heroe presente (dx ' + dx + ')')
+    t.ok(screen.includes('.+.'), 'alma top presente (dx ' + dx + ')')
+    t.ok(screen.match(/\(o[\\., ]o\)/), 'alma cara presente (dx ' + dx + ')')
+    t.ok(screen.includes('/[+]\\'), 'alma torso presente (dx ' + dx + ')')
+  }
+  t.end()
+})
+
 test('t returns from the field to the city outside combat', (t) => {
   const game = new Runa({ presence: false })
   startGame(game)
@@ -1242,6 +1257,44 @@ test('t returns from the field to the city outside combat', (t) => {
   t.absent(game.field, 't closes the excursion')
   t.is(game.walker.mapId, 'city')
   t.ok(game.log.includes('volves a la ciudad'))
+})
+
+test('mapScreen renders sidebar (ficha and log) between 64 and 90 columns', (t) => {
+  for (const width of [64, 72, 80, 90, 91, 100]) {
+    const screen = style.stripAnsi(
+      render.mapScreen({
+        width,
+        height: 20,
+        map: { tiles: MAPS.city.rows, hero: { x: 26, y: 130 } },
+        stats: { name: 'Tomas', level: 1, hp: 10, maxhp: 10, gold: 5 },
+        log: ['hermana Alma te cura']
+      })
+    )
+    t.ok(
+      screen.includes('ficha') && screen.includes('log'),
+      `sidebar panels (ficha and log) render at width ${width}`
+    )
+    t.ok(screen.includes('hermana Alma te cura'), `log message is visible at width ${width}`)
+  }
+
+  const explicitNoSidebar = style.stripAnsi(
+    render.mapScreen({
+      width: 80,
+      height: 20,
+      sidebar: false,
+      map: { tiles: MAPS.city.rows, hero: { x: 26, y: 130 } },
+      stats: { name: 'Tomas', level: 1, hp: 10, maxhp: 10, gold: 5 },
+      log: ['hermana Alma te cura']
+    })
+  )
+  t.ok(
+    !explicitNoSidebar.includes('ficha') && !explicitNoSidebar.includes('log'),
+    'explicit sidebar: false drops the sidebar'
+  )
+  t.ok(
+    explicitNoSidebar.includes('hp 10/10'),
+    'explicit sidebar: false shows compact stats in subtitle'
+  )
 })
 
 test('the world boss animates powers with real field damage', (t) => {
@@ -1400,4 +1453,28 @@ test('the world boss animates powers with real field damage', (t) => {
   game.field.player.y = incoming.y
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
+})
+test('city gardens are open and accessible from spawn', (t) => {
+  const city = MAPS.city
+  const seen = new Set()
+  const q = [[city.spawn.x, city.spawn.y]]
+  while (q.length) {
+    const [x, y] = q.pop()
+    const k = x + ',' + y
+    if (seen.has(k)) continue
+    if ((TILES[city.rows[y][x]] || { solid: true }).solid) continue
+    seen.add(k)
+    if (x + 1 < city.width) q.push([x + 1, y])
+    if (x - 1 >= 0) q.push([x - 1, y])
+    if (y + 1 < city.height) q.push([x, y + 1])
+    if (y - 1 >= 0) q.push([x, y - 1])
+  }
+
+  // Check interior points in garden 1 (x: 5, y: 5, w: 65, h: 43)
+  t.ok(seen.has('6,6'), 'garden 1 top-left interior is reachable')
+  t.ok(seen.has('68,46'), 'garden 1 bottom-right interior is reachable')
+
+  // Check interior points in garden 2 (x: 250, y: 5, w: 65, h: 43)
+  t.ok(seen.has('251,6'), 'garden 2 top-left interior is reachable')
+  t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
 })
