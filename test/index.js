@@ -21,6 +21,7 @@ const render = require('../lib/render.js')
 require('./sage.test.js')
 require('./stellar.test.js')
 require('./wallet.test.js')
+require('./duel-chain.test.js')
 require('./duel.test.js')
 require('./net.test.js')
 

@@ -13,9 +13,15 @@ vuelve al mapa. La direccion se valida con `StrKey` y se guarda en la ranura de
 la partida. Una seed secreta `S...` se rechaza y nunca entra al guardado.
 
 `WalletSession` recibe un adaptador por inyeccion con `signTransaction(xdr)`.
-Esto deja preparada la frontera para una wallet real sin acoplar el TUI a una
-extension de navegador. En la version actual no se incluye un adaptador: por
-eso la pantalla dice honestamente **solo identidad**.
+`DuelChain` construye la llamada al contrato, la simula contra Stellar RPC,
+aplica el footprint y la tarifa de recursos, entrega ese XDR al adaptador y
+envia solamente el XDR firmado que recibe de vuelta. La seed secreta nunca pasa
+por el juego ni por el guardado.
+
+El adaptador puede devolver el XDR como texto o como
+`{ signedTxXdr: "..." }`, formato habitual de wallets. En la version actual no
+se incluye un companion concreto: sin uno, la pantalla sigue diciendo
+honestamente **solo identidad**.
 
 Para publicar apuestas falta configurar dos datos externos que no existen en el
 repositorio: el id desplegado de `contracts/duel-arena` y un firmante. En una

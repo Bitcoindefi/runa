@@ -1,6 +1,7 @@
 const { test } = require('brittle')
-const { Chain } = require('../lib/stellar.js')
+const { Chain, TESTNET, assembleInvocation, scVal } = require('../lib/stellar.js')
 const { Field } = require('../lib/field.js')
+const base = require('../vendor/stellar-base.bundle.js')
 
 /**
  * Ni un solo test de aca toca la red.
@@ -36,6 +37,29 @@ test('la cadena esta disponible en este build', (t) => {
   const c = new Chain()
   t.ok(c.available, 'stellar-base cargo dentro de Bare')
   t.is(c.address, null, 'sin cuenta todavia')
+})
+
+test('la simulacion se ensambla en un XDR firmable con recursos y tarifa', (t) => {
+  const source = new Chain({ secret: new Chain().create() }).address
+  const contractId = base.StrKey.encodeContract(Buffer.alloc(32, 7))
+  const raw = new base.TransactionBuilder(new base.Account(source, '10'), {
+    fee: '100',
+    networkPassphrase: TESTNET.passphrase
+  })
+    .addOperation(new base.Contract(contractId).call('settle', scVal(4n, 'u64')))
+    .setTimeout(60)
+    .build()
+  const transactionData = new base.SorobanDataBuilder().build().toXDR('base64')
+  const assembled = assembleInvocation(
+    raw,
+    { transactionData, minResourceFee: '500', results: [{ auth: [] }] },
+    TESTNET.passphrase
+  )
+
+  t.is(assembled.fee, '600', 'la tarifa base incluye la tarifa simulada')
+  t.is(assembled.operations.length, 1)
+  t.is(assembled.operations[0].type, 'invokeHostFunction')
+  t.ok(assembled.toXDR(), 'el envelope final sigue siendo XDR valido')
 })
 
 test('dos jugadores en el mismo dia sacan la misma semilla', async (t) => {

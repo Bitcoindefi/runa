@@ -217,3 +217,18 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
   de dos partidas, y lint limpio tras corregir reglas de estilo.
 - TODO: desplegar el contrato, configurar su id y sumar el companion
   Wallets Kit/WalletConnect o SEP-7 que firme y envie el XDR.
+
+## Puente XDR para duel-arena
+
+- Integrado `origin/main` antes de continuar; se conservaron las correcciones
+  recientes de mapa/render y el contrato de inventario.
+- `Chain.prepareInvocation()` obtiene la secuencia publica, construye la llamada,
+  simula contra Soroban RPC y aplica footprint, autorizaciones y tarifa de recursos.
+- `DuelChain` expone create, accept, reveal y publish-result, delega la firma a
+  `WalletSession` y envia solamente el XDR firmado que devuelve el adaptador.
+- Ninguna seed secreta entra a Runa, al cliente del contrato ni al guardado.
+- Cerrado un vector de terceros en `publish_result`: el ganador declarado ahora
+  debe autorizar la llamada antes de que el contrato acepte el claim.
+- Verificado: 109/109 pruebas (801 aserciones), lint limpio y diff valido.
+- TODO: desplegar `duel-arena`, configurar su contract id y conectar un companion
+  WalletConnect/SEP-7 concreto para completar una transaccion real en testnet.

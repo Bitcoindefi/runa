@@ -211,6 +211,10 @@ impl DuelArena {
         if winner != d.challenger && winner != d.opponent {
             panic_with_error!(env, Error::BadWinner);
         }
+        // A result claim is not an oracle: a player may only claim their own
+        // victory. Without this auth any unrelated account could front-run a
+        // duel, publish a winner and let the false claim settle uncontested.
+        winner.require_auth();
         if let Some(prev) = &d.claim {
             if *prev != winner {
                 d.contested = true;
