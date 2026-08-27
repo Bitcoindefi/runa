@@ -232,3 +232,167 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Verificado: 109/109 pruebas (801 aserciones), lint limpio y diff valido.
 - TODO: desplegar `duel-arena`, configurar su contract id y conectar un companion
   WalletConnect/SEP-7 concreto para completar una transaccion real en testnet.
+
+## Estatua y rankings de heroes
+
+- La estatua decorativa de la plaza se amplio y ahora es un monumento interactivo.
+- `E` junto al pedestal abre una pantalla con rankings por nivel y por PvP.
+- El ranking combina las tres ranuras locales con los perfiles publicos de los
+  jugadores conectados; no transmite direcciones de wallet ni datos secretos.
+- Victorias y derrotas PvP se registran al cerrar el duelo y sobreviven en el
+  guardado version 3; las partidas anteriores migran con ambos contadores en cero.
+- Las pestañas se cambian con izquierda/derecha o Tab y se cierran con E/Escape.
+- Verificado: 113/113 pruebas (829 aserciones), lint limpio y diff valido.
+
+## Interior del castillo y salon del trono
+
+- La entrada principal del castillo abre ahora un mapa interior propio, en vez de
+  bajar directamente a las ruinas.
+- El gran salon incluye alfombra real, tarima, trono, columnas, estandartes,
+  bancos y braseros en arte ASCII nativo.
+- El rey Aldren espera frente al trono y puede ser consultado como los demas NPC.
+- Una escalera lateral conecta con la mazmorra y devuelve al punto exacto del
+  salon; la puerta sur regresa al punto exacto de la ciudad.
+- El retorno del castillo se conserva en guardados y se reinicia al crear una
+  partida nueva.
+- Revision visual: corregido un umbral duplicado en la puerta sur; el trono, el
+  rey, la alfombra y el mobiliario conservan filas estables en 120x34.
+- Aldren usa ahora un sprite real propio de 7x4: corona, emblema y pose sentada
+  con brazos y piernas apoyados en el trono, manteniendo la interaccion con E.
+
+## Primera mision de la plaza
+
+- Sir Cedric, con sprite de caballero, espera a la izquierda de la estatua
+  sin bloquear ninguno de los accesos de la plaza.
+- E acepta la mision `plaga de mosquitos`: eliminar 20 mosquitos en la pradera.
+- Solo una victoria real contra el tipo `mosquito` suma progreso; otros enemigos
+  y bajas anteriores a la aceptacion no cuentan.
+- La ficha muestra el contador o avisa cuando corresponde volver con Cedric.
+- Entregarla concede una sola vez 100 de oro y 100 de experiencia, incluyendo
+  subidas de nivel, y su estado se conserva al guardar y cargar la ranura.
+
+## Plaza central y agua animada
+
+- La plaza de los heroes tiene ahora rotulo propio, estandartes simetricos,
+  jardines, bancos y una fuente monumental integrada a la estatua del ranking.
+- Tres fases alternan crestas, ondas y gotas en la fuente de la plaza; la fuente
+  de la avenida comparte el mismo sistema de movimiento.
+- El agua se compone como una capa visual bajo NPC y heroe. Nunca modifica las
+  filas del mapa, por lo que colisiones, caminos y guardados permanecen estables.
+- El reloj visual avanza incluso con el jugador quieto y cada fase conserva el
+  ancho exacto de todas las filas de la terminal.
+
+## Pradera ampliada y mazmorra de tres niveles
+
+- La pradera dinamica crecio de 120x36 a 160x48 y tiene una cripta de piedra
+  visible en el extremo sudeste, con una zona segura alrededor de su entrada X.
+- La cripta es una excursion de combate real: nivel 1 con slimes y esqueletos;
+  nivel 2 con esqueletos, caballeros y arqueros; nivel 3 con guardia de elite y
+  un unico Rey Esqueleto sentado ante su trono funerario.
+- Cada nivel tiene plano amplio, camaras conectadas, obstaculos, escaleras ^/v y
+  patrullas. La bajada queda sellada hasta derrotar todos los monstruos del piso.
+- Los enemigos derrotados, el piso actual, la posicion y la victoria sobre el
+  Rey Esqueleto sobreviven al autoguardado y a la carga de ranura.
+- Salir por ^ en el nivel 1 devuelve al punto seguro frente a la cripta; T no
+  permite saltarse la progresion desde dentro.
+- Revision visual real: entrada en la pradera, comienzo con slimes, nivel 2 y
+  salon del trono del nivel 3 inspeccionados en renders 100x32.
+- Verificado con pruebas de entrada, bloqueo/desbloqueo, tres pisos, victorias,
+  persistencia y retorno. TODO: ninguno para esta primera version jugable.
+
+## Portal del yermo y arena volcanica del world boss
+
+- El Coloso Runico fue retirado completamente de la pradera abierta.
+- Un portal runico `O` espera en el extremo nordeste del yermo, con espacio
+  seguro para que los monstruos normales no tapen su entrada.
+- Atravesarlo abre un mapa independiente de 128x44: suelo de ceniza, dos rios
+  de lava, tres puentes por rio, edificios derruidos, columnas quebradas y altar.
+- La lava y los muros destruidos tienen colision; los puentes conservan varias
+  rutas comprobadas hasta el cuerpo del jefe para poder esquivar sus poderes.
+- El Coloso conserva sus fases, animaciones, telegraphs, peligros y recompensa.
+  Su vida y estado persisten al salir, reingresar, guardar y cargar.
+- `O` devuelve al punto seguro frente al portal del yermo; `T` no permite
+  saltarse ese regreso desde la arena.
+- Revision visual real: portal exterior, llegada a las ruinas y combate junto al
+  jefe inspeccionados en renders 100x32. Verificado con 122/122 pruebas y
+  934/934 aserciones; lint limpio. TODO: ninguno para esta reubicacion.
+
+## Fachada monumental de la cripta
+
+- La antigua entrada de cinco caracteres fue reemplazada por una fachada de diez
+  filas: techo quebrado, mamposteria, torreones, rotulo CRIPTA, calavera,
+  antorchas, arco profundo, porton X y escalinata de piedra.
+- El arte esta anclado al mismo `X` que activa la entrada; agrandarlo no cambio la
+  transicion ni el punto seguro de regreso desde el nivel 1.
+- La zona despejada alrededor crecio a quince celdas para que ninguna patrulla
+  tape la silueta del edificio.
+- Revision visual real en 100x32: fachada completa, rotulo, calavera, porton y
+  heroe visibles con el caption de la cripta. Las ocho comprobaciones especificas
+  de la entrada pasan y el lint esta limpio.
+- Nota de suite: 123/124 pruebas pasan; la unica falla ajena a este cambio es la
+  cota de malla, cuyo `hand: right` esta comentado como `roto a proposito` en el
+  arbol de trabajo actual. TODO de esta fachada: ninguno.
+
+## Rediseno documentado de los tres niveles de la mazmorra
+
+- Se reemplazo la grilla repetida por tres plantas originales con identidad:
+  cisternas del limo, galerias del osario y necropolis de la corona.
+- El nivel 1 usa cavidades talladas, un deposito inundado, puentes de piedra y
+  una camara de desborde; el nivel 2 combina canteras, cursos de huesos, pilares,
+  sarcofagos y una lampara sepulcral; el nivel 3 tiene nave, rotonda, capillas,
+  doble acceso ceremonial y salon del trono.
+- La inspiracion y su traduccion jugable quedaron documentadas en
+  `docs/dungeon-design.md`: deposito subterraneo de UNESCO, Catacumbas de Paris,
+  necropolis y Rotonda de los Valois de Saint-Denis, y el principio de rutas con
+  bucles de The Alexandrian. Ningun plano historico se copia literalmente.
+- Los monstruos tienen posiciones curadas segun el espacio: slimes cerca del
+  agua, arqueros en galerias largas y elites guardando la ruta al Rey Esqueleto.
+- Una prueba recorre cada planta desde la entrada y exige que destino y todos
+  los encuentros sean accesibles; tambien protege sus motivos y planos unicos.
+- Verificado con 125/125 pruebas y 1002/1002 aserciones correctas.
+
+## Fuente ceremonial de la plaza
+
+- La fuente plana fue reemplazada por un monumento de diecinueve filas: heroe
+  coronado con rostro y emblema, copa superior, segundo plato, cuatro cascadas,
+  gran estanque inferior y basamento rotulado `heroes runa`.
+- El agua ahora recorre cuatro fases de altura en lugar de tres: cae primero de
+  la copa superior, despues del plato intermedio y termina formando crestas en
+  dos filas del estanque. Todas las fases conservan una huella de 66 celdas.
+- El rotulo `plaza de los heroes` se integro al borde noroeste para que la nueva
+  altura del monumento no lo tape; el area de ranking conserva su interaccion.
+- Revision visual real de las cuatro fases en terminal y del plano estatico.
+  Verificado con 125/125 pruebas, 1005/1005 aserciones, lint y smoke test limpios.
+- TODO: ninguno para este rediseno.
+
+## Entrada monumental al world boss
+
+- El marco de 7x6 fue reemplazado por una fachada de 27x13 anclada al mismo
+  nucleo `O`: cartel propio, pilonos gemelos quebrados, runas, camara de energia,
+  basamento de piedra y grietas corruptas sobre el yermo.
+- El portal se reubico unos pasos al sur para mostrar la silueta completa sin
+  recortarla contra el borde norte del mapa.
+- El nucleo pulsa en tres fases cada cinco ticks sin desplazar el punto de
+  entrada ni alterar la persistencia del Coloso.
+- El claro sin patrullas crecio de cinco a quince celdas y ahora cubre todo el
+  monumento; el retorno desde las ruinas cae dentro de esa zona segura.
+- Revision visual real de las tres fases en la pantalla 120x34 del juego.
+  Verificado con 125/125 pruebas, 1011/1011 aserciones, lint y smoke test limpios.
+- TODO: ninguno para esta entrada.
+
+## Reinos rivales y elección de origen
+
+- La creación de personaje permite elegir con izquierda/derecha entre RUNA,
+  reino del alba, y NOX, reino enemigo, sin interferir con la escritura del nombre.
+- El reino natal queda en el autoguardado y en el resumen de la ranura; partidas
+  anteriores sin ese dato conservan RUNA como origen compatible.
+- Un personaje de NOX nace en su plaza y reaparece en su propio templo al morir.
+- NOX es un mapa explorable de 180x100 con ciudadela de obsidiana, plaza, templo,
+  alquimia, forja, armería y refugio, todos conectados por caminos alcanzables.
+- La frontera monumental del este de RUNA usa `N`; la del oeste de NOX usa `R`.
+  Ambas son visibles, transitables y el regreso conserva el lado correcto del paso.
+- El mensaje de bienvenida indica la dirección de la frontera desde cada origen.
+- Revisión visual real en 100x30: selector de reino, nacimiento en NOX y los dos
+  lados de la frontera. Verificado con 127/127 pruebas, 1039/1039 aserciones,
+  lint limpio y smoke test de rutas `TODO OK`.
+- TODO: ninguno para esta primera versión de los reinos rivales.

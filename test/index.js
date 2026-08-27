@@ -3,10 +3,20 @@ const { style } = require('bare-tui')
 const fs = require('bare-fs')
 const os = require('bare-os')
 const path = require('bare-path')
-const { Runa, COMBAT_TURN_TICKS } = require('../lib/game.js')
+const { Runa, COMBAT_TURN_TICKS, QUESTS, REALMS, normalizeRealm } = require('../lib/game.js')
 const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES, tileAt } = require('../lib/map.js')
-const { Field } = require('../lib/field.js')
-const { Player, reward, xpToLeave, SAVE_VERSION } = require('../lib/shop.js')
+const {
+  Field,
+  DUNGEON_ENTRANCE_ART,
+  DUNGEON_CLEARANCE,
+  WORLD_BOSS_PORTAL_ART,
+  WORLD_BOSS_PORTAL_CLEARANCE,
+  WORLD_BOSS_PORTAL_CADENCE
+} = require('../lib/field.js')
+const { Dungeon, DUNGEON, FLOOR_ROSTERS, floorRows } = require('../lib/dungeon.js')
+const { BossZone, BOSS_ZONE } = require('../lib/boss-zone.js')
+const CONTENT = require('../lib/content.js')
+const { Player, reward, xpToLeave, SAVE_VERSION, EQUIPMENT_SLOTS } = require('../lib/shop.js')
 const { SaveStore } = require('../lib/saves.js')
 const { World } = require('../lib/world.js')
 const { WORLD_BOSS } = require('../lib/world-boss.js')
@@ -39,6 +49,14 @@ function startGame(game, name = 'Tomas') {
   press(game, 'enter')
   typeText(game, name)
   press(game, 'enter')
+}
+
+function locateGlyph(map, glyph) {
+  for (let y = 0; y < map.height; y++) {
+    const x = map.rows[y].indexOf(glyph)
+    if (x !== -1) return { x, y }
+  }
+  return null
 }
 
 function keyMessage(name) {
@@ -135,6 +153,75 @@ test('new game asks for a name and puts its initial on the hero', (t) => {
   t.ok(screen.includes('la ciudad'))
   t.ok(screen.includes('wasd o flechas'))
   t.ok(screen.includes('/Q\\'), 'the first letter of the name is painted on the chest')
+})
+
+test('character creation chooses, saves and restores the birth realm', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 88, height: 30 })
+  press(game, 'enter')
+  typeText(game, 'Nyra')
+
+  const creation = style.stripAnsi(game.view())
+  t.ok(creation.includes('REINO DE ORIGEN'))
+  t.ok(creation.includes('RUNA - reino del alba'))
+  t.ok(creation.includes('NOX - reino enemigo'))
+  t.is(game.realmCursor, 0, 'RUNA remains the compatible default')
+
+  press(game, 'right')
+  t.is(game.realmCursor, 1, 'the realm selector moves independently from name typing')
+  press(game, 'enter')
+
+  t.is(game.realm, 'nox')
+  t.is(game.walker.mapId, 'nox', 'a NOX character is born in NOX')
+  t.is(game.walker.x, MAPS.nox.spawn.x)
+  t.is(game.walker.y, MAPS.nox.spawn.y)
+  t.ok(game.log.some((line) => line.includes('frontera hacia RUNA queda al oeste')))
+
+  const saved = game.saveState()
+  t.is(saved.realm, 'nox')
+  t.is(saved.summary.realm, 'nox')
+  const loaded = new Runa({
+    presence: false,
+    saves: {
+      list: () => [],
+      load: () => JSON.parse(JSON.stringify(saved))
+    }
+  })
+  t.ok(loaded.loadSlot(1))
+  t.is(loaded.realm, 'nox')
+  t.is(loaded.walker.mapId, 'nox')
+
+  loaded.wakeInChurch()
+  t.is(loaded.walker.mapId, 'nox', 'death returns a NOX hero to their own temple')
+  t.is(loaded.walker.here().enter.kind, 'church')
+  t.is(normalizeRealm(undefined), 'runa', 'older saves without a realm still load as RUNA')
+  t.is(REALMS.length, 2)
+})
+
+test('the two enemy kingdoms are joined by visible two-way frontier gates', (t) => {
+  const runaGate = locateGlyph(MAPS.city, 'N')
+  const noxGate = locateGlyph(MAPS.nox, 'R')
+  t.ok(runaGate, 'RUNA has a physical eastern gate to NOX')
+  t.ok(noxGate, 'NOX has a physical western gate back to RUNA')
+  t.ok(MAPS.city.rows.some((row) => row.includes('[frontera nox]')))
+  t.ok(MAPS.nox.rows.some((row) => row.includes('[frontera runa]')))
+
+  const game = new Runa({ presence: false })
+  startGame(game, 'Aster')
+  game.walker.placeAt('city', runaGate.x, runaGate.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'nox')
+  t.is(game.walker.x, MAPS.nox.arrive.x)
+  t.is(game.walker.y, MAPS.nox.arrive.y)
+
+  game.walker.placeAt('nox', noxGate.x, noxGate.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'city')
+  t.alike(
+    { x: game.walker.x, y: game.walker.y },
+    MAPS.city.arrivals.noxBorder,
+    'returning lands beside the eastern frontier instead of the southern meadow gate'
+  )
 })
 
 test('three save slots create, autosave and load persistent progress', (t) => {
@@ -307,13 +394,22 @@ test('the named hero animates and draws only equipped gear', (t) => {
 })
 
 test('weapons and armour occupy real slots, survive saves and affect combat', (t) => {
-  const player = new Player({ gold: 500, xp: xpToLeave(1) })
+  const player = new Player({ gold: 2000, xp: 500 })
   player.buy('sword', 'weapons')
   player.buy('shield', 'armor')
-  t.alike(player.snapshot().equipped, { left: 'sword', right: 'shield' })
+  player.buy('leather', 'armor')
+  player.buy('leather_cap', 'armor')
+  player.buy('boots', 'armor')
+  t.alike(player.snapshot().equipped, {
+    left_hand: 'sword',
+    right_hand: 'shield',
+    chest: 'leather',
+    head: 'leather_cap',
+    boots: 'boots'
+  })
 
   player.buy('crossbow', 'weapons')
-  t.is(player.snapshot().equipped.left, 'crossbow', 'a new weapon replaces the same slot')
+  t.is(player.snapshot().equipped.left_hand, 'crossbow', 'a new weapon replaces the same slot')
   t.ok(player.owns('sword'), 'replaced gear stays in the inventory')
 
   const loaded = Player.fromJSON(JSON.stringify(player))
@@ -321,26 +417,105 @@ test('weapons and armour occupy real slots, survive saves and affect combat', (t
   t.alike(loaded.snapshot().equipped, player.snapshot().equipped, 'the loadout survives a save')
 
   const oldSave = Player.fromJSON({
-    version: 1,
+    version: 3,
     gold: 30,
     xp: 0,
     hp: 20,
     potions: 2,
-    items: ['shield']
+    items: ['sword', 'leather'],
+    equipped: { left: 'sword', right: 'leather' },
+    pvp: { wins: 0, losses: 0 }
   })
-  t.alike(oldSave.snapshot().equipped, { left: null, right: null }, 'old saves invent no gear')
+  t.is(oldSave.snapshot().equipped.left_hand, 'sword', 'old weapon slots migrate')
+  t.is(oldSave.snapshot().equipped.chest, 'leather', 'old armour moves out of the hand')
+  t.alike(oldSave.snapshot().storage, [], 'old saves start with an empty home chest')
 
   const world = new World('mosquito')
   loaded.outfit(world)
   world.foe.x = 1
   const hp = world.hero.hp
   world.step()
-  t.is(world.held.right.id, 'shield', 'combat starts with the persistent armour equipped')
-  t.is(world.hero.hp, hp - 3, 'the shield reduces a mosquito hit from 5 to 3')
+  t.is(world.held.right.id, 'shield', 'combat starts with the persistent shield equipped')
+  t.is(world.held.chest.id, 'leather', 'chest armour enters combat without occupying a hand')
+  t.is(world.held.head.id, 'leather_cap', 'the helmet contributes at the same time')
+  t.is(world.held.boots.id, 'boots', 'boots contribute at the same time')
+  t.is(world.hero.hp, hp - 1, 'shield, chest and helmet stack their defence')
 
   loaded.unequip('shield')
-  t.is(loaded.snapshot().equipped.right, null, 'gear can be removed without selling it')
+  t.is(loaded.snapshot().equipped.right_hand, null, 'gear can be removed without selling it')
   t.ok(loaded.owns('shield'))
+})
+
+test('weapon, shield, chest, helmet and boots stay equipped together', (t) => {
+  const player = new Player({
+    items: ['dagger', 'shield', 'leather', 'leather_cap', 'boots']
+  })
+  for (const id of player.items) t.ok(player.equip(id).ok, `${id} equips`)
+  t.alike(player.snapshot().equipped, {
+    left_hand: 'dagger',
+    right_hand: 'shield',
+    chest: 'leather',
+    head: 'leather_cap',
+    boots: 'boots'
+  })
+})
+
+test('every item declares the slot it occupies, and says it the same way twice', (t) => {
+  const HANDS = { left_hand: 'left', right_hand: 'right' }
+  const KINDS = {
+    left_hand: 'weapon',
+    right_hand: 'shield',
+    chest: 'armor',
+    head: 'helmet',
+    boots: 'boots'
+  }
+  const ids = Object.keys(CONTENT.items)
+  t.ok(ids.length > 0, 'there are items to check')
+
+  for (const id of ids) {
+    const item = CONTENT.items[id]
+    t.ok(EQUIPMENT_SLOTS.includes(item.slot), `${id} has a known body slot`)
+    t.is(item.kind, KINDS[item.slot], `${id}: its kind matches its slot`)
+    if (HANDS[item.slot]) t.is(item.hand, HANDS[item.slot], `${id}: its hand matches its slot`)
+    else t.absent(item.hand, `${id}: body gear does not pretend to occupy a hand`)
+  }
+})
+
+test('equipping a second weapon replaces the first one and leaves the armour alone', (t) => {
+  const player = new Player()
+  player.items.add('dagger')
+  player.items.add('sword')
+  player.items.add('leather')
+
+  player.equip('dagger')
+  player.equip('leather')
+  t.is(player.snapshot().equipped.left_hand, 'dagger')
+  t.is(player.snapshot().equipped.chest, 'leather')
+
+  const res = player.equip('sword')
+  t.ok(res.ok, 'the second weapon equips')
+  t.is(player.snapshot().equipped.left_hand, 'sword', 'the weapon slot is replaced')
+  t.is(player.snapshot().equipped.chest, 'leather', 'chest armour survives the swap')
+  t.ok(player.owns('dagger'), 'the displaced weapon stays in the inventory')
+})
+
+test('the expanded equipment catalogue has distinct combat roles', (t) => {
+  const weapons = Object.values(CONTENT.items).filter((item) => item.kind === 'weapon')
+  const armour = Object.values(CONTENT.items).filter((item) => item.kind === 'armor')
+  const helmets = Object.values(CONTENT.items).filter((item) => item.kind === 'helmet')
+  t.is(weapons.length, 6)
+  t.is(armour.length, 3)
+  t.is(helmets.length, 2)
+  t.ok(new Set(weapons.map((item) => `${item.atk}/${item.reach}/${item.cooldown}`)).size >= 5)
+  t.ok(new Set(armour.map((item) => `${item.defense || 0}/${item.speed}`)).size === 3)
+
+  const sprite = render
+    .heroSprite({ initial: 'A', items: ['warhammer', 'plate', 'iron_helmet', 'boots'] })
+    .join('\n')
+  t.ok(sprite.includes('T[O]'), 'the warhammer and helmet share the head row')
+  t.ok(sprite.includes('HA'), 'plate armour is visible on the body')
+  t.ok(sprite.includes('[O]'), 'the helmet is visible on the head')
+  t.ok(sprite.includes('/_\\'), 'the boots are visible on the feet')
 })
 
 test('the shop lets the player equip and remove owned gear', (t) => {
@@ -352,15 +527,79 @@ test('the shop lets the player equip and remove owned gear', (t) => {
   game.shop = 'weapons'
 
   press(game, 'enter')
-  t.is(game.player.snapshot().equipped.left, 'sword', 'buying equipment puts it in its slot')
+  t.is(game.player.snapshot().equipped.left_hand, 'dagger', 'buying equipment puts it in its slot')
   t.ok(style.stripAnsi(game.view()).includes('equipado'), 'the shop marks the active item')
 
   press(game, 'x')
-  t.is(game.player.snapshot().equipped.left, null, 'x removes the selected item')
-  t.ok(game.player.owns('sword'), 'removing equipment does not sell it')
+  t.is(game.player.snapshot().equipped.left_hand, null, 'x removes the selected item')
+  t.ok(game.player.owns('dagger'), 'removing equipment does not sell it')
 
   press(game, 'enter')
-  t.is(game.player.snapshot().equipped.left, 'sword', 'enter equips an item already owned')
+  t.is(game.player.snapshot().equipped.left_hand, 'dagger', 'enter equips an item already owned')
+
+  game.shop = 'armor'
+  game.cursor = 0
+  press(game, 'enter')
+  t.is(game.player.snapshot().equipped.left_hand, 'dagger')
+  t.is(game.player.snapshot().equipped.chest, 'leather')
+  const screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('izq ; daga'))
+  t.ok(screen.includes('pecho { cuero liviano'))
+})
+
+test('inventory equips five slots and the home chest deposits persistent items', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.width = 100
+  game.height = 30
+  for (const id of ['sword', 'shield', 'leather', 'leather_cap', 'boots']) {
+    game.player.items.add(id)
+    game.player.equip(id)
+  }
+
+  press(game, 'i')
+  let screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('INVENTARIO'))
+  t.ok(screen.includes('izq / espada'))
+  t.ok(screen.includes('der 0 escudo'))
+  t.ok(screen.includes('pecho { cuero liviano'))
+  t.ok(screen.includes('casco ( capucha de cuero'))
+  t.ok(screen.includes('botas ^ botas'))
+  for (const [width, height] of [
+    [64, 16],
+    [80, 24]
+  ]) {
+    game.update({ type: 'resize', width, height })
+    const lines = style.stripAnsi(game.view()).split('\n')
+    t.is(lines.length, height, `inventory keeps ${height} terminal rows`)
+    t.ok(lines.every((line) => line.length === width), `inventory keeps ${width} columns`)
+  }
+  game.update({ type: 'resize', width: 100, height: 30 })
+  press(game, 'escape')
+
+  const home = locateGlyph(MAPS.city, 'C')
+  game.walker.placeAt('city', home.x, home.y)
+  press(game, 'e')
+  t.ok(game.inventoryOpen && game.inventoryHome, 'interacting with home opens its chest')
+  t.ok(style.stripAnsi(game.view()).includes('DEPOSITO DEL HOGAR'))
+
+  press(game, 'enter')
+  t.ok(game.player.stored('sword'), 'enter deposits the selected carried item')
+  t.not(game.player.owns('sword'))
+  t.is(game.player.equipped.left_hand, null, 'depositing equipped gear removes it safely')
+
+  press(game, 'tab')
+  screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('[ DEPOSITO ]'))
+  t.ok(screen.includes('/ espada'))
+  press(game, 'enter')
+  t.ok(game.player.owns('sword'), 'enter withdraws the selected stored item')
+  t.not(game.player.stored('sword'))
+
+  game.player.deposit('shield')
+  const loaded = Player.fromJSON(JSON.stringify(game.player))
+  t.ok(loaded.stored('shield'), 'the home chest survives saving and loading')
+  t.not(loaded.owns('shield'), 'stored gear is not also duplicated in the backpack')
 })
 
 test('spaces inside actor sprites are transparent over city and field terrain', (t) => {
@@ -510,7 +749,7 @@ test('city art remains rectangular and walkable', (t) => {
   t.ok(cityText.includes('[== jarra ==]'), 'the tavern has its own half-timbered sign')
   t.ok(cityText.includes('fragua (())'), 'the smithy exposes a working forge bay')
   t.ok(cityText.includes('[]__[]__[]'), 'the armoury has a crenellated silhouette')
-  t.is(city.npcs.length, 9, 'the city has nine static residents')
+  t.is(city.npcs.length, 10, 'the city has ten static residents')
   t.ok(NPC_MASTER_SPRITES.guard.length >= 20, 'the faithful high-resolution knight is preserved')
   t.ok(
     NPC_MASTER_SPRITES.guard.some((line) => line.includes('hjw')),
@@ -530,6 +769,70 @@ test('city art remains rectangular and walkable', (t) => {
   t.is(TILES[';'].solid, false)
   t.is(TILES.O.solid, true)
   t.is(TILES.T.enter.kind, 'tavern')
+})
+
+test('the hero statue opens level and PvP rankings', (t) => {
+  const city = MAPS.city
+  const statue = city.landmarks.find((landmark) => landmark.id === 'hero-statue')
+  t.ok(statue)
+  t.ok(city.rows.join('\n').includes('heroes runa'), 'the monument is visible in the plaza')
+
+  const game = new Runa({ presence: false, name: 'Ayla' })
+  game.title = false
+  game.name = 'Ayla'
+  game.player.gainXp(xpToLeave(1) + xpToLeave(2))
+  game.player.recordDuel(true)
+  game.slots = [
+    { slot: 1, name: 'Borin', level: 2, pvp: { wins: 4, losses: 1 } },
+    { slot: 2, empty: true },
+    { slot: 3, empty: true }
+  ]
+  game.walker.placeAt('city', 160, 160)
+  t.is(game.nearbyLandmark().id, 'hero-statue')
+  press(game, 'e')
+  t.ok(game.rankingOpen)
+
+  let screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('clasificacion por nivel'))
+  t.ok(screen.indexOf('Ayla') < screen.indexOf('Borin'), 'level ranking puts level 3 first')
+  press(game, 'right')
+  screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('clasificacion pvp'))
+  t.ok(screen.indexOf('Borin') < screen.indexOf('Ayla'), 'PvP ranking puts four wins first')
+  press(game, 'escape')
+  t.absent(game.rankingOpen)
+})
+
+test('the improved hero plaza animates its fountain without mutating collision art', (t) => {
+  const city = MAPS.city
+  const fountain = city.animations.find((animation) => animation.id === 'plaza-fountain-water')
+  t.ok(city.rows.join('\n').includes('plaza de los heroes'))
+  t.ok(fountain, 'the central fountain publishes water animation frames')
+  t.is(fountain.frames.length, 4, 'water descends through four distinct phases')
+  t.ok(city.rows.join('\n').includes('|o o|'), 'the monument has a recognizable hero face')
+  t.ok(
+    city.rows.join('\n').includes('.-----------|||-----------.'),
+    'a wide lower tier gives the fountain a ceremonial silhouette'
+  )
+  t.ok(
+    fountain.frames.every((frame) => frame.length === fountain.frames[0].length),
+    'every water phase has a stable terminal footprint'
+  )
+
+  const game = new Runa({ presence: false })
+  game.title = false
+  game.update({ type: 'resize', width: 120, height: 34 })
+  game.walker.placeAt('city', 160, 165)
+  const collisionRow = city.rows[155]
+  game.animationTick = 0
+  const first = style.stripAnsi(game.view())
+  for (let tick = 0; tick < fountain.cadence; tick++) game.onTick()
+  const second = style.stripAnsi(game.view())
+
+  t.not(first, second, 'water crests and drops change between visible phases')
+  t.is(city.rows[155], collisionRow, 'animation never rewrites the collision map')
+  t.ok(first.split('\n').every((line) => line.length === game.width))
+  t.ok(second.split('\n').every((line) => line.length === game.width))
 })
 
 test('the coliseum is a high-resolution duel map with mirrored safe spawns', (t) => {
@@ -642,6 +945,7 @@ test('an accepted PvP duel uses the Coliseum, equipment and exact return point',
   t.is(game.walker.x, 160)
   t.is(game.walker.y, 130)
   t.is(game.lastDuelResult.winner, 'peer-b')
+  t.alike(game.player.snapshot().pvp, { wins: 0, losses: 1 })
 })
 
 test('PvP movement stays in bounds and ordered attacks finish deterministically', (t) => {
@@ -701,7 +1005,59 @@ test('city NPCs block movement and provide their services', (t) => {
   t.is(game.shop, 'weapons', 'talking to the blacksmith opens the weapon shop')
 })
 
-test('the castle dungeon entrance descends and returns to the same district', (t) => {
+test('the plaza knight gives and rewards the mosquito mission once', (t) => {
+  const game = new Runa({ presence: false })
+  game.title = false
+  const knight = MAPS.city.npcs.find((npc) => npc.id === 'cedric')
+  const quest = QUESTS.mosquito_hunt
+
+  t.ok(knight, 'sir Cedric waits in the plaza')
+  t.is(TILES[MAPS.city.rows[knight.y][knight.x]].solid, false, 'his plaza anchor is walkable')
+  game.walker.placeAt('city', knight.x, knight.y + 1)
+  press(game, 'e')
+  t.is(game.quests[quest.id].status, 'active', 'talking to him accepts the mission')
+  t.is(game.quests[quest.id].progress, 0)
+
+  game.recordQuestKill('golem')
+  for (let kill = 0; kill < quest.count - 1; kill++) game.recordQuestKill('mosquito')
+  t.is(game.quests[quest.id].progress, 19, 'only mosquito kills advance the objective')
+  t.ok(style.stripAnsi(game.view()).includes('mision mosquitos 19/20'))
+
+  const goldBefore = game.player.gold
+  press(game, 'e')
+  t.is(game.player.gold, goldBefore, 'an unfinished mission pays nothing')
+
+  const world = new World('mosquito')
+  world.over = 'ganaste'
+  game.field = { combat: null }
+  game.pending = world
+  game.earned = { kind: 'mosquito' }
+  game.syncCombat(true)
+  game.field = null
+  t.ok(style.stripAnsi(game.view()).includes('mision lista: volver'))
+  const readyGold = game.player.gold
+  const readyXp = game.player.xp
+  press(game, 'e')
+  t.is(game.quests[quest.id].status, 'completed')
+  t.is(game.player.gold, readyGold + quest.reward.gold)
+  t.is(game.player.xp, readyXp + quest.reward.xp)
+
+  press(game, 'e')
+  t.is(game.player.gold, readyGold + quest.reward.gold, 'the reward cannot be claimed twice')
+  const saved = game.saveState()
+  t.alike(saved.quests[quest.id], {
+    status: 'completed',
+    progress: quest.count
+  })
+  const loaded = new Runa({
+    presence: false,
+    saves: { list: () => [], load: () => JSON.parse(JSON.stringify(saved)) }
+  })
+  t.ok(loaded.loadSlot(1))
+  t.alike(loaded.quests[quest.id], saved.quests[quest.id], 'mission progress survives loading')
+})
+
+test('the throne room connects the city, king and castle ruins', (t) => {
   const game = new Runa({ presence: false })
   game.title = false
   const locate = (map, glyph) => {
@@ -712,17 +1068,42 @@ test('the castle dungeon entrance descends and returns to the same district', (t
     return null
   }
 
-  const entrance = locate(MAPS.city, 'V')
-  t.ok(entrance, 'the castle has a visible dungeon stair')
+  const entrance = locate(MAPS.city, 'K')
+  t.ok(entrance, 'the city castle has a visible entrance')
   game.walker.placeAt('city', entrance.x, entrance.y)
   press(game, 'e')
-  t.is(game.walker.mapId, 'dungeon', 'V descends into the ruins')
+  t.is(game.walker.mapId, 'castle', 'the castle entrance opens the great hall')
+  t.ok(style.stripAnsi(game.view()).includes('salon del trono'))
+  t.is(MAPS.castle.npcs[0].name, 'Aldren', 'the king waits beside his throne')
+  t.is(MAPS.castle.npcs[0].sprite, NPC_SPRITES.king, 'Aldren uses the seated king sprite')
+  t.ok(NPC_SPRITES.king[0].includes('\\/\\/'), 'the seated king wears a crown')
+  t.ok(NPC_SPRITES.king[3].includes('|_/ \\_|'), 'the king rests inside the throne')
+  game.walker.placeAt('castle', 56, 14)
+  press(game, 'e')
+  t.ok(
+    game.log.some((line) => String(line).includes('Aldren')),
+    'the king can be consulted'
+  )
+
+  const dungeonEntrance = locate(MAPS.castle, 'V')
+  t.ok(dungeonEntrance, 'the ruins have a dedicated side stair')
+  game.walker.placeAt('castle', dungeonEntrance.x, dungeonEntrance.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'dungeon', 'the side stair descends into the ruins')
   t.ok(style.stripAnsi(game.view()).includes('las ruinas bajo el castillo'))
 
   const exit = locate(MAPS.dungeon, 'U')
   game.walker.placeAt('dungeon', exit.x, exit.y)
   press(game, 'e')
-  t.is(game.walker.mapId, 'city', 'U climbs back into the city')
+  t.is(game.walker.mapId, 'castle', 'U climbs back into the throne room')
+  t.is(game.walker.x, dungeonEntrance.x, 'the player returns beside the ruins stair')
+  t.is(game.walker.y, dungeonEntrance.y + 1)
+
+  const castleExit = locate(MAPS.castle, 'B')
+  t.ok(castleExit, 'the great hall has a visible city exit')
+  game.walker.placeAt('castle', castleExit.x, castleExit.y)
+  press(game, 'e')
+  t.is(game.walker.mapId, 'city', 'the south door returns to the city')
   t.is(game.walker.x, entrance.x, 'the player returns beside the castle entrance')
   t.is(game.walker.y, entrance.y + 1)
 })
@@ -1410,7 +1791,7 @@ test('the world boss animates powers with real field damage', (t) => {
   t.ok(attacks.has('punio_izquierdo'), 'the final phase preserves learned attacks')
   t.ok(attacks.has('colapso'), 'the final phase also adds its new attack')
 
-  const field = new Field({ seed: 17, width: 120, height: 36 })
+  const field = new BossZone({ seed: 17 })
   field.player.x = field.boss.x - 23
   field.player.y = field.boss.y
   field.boss.activate(0)
@@ -1419,6 +1800,7 @@ test('the world boss animates powers with real field damage', (t) => {
     render.fieldPane(
       {
         rows: field.render(64, 25, false),
+        mode: snap.mode,
         width: snap.width,
         height: snap.height,
         player: { ...snap.player, sprite: render.heroSprite() },
@@ -1439,7 +1821,7 @@ test('the world boss animates powers with real field damage', (t) => {
 
   const game = new Runa({ presence: false })
   startGame(game)
-  game.field = new Field({ player: game.player })
+  game.field = new BossZone({ player: game.player })
   game.field.player.x = game.field.boss.x - 12
   game.field.player.y = game.field.boss.y
   const bossHp = game.field.boss.hp
@@ -1478,4 +1860,363 @@ test('city gardens are open and accessible from spawn', (t) => {
   // Check interior points in garden 2 (x: 250, y: 5, w: 65, h: 43)
   t.ok(seen.has('251,6'), 'garden 2 top-left interior is reachable')
   t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
+})
+
+test('the expanded meadow exposes a visible entrance to the crypt', (t) => {
+  const field = new Field({ seed: 27 })
+  t.ok(field.width >= 160, 'the meadow is substantially wider than before')
+  t.ok(field.height >= 48, 'the meadow gained room in both axes')
+  field.player.x = field.dungeonEntrance.x - 3
+  field.player.y = field.dungeonEntrance.y
+  const rows = field.render(48, 18, false)
+  t.ok(
+    rows.some((row) => row.includes('CRIPTA')),
+    'the landmark names itself as a crypt'
+  )
+  t.ok(
+    rows.some((row) => row.includes('(o o)')),
+    'a skull guards the facade'
+  )
+  t.ok(
+    rows.some((row) => row.includes('/X\\')),
+    'the deep doorway remains readable'
+  )
+  t.ok(DUNGEON_ENTRANCE_ART.length >= 10, 'the entrance is a full building, not a tiny marker')
+  t.ok(
+    field.foes.every(
+      (foe) =>
+        Math.max(
+          Math.abs(foe.x - field.dungeonEntrance.x),
+          Math.abs(foe.y - field.dungeonEntrance.y)
+        ) >= DUNGEON_CLEARANCE
+    ),
+    'the facade begins with a monster-free clearing'
+  )
+
+  field.player.x = field.dungeonEntrance.x - 1
+  const events = field.walk(1, 0)
+  t.ok(
+    events.some((event) => event.type === 'dungeon-enter'),
+    'walking into X enters it'
+  )
+})
+
+test('the yermo portal owns a separate volcanic world-boss map', (t) => {
+  const meadow = new Field({ seed: 27 })
+  t.absent(meadow.boss, 'the Colossus was removed from the open meadow')
+  meadow.player.x = meadow.worldBossPortal.x - 5
+  meadow.player.y = meadow.worldBossPortal.y
+  const portalRows = meadow.render(48, 18, false)
+  t.ok(
+    portalRows.some((row) => row.includes('~~O~~')),
+    'the north-east portal has a visible energy core'
+  )
+  t.ok(
+    portalRows.some((row) => row.includes('portal-del-coloso')),
+    'the landmark names itself'
+  )
+  t.ok(
+    portalRows.some((row) => row.includes('/#####')),
+    'two ruined pylons give the entrance a monumental silhouette'
+  )
+  t.is(WORLD_BOSS_PORTAL_ART.length, 13, 'the portal is a full facade instead of a tiny marker')
+  const restingPortal = portalRows.join('\n')
+  meadow.time = WORLD_BOSS_PORTAL_CADENCE
+  t.not(meadow.render(48, 18, false).join('\n'), restingPortal, 'the portal energy visibly pulses')
+  t.ok(
+    meadow.foes.every(
+      (foe) =>
+        Math.max(
+          Math.abs(foe.x - meadow.worldBossPortal.x),
+          Math.abs(foe.y - meadow.worldBossPortal.y)
+        ) >= WORLD_BOSS_PORTAL_CLEARANCE
+    ),
+    'the monument begins inside a monster-free clearing'
+  )
+  meadow.player.x = meadow.worldBossPortal.x - 1
+  let events = meadow.walk(1, 0)
+  t.ok(
+    events.some((event) => event.type === 'boss-enter'),
+    'walking into O opens the boss zone'
+  )
+
+  const zone = new BossZone({ seed: 27 })
+  t.is(zone.mode, 'boss')
+  t.is(zone.width, BOSS_ZONE.width)
+  t.ok(
+    zone.layout.rows.some((row) => row.includes('~~~~')),
+    'lava rivers cross the arena'
+  )
+  t.ok(
+    zone.layout.rows.some((row) => row.includes('+---')),
+    'broken buildings remain standing'
+  )
+  t.ok(zone.boss && !zone.boss.defeated, 'the world boss exists only inside this map')
+
+  const target = { x: zone.boss.x - 12, y: zone.boss.y }
+  const queue = [[zone.portal.x + 3, zone.portal.y]]
+  const seen = new Set()
+  while (queue.length) {
+    const [x, y] = queue.shift()
+    const key_ = `${x},${y}`
+    if (seen.has(key_) || !zone.isWalkable(x, y) || zone.boss.occupies(x, y)) continue
+    seen.add(key_)
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1]
+    ]) {
+      queue.push([x + dx, y + dy])
+    }
+  }
+  t.ok(seen.has(`${target.x},${target.y}`), 'stone bridges provide a route to the Colossus')
+
+  zone.player.x = zone.portal.x + 1
+  zone.player.y = zone.portal.y
+  events = zone.walk(-1, 0)
+  t.ok(
+    events.some((event) => event.type === 'boss-exit'),
+    'O also returns to the yermo'
+  )
+})
+
+test('Runa travels through the world-boss portal and preserves its state', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game)
+  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
+  game.field.player.x = game.field.worldBossPortal.x - 1
+  game.field.player.y = game.field.worldBossPortal.y
+  press(game, 'right')
+  t.is(game.field.mode, 'boss')
+  t.is(game.saveState().location.kind, 'boss')
+
+  game.field.boss.hp -= 17
+  const damagedHp = game.field.boss.hp
+  t.is(game.saveState().location.state.hp, damagedHp, 'boss life enters autosave state')
+  press(game, 't')
+  t.is(game.field.mode, 'boss', 'T cannot bypass the return portal')
+  game.field.player.x = game.field.portal.x + 1
+  game.field.player.y = game.field.portal.y
+  press(game, 'left')
+  t.is(game.field.mode, 'field')
+  t.ok(
+    game.field.player.x < game.field.worldBossPortal.x,
+    'the hero returns outside the yermo portal'
+  )
+  t.ok(
+    Math.max(
+      Math.abs(game.field.player.x - game.field.worldBossPortal.x),
+      Math.abs(game.field.player.y - game.field.worldBossPortal.y)
+    ) < WORLD_BOSS_PORTAL_CLEARANCE,
+    'the return point remains inside the monster-free portal clearing'
+  )
+  game.field.player.x = game.field.worldBossPortal.x - 1
+  game.field.player.y = game.field.worldBossPortal.y
+  press(game, 'right')
+  t.is(game.field.boss.hp, damagedHp, 'leaving and re-entering cannot reset the boss fight')
+})
+
+test('the crypt progresses through three cleared monster floors', (t) => {
+  const state = {}
+  const first = new Dungeon({ floor: 1, seed: 9, state })
+  t.is(first.mode, 'dungeon')
+  t.is(first.floor, 1)
+  t.is(first.foes.length, FLOOR_ROSTERS[1].length)
+  t.ok(
+    first.foes.some((foe) => foe.kind === 'slime'),
+    'slimes occupy the opening floor'
+  )
+  t.ok(
+    first.foes.some((foe) => foe.kind === 'skeleton'),
+    'skeletons follow the slimes'
+  )
+  t.ok(
+    first.render(56, 20, false).some((row) => row.includes('^')),
+    'the up stair is visible'
+  )
+
+  first.player.x = first.layout.down.x - 1
+  first.player.y = first.layout.down.y
+  let events = first.walk(1, 0)
+  t.ok(
+    events.some((event) => event.type === 'dungeon-locked'),
+    'living monsters seal the descent'
+  )
+  for (const foe of first.foes) foe.dead = true
+  first.player.x = first.layout.down.x - 1
+  events = first.walk(1, 0)
+  t.ok(
+    events.some((event) => event.type === 'dungeon-floor' && event.floor === 2),
+    'clearing level 1 opens level 2'
+  )
+
+  const second = new Dungeon({ floor: 2, seed: 9, state: first.state })
+  t.ok(
+    second.foes.some((foe) => foe.kind === 'skeleton_knight'),
+    'level 2 adds skeleton knights'
+  )
+  t.ok(
+    second.foes.some((foe) => foe.kind === 'skeleton_archer'),
+    'level 2 adds skeleton archers'
+  )
+
+  const third = new Dungeon({ floor: DUNGEON.floors, seed: 9, state: second.state })
+  t.ok(
+    third.foes.some((foe) => foe.kind === 'skeleton_elite'),
+    'level 3 adds elite skeletons'
+  )
+  t.is(
+    third.foes.filter((foe) => foe.kind === 'skeleton_king').length,
+    1,
+    'one skeleton king waits in the final throne room'
+  )
+  t.absent(third.layout.down, 'there is no invented fourth floor')
+})
+
+test('every dungeon floor has a sourced identity and a traversable authored route', (t) => {
+  const layouts = [1, 2, 3].map((floor) => floorRows(floor))
+  const blocked = new Set(['#', '|', '-', '=', '[', ']', '~', '%', 'o', '+'])
+  const reachable = (layout) => {
+    const queue = [layout.up]
+    const visited = new Set([`${layout.up.x},${layout.up.y}`])
+    while (queue.length) {
+      const point = queue.shift()
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1]
+      ]) {
+        const x = point.x + dx
+        const y = point.y + dy
+        const key = `${x},${y}`
+        const ch = layout.rows[y] && layout.rows[y][x]
+        if (!ch || blocked.has(ch) || visited.has(key)) continue
+        visited.add(key)
+        queue.push({ x, y })
+      }
+    }
+    return visited
+  }
+
+  t.alike(
+    layouts.map((layout) => layout.name),
+    ['cisternas del limo', 'galerias del osario', 'necropolis de la corona'],
+    'each descent has its own architectural identity'
+  )
+  t.unlike(layouts[0].rows, layouts[1].rows, 'the cistern and ossuary are distinct plans')
+  t.unlike(layouts[1].rows, layouts[2].rows, 'the ossuary and necropolis are distinct plans')
+  t.ok(
+    layouts[0].rows.some((row) => row.includes('~')),
+    'the cistern has flooded reservoirs'
+  )
+  t.ok(
+    layouts[0].rows.some((row) => row.includes(':')),
+    'the cistern has stone bridges'
+  )
+  t.ok(
+    layouts[1].rows.some((row) => row.includes('%o')),
+    'the ossuary has bone courses'
+  )
+  t.ok(
+    layouts[1].rows.some((row) => row.includes('*')),
+    'the ossuary has a sepulchral lamp'
+  )
+  t.ok(
+    layouts[2].rows.some((row) => row.includes('[=T=]')),
+    'the royal floor has a throne'
+  )
+  t.ok(layouts[2].throne, 'the necropolis records its ceremonial destination')
+
+  for (const layout of layouts) {
+    const visited = reachable(layout)
+    const destination = layout.down || layout.spawnPoints[layout.spawnPoints.length - 1]
+    t.ok(
+      visited.has(`${destination.x},${destination.y}`),
+      `${layout.name} connects its entrance to its destination`
+    )
+    t.ok(
+      layout.spawnPoints.every((point) => visited.has(`${point.x},${point.y}`)),
+      `${layout.name} keeps every encounter on the playable route`
+    )
+  }
+})
+
+test('Runa enters, saves and exits the meadow dungeon as one run', (t) => {
+  const game = new Runa({ presence: false })
+  startGame(game)
+  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
+  game.field.player.x = game.field.dungeonEntrance.x - 1
+  game.field.player.y = game.field.dungeonEntrance.y
+  press(game, 'right')
+  t.is(game.field.mode, 'dungeon')
+  t.is(game.field.floor, 1)
+  t.is(game.saveState().location.kind, 'dungeon', 'autosave records the active dungeon floor')
+
+  press(game, 't')
+  t.is(game.field.mode, 'dungeon', 'T cannot bypass dungeon progression')
+  game.field.player.x = game.field.layout.up.x + 1
+  game.field.player.y = game.field.layout.up.y
+  press(game, 'left')
+  t.is(game.field.mode, 'field', 'the up stair on level 1 returns to the meadow')
+  t.ok(
+    game.field.player.x < game.field.dungeonEntrance.x,
+    'the hero reappears safely outside instead of re-entering immediately'
+  )
+})
+
+test('dungeon victories persist, including the skeleton king', (t) => {
+  const first = new Dungeon({ floor: 1, seed: 31 })
+  const slime = first.foes.find((foe) => foe.kind === 'slime')
+  const events = []
+  first.startFight(slime, 1, events)
+  first.combat.world.over = 'ganaste'
+  first.endFight(events)
+  t.ok(first.state.defeated[1].includes(String(slime.id)), 'a defeated slime enters run state')
+  t.ok(events.some((event) => event.type === 'win' && event.kind === 'slime'))
+
+  const reopened = new Dungeon({ floor: 1, seed: 31, state: first.toJSON() })
+  t.ok(
+    reopened.foes.find((foe) => foe.id === slime.id).dead,
+    'returning to a floor does not resurrect its defeated monsters'
+  )
+
+  const final = new Dungeon({ floor: 3, seed: 31, state: reopened.toJSON() })
+  const king = final.foes.find((foe) => foe.kind === 'skeleton_king')
+  const finale = []
+  final.startFight(king, 1, finale)
+  final.combat.world.over = 'ganaste'
+  final.endFight(finale)
+  t.ok(final.state.kingDefeated, 'the final victory is recorded')
+  t.ok(finale.some((event) => event.type === 'dungeon-complete'))
+})
+
+test('a save slot restores the current dungeon floor and defeated monsters', (t) => {
+  const dir = path.join(
+    os.tmpdir(),
+    `runa-dungeon-save-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+  )
+  const saves = new SaveStore(dir)
+  try {
+    const game = new Runa({ presence: false, saves })
+    startGame(game, 'Cripta')
+    game.meadowReturn = { x: 149, y: 43 }
+    game.openDungeonFloor(2)
+    game.field.foes[0].dead = true
+    game.field.state.defeated[2].push(String(game.field.foes[0].id))
+    game.field.player.x = 44
+    game.field.player.y = 18
+    game.saveCurrent()
+
+    const loaded = new Runa({ presence: false, saves })
+    t.ok(loaded.loadSlot(1))
+    t.is(loaded.field.mode, 'dungeon')
+    t.is(loaded.field.floor, 2)
+    t.is(loaded.field.player.x, 44)
+    t.is(loaded.field.player.y, 18)
+    t.ok(loaded.field.foes[0].dead, 'the cleared enemy stays dead after loading')
+  } finally {
+    removeSaveFixture(dir)
+  }
 })

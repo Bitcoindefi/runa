@@ -81,7 +81,7 @@ function flood(map, from) {
 }
 const city = M.MAPS.city
 const reach = flood(city, [city.spawn.x, city.spawn.y])
-for (const g of ['C', 'I', 'P', 'A', 'D', 'T', 'V', '>']) {
+for (const g of ['C', 'I', 'P', 'A', 'D', 'T', 'K', '>', 'N']) {
   const at = scan(city, g)
   const named = M.TILES[g].name
   ok(at.length === 1, 'ciudad: ' + g + ' (' + named + ') aparece 1 vez, aparece ' + at.length)
@@ -90,17 +90,40 @@ for (const g of ['C', 'I', 'P', 'A', 'D', 'T', 'V', '>']) {
     '  y se llega caminando desde el spawn: ' + JSON.stringify(at[0])
   )
 }
+const nox = M.MAPS.nox
+const nreach = flood(nox, [nox.spawn.x, nox.spawn.y])
+for (const g of ['C', 'I', 'P', 'A', 'D', 'R']) {
+  const at = scan(nox, g)
+  const named = M.TILES[g].name
+  ok(at.length === 1, 'nox: ' + g + ' (' + named + ') aparece 1 vez, aparece ' + at.length)
+  ok(
+    at.length === 1 && nreach.has(at[0][0] + ',' + at[0][1]),
+    '  y se llega caminando desde el spawn de NOX: ' + JSON.stringify(at[0])
+  )
+}
 const field = M.MAPS.field
 const freach = flood(field, [field.spawn.x, field.spawn.y])
 const back = scan(field, '<')
 ok(back.length === 1, 'campo: < aparece 1 vez')
 ok(freach.has(back[0][0] + ',' + back[0][1]), 'campo: se llega a la entrada de la ciudad')
+const castle = M.MAPS.castle
+const creach = flood(castle, [castle.spawn.x, castle.spawn.y])
+const ruins = scan(castle, 'V')
+ok(ruins.length === 1, 'castillo: V aparece 1 vez')
+ok(creach.has(ruins[0][0] + ',' + ruins[0][1]), 'castillo: se llega a la escalera a las ruinas')
 const dungeon = M.MAPS.dungeon
 const dreach = flood(dungeon, [dungeon.spawn.x, dungeon.spawn.y])
 const stairs = scan(dungeon, 'U')
 ok(stairs.length === 1, 'dungeon: U aparece 1 vez')
 ok(dreach.has(stairs[0][0] + ',' + stairs[0][1]), 'dungeon: se llega a la salida al castillo')
-console.log('  celdas caminables ciudad:', reach.size, '| campo:', freach.size)
+console.log(
+  '  celdas caminables ciudad:',
+  reach.size,
+  '| nox:',
+  nreach.size,
+  '| campo:',
+  freach.size
+)
 
 console.log('\n=== viaje ciudad -> campo por el porton ===')
 const gate = scan(city, '>')[0]

@@ -70,6 +70,18 @@ test('los mensajes de duelo son dirigidos, saneados y no se repiten', (t) => {
   t.is(received.length, 1, 'una conexion no puede fingir la identidad de otro peer')
 })
 
+test('la presencia comparte solo estadisticas publicas del ranking', (t) => {
+  const ana = new Presence({ name: 'ana', offline: true })
+  const beto = new Presence({ name: 'beto', offline: true })
+  ana.update('city', 10, 20, { level: 7, wins: 12, losses: 3 })
+  connect(ana, beto)
+  const profile = beto.others('city').find((peer) => peer.id === ana.id)
+  t.is(profile.level, 7)
+  t.is(profile.wins, 12)
+  t.is(profile.losses, 3)
+  t.absent(JSON.stringify(profile).includes('secret'), 'the ranking carries no wallet secrets')
+})
+
 test('dos partidas negocian, sincronizan y cierran el mismo duelo', (t) => {
   const ana = new Runa({ presence: false, name: 'Ana' })
   const beto = new Runa({ presence: false, name: 'Beto' })
@@ -112,4 +124,7 @@ test('dos partidas negocian, sincronizan y cierran el mismo duelo', (t) => {
   t.absent(host.duel, 'el host sale al resolver')
   t.absent(guest.duel, 'el invitado reproduce el mismo cierre')
   t.is(host.lastDuelResult.winner, guest.lastDuelResult.winner, 'los dos ven el mismo ganador')
+  const anaWon = host.lastDuelResult.winner === pa.id
+  t.alike(ana.player.snapshot().pvp, anaWon ? { wins: 1, losses: 0 } : { wins: 0, losses: 1 })
+  t.alike(beto.player.snapshot().pvp, anaWon ? { wins: 0, losses: 1 } : { wins: 1, losses: 0 })
 })
