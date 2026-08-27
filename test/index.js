@@ -358,6 +358,28 @@ test('the shop lets the player equip and remove owned gear', (t) => {
   t.is(game.player.snapshot().equipped.left, 'sword', 'enter equips an item already owned')
 })
 
+test('hero sprites do not overwrite solid wall tiles', (t) => {
+  const sprite = render.heroSprite({ frame: 0 })
+  const tiles = Array(5).fill(','.repeat(12))
+  tiles[1] = ',,,,#,,,,,,,'
+  const city = style
+    .stripAnsi(
+      render.mapPane(
+        {
+          tiles,
+          hero: { x: 4, y: 3, sprite },
+          actors: []
+        },
+        12,
+        5,
+        { cellW: 1 }
+      )
+    )
+    .split('\n')
+
+  t.is(city[1][4], '#', 'the wall remains visible through the hero sprite')
+})
+
 test('spaces inside actor sprites are transparent over city and field terrain', (t) => {
   const sprite = render.heroSprite({ frame: 0 })
   const city = style
