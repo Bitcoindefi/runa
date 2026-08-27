@@ -1,0 +1,5 @@
+# Artefactos de cargo. No son fuente: se regeneran.
+target/
+
+# Soroban los reescribe en cada corrida.
+test_snapshots/

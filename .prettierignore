@@ -1,2 +1,6 @@
 # Codigo de terceros: se empaqueta, no se formatea.
 vendor/
+
+# Artefactos de Rust. Los regenera cargo, no son fuente.
+contracts/target/
+contracts/**/test_snapshots/
