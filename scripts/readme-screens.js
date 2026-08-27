@@ -12,6 +12,8 @@ const path = require('bare-path')
 
 const { Runa } = require('../lib/game.js')
 const { Field } = require('../lib/field.js')
+const { Dungeon } = require('../lib/dungeon.js')
+const { BossZone } = require('../lib/boss-zone.js')
 
 const WIDTH = 120
 const HEIGHT = 34
@@ -154,21 +156,25 @@ function type(sequence) {
   return { type: 'key', sequence, ctrl: false, meta: false, is: () => false }
 }
 
-function namedGame(name = 'Ayla') {
+function namedGame(name = 'Ayla', realm = 'runa') {
   const game = new Runa({ presence: false })
   game.width = WIDTH
   game.height = HEIGHT
   game.onKey(key('enter'))
   for (const ch of name) game.onKey(type(ch))
+  if (realm === 'nox') game.onKey(key('right'))
   game.onKey(key('enter'))
   return game
 }
 
 function equippedGame(name = 'Ayla') {
   const game = namedGame(name)
-  game.player.gold = 200
-  game.player.buy('sword', 'weapons')
-  game.player.buy('shield', 'armor')
+  for (const id of ['spear', 'shield', 'chainmail', 'iron_helmet', 'boots', 'longbow']) {
+    game.player.items.add(id)
+  }
+  for (const id of ['spear', 'shield', 'chainmail', 'iron_helmet', 'boots']) {
+    game.player.equip(id)
+  }
   return game
 }
 
@@ -189,12 +195,12 @@ function frames() {
   city.walker.placeAt('city', churchX, churchY)
 
   const field = equippedGame()
-  field.field = new Field({ seed: 17 })
+  field.field = new Field({ seed: 17, player: field.player })
   field.field.player.x = 40
   field.field.player.y = 12
 
   const combat = equippedGame()
-  combat.field = new Field({ seed: 17 })
+  combat.field = new Field({ seed: 17, player: combat.player })
   const foe = combat.field.foes.find((candidate) => !candidate.dead)
   combat.field.player.x = foe.x > 1 ? foe.x - 2 : foe.x + 2
   combat.field.player.y = foe.y
@@ -205,13 +211,44 @@ function frames() {
   equipment.shop = 'armor'
   equipment.cursor = 0
 
+  const nox = namedGame('Nyra', 'nox')
+  nox.animationTick = 12
+  nox.walker.placeAt('nox', 90, 32)
+
+  const dungeon = equippedGame('Ayla')
+  dungeon.field = new Dungeon({
+    floor: 2,
+    seed: 31,
+    player: dungeon.player,
+    script: dungeon.scriptSource,
+    x: 57,
+    y: 20
+  })
+
+  const worldBoss = equippedGame('Ayla')
+  worldBoss.field = new BossZone({
+    seed: 27,
+    player: worldBoss.player,
+    script: worldBoss.scriptSource,
+    x: 101,
+    y: 22
+  })
+  worldBoss.animationTick = 9
+
+  const inventory = equippedGame('Ayla')
+  inventory.openInventory()
+
   return {
     menu: { title: 'menu principal', frame: menu.view() },
     nombre: { title: 'nueva partida', frame: name.view() },
     ciudad: { title: 'ciudad', frame: city.view() },
     campo: { title: 'pradera', frame: field.view() },
     combate: { title: 'combate en el mapa', frame: combat.view() },
-    equipo: { title: 'armaduras y equipo', frame: equipment.view() }
+    equipo: { title: 'armaduras y equipo', frame: equipment.view() },
+    nox: { title: 'reino elfico oscuro de nox', frame: nox.view() },
+    dungeon: { title: 'cripta - nivel 2', frame: dungeon.view() },
+    'world-boss': { title: 'ruinas volcanicas del coloso', frame: worldBoss.view() },
+    inventario: { title: 'inventario y equipo', frame: inventory.view() }
   }
 }
 

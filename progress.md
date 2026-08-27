@@ -396,3 +396,138 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
   lados de la frontera. Verificado con 127/127 pruebas, 1039/1039 aserciones,
   lint limpio y smoke test de rutas `TODO OK`.
 - TODO: ninguno para esta primera versión de los reinos rivales.
+
+## Inventario, cinco ranuras y depósito del hogar
+
+- La mochila tiene una pantalla propia accesible con `I` y muestra todos los
+  objetos transportados, su ranura y si están equipados.
+- El equipo se separó en cinco ranuras reales: mano izquierda, mano derecha,
+  pecho, casco y botas. Arma, escudo y las tres protecciones pueden permanecer
+  equipados y aportar estadísticas al mismo tiempo en PvE y PvP.
+- La tienda de armaduras ahora vende por categoría: escudo para la mano derecha,
+  cuero/malla/placas para el pecho, botas para los pies y dos cascos nuevos.
+- Interactuar con el hogar `C` abre el cofre personal. Sus pestañas permiten
+  depositar desde la mochila o retirar; depositar equipo lo quita sin destruirlo.
+- Mochila, equipo y depósito se guardan juntos. La migración v3→v4 mueve las
+  armaduras antiguas de la mano derecha a su ranura corporal correspondiente.
+- Cascos, armaduras, botas, armas y escudo tienen representación simultánea en
+  el héroe compacto sin cambiar su colisión.
+- Revisión visual real en 100x30 del inventario completo y del cofre con un arma
+  depositada. Verificado en 64x16 y 80x24 para conservar el ancho de la terminal.
+- Verificado con 128/128 pruebas y 1067/1067 aserciones; lint y smoke test limpios.
+- TODO: ninguno para esta primera versión del inventario y depósito.
+
+## Escaleras ASCII de la mazmorra
+
+- Las transiciones aisladas `^` y `v` ahora forman parte de escalinatas de cinco
+  filas, con peldaños en perspectiva y remates propios para cisterna, osario y
+  necrópolis real.
+- Se conservaron las coordenadas interactivas y se apartaron los enemigos que
+  tapaban los accesos en los niveles 1 y 2.
+- Las pruebas de conectividad ahora exigen tanto rutas transitables como una
+  escalera completa y varios peldaños visibles en cada acceso.
+- Revisión visual de los cinco accesos en ventanas reales de 36x12. Verificado
+  con 128/128 pruebas, 1077/1077 aserciones, lint y smoke test limpios.
+- TODO: ninguno para este rediseño.
+
+## Botón y lista de controles
+
+- El menú principal incorpora una opción seleccionable `CONTROLES` y todas las
+  vistas de juego muestran el botón ASCII `[? CONTROLES]` en el pie.
+- `?` abre una ayuda superpuesta de dos columnas con exploración, combate,
+  interfaces y acciones generales; `Esc`, `?` o `Enter` vuelven al estado previo.
+- La ayuda bloquea las acciones del mundo mientras está abierta y cabe completa
+  tanto en 80x24 como en el mínimo admitido de 64x16.
+- Verificado con 129/129 pruebas, 1095/1095 aserciones, lint y smoke test limpios.
+- TODO: ninguno para esta ayuda.
+
+## Portones de los reinos en la pradera
+
+- El símbolo aislado `<` del borde oeste fue integrado en una fachada ASCII de
+  trece filas, rotulada `REINO DE RUNA`, con torres, muralla y portón.
+- Se añadió la entrada oscura de NOX en la punta opuesta: su celda `N` está
+  exactamente en el borde este de la pradera y abre el mapa del reino enemigo.
+- Ambos accesos tienen interiores visualmente limpios, caption de proximidad y
+  una explanada rectangular donde no pueden aparecer ni patrullar monstruos.
+- Al salir de RUNA, el registro indica que RUNA queda al oeste y NOX al este.
+- Las pruebas verifican posición extrema, arte completo, áreas seguras y viaje
+  real al reino oscuro.
+- Revisión visual real de ambos extremos en 100x30. Verificado con 130/130
+  pruebas, 1109/1109 aserciones, lint y smoke test limpios.
+- TODO: ninguno para estos accesos.
+
+## Acceso visible al inventario
+
+- Ciudad, pradera, dungeon y world boss muestran primero el botón permanente
+  `[I INVENTARIO]`, junto al botón de controles.
+- `I` abre la mochila y dentro aparece `[I / ESC CERRAR]`; una instrucción fija
+  en el panel indica `ENTER equipar` y `X quitar` aunque el pie sea recortado.
+- La vista conserva todos los botones y acciones esenciales en el tamaño mínimo
+  de terminal de 64x16.
+- Revisión visual real de ciudad e inventario en 64x16. Verificado con 130/130
+  pruebas, 1117/1117 aserciones, lint y smoke test limpios.
+- TODO: ninguno para la visibilidad del inventario.
+
+## Combate con el arma realmente equipada
+
+- La estrategia inicial dejó de sustituir silenciosamente cualquier arma por
+  una espada o ballesta: cada pelea comienza y continúa con la pieza elegida en
+  `I INVENTARIO`.
+- Las instalaciones que todavía conservan exactamente la estrategia inicial
+  antigua se migran a la nueva sin sobrescribir estrategias personalizadas.
+- Las reglas `equip` siguen permitiendo tácticas avanzadas, pero ahora pasan por
+  el inventario real y rechazan cualquier arma que el jugador no posea.
+- El registro de daño identifica el arma usada, por ejemplo
+  `pegas 4 con lanza de guerra`, para que la elección sea visible al atacar.
+- Pruebas de regresión cubren lanza, arco largo, daño propio y el rechazo de una
+  espada no poseída. Verificado con 132/132 pruebas, 1134/1134 aserciones,
+  lint y smoke test de mapas limpios.
+- TODO: ninguno para la selección de arma en combate.
+
+## Coordenadas visibles del mundo
+
+- La ficha incorpora una referencia permanente `X:n Y:n` que se actualiza con cada
+  paso del personaje sin ocupar celdas ni dejar marcas sobre el mapa.
+- Cada posición incluye una referencia corta del área: RUNA, NOX, castillo,
+  ruinas, coliseo, pradera, yermo, nivel de dungeon o world boss.
+- Las coordenadas continúan visibles durante combates e interfaces que conservan
+  la ficha, de modo que un lugar puede reportarse con precisión en cualquier
+  momento.
+- La regresión recorre ciudad y pradera y comprueba tanto el cambio de X/Y como
+  el nombre de la zona. Verificado con 133/133 pruebas y 1141/1141 aserciones.
+- TODO: ninguno para esta primera referencia cartográfica.
+
+## Separación de la cripta, el portal y NOX
+
+- La cripta dejó el borde oriental: su entrada pasó de `X:144 Y:43` a
+  `X:88 Y:43`, en el sector sur interior del mapa.
+- El portal del Coloso pasó de `X:146 Y:12` a `X:112 Y:12`, en el norte-central
+  del yermo.
+- El portón de NOX permanece en `X:159 Y:26`; ahora lo separan 71 columnas de
+  la cripta y 47 del portal, mientras los dos accesos especiales conservan 24
+  columnas entre sí.
+- Las áreas sin monstruos, las transiciones, los puntos seguros de retorno y
+  las animaciones del portal siguen anclados a sus nuevas coordenadas.
+- Las pruebas exigen separación respecto de NOX y entre ambos monumentos.
+- Revisión visual de los tres sectores completada. Verificado con 133/133
+  pruebas, 1144/1144 aserciones, lint y smoke test de mapas limpios.
+- TODO: ninguno para esta reubicación.
+
+## Reino élfico oscuro de NOX
+
+- Investigación previa documentada en `docs/nox-design.md`: arquitectura gótica
+  del Met, asentamientos rupestres de Göreme/UNESCO y hongos bioluminiscentes
+  descritos por Kew Gardens.
+- La explanada de grava se convirtió en una capital excavada con Palacio del
+  Eclipse explorable, corte lunar, jardín luminiscente, Mercado Velado, barrio
+  de linajes y talleres especializados.
+- Agujas, arcos apuntados, pináculos volcánicos, estanques y hongos animados le
+  dan una silueta propia sin copiar una ciudad de otra franquicia.
+- Se añadieron seis habitantes de NOX con oficio, diálogo y servicios: una
+  centinela, un micólogo, un mercader, una sacerdotisa, un forjador y una armera.
+- Dos avenidas y caminos de tres celdas mantienen conectadas la frontera y las
+  puertas `C`, `I`, `P`, `A` y `D`; el jardín incorpora puentes transitables.
+- Revisión visual real en 100x30 del barrio de linajes y del jardín con NPC y
+  animación. Verificado con 134/134 pruebas, 1166/1166 aserciones, lint y smoke
+  test de mapas limpios.
+- TODO: ninguno para esta primera reconstrucción del reino.

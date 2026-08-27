@@ -51,3 +51,11 @@ para acercarse y retirarse durante la exploracion.
 Cada punto de aparicion y cada destino tiene una prueba de conectividad desde la
 escalera de entrada. Otra prueba exige que los tres planos y sus motivos visuales
 sean diferentes para impedir que vuelvan a degradarse a una grilla repetida.
+
+## Escaleras monumentales
+
+Las transiciones ya no flotan como un unico `^` o `v`. Cada acceso ocupa cinco
+filas ASCII con descansos, peldaños en perspectiva y un remate acorde al piso:
+piedra hidraulica en la cisterna, huesos en el osario y ornamentacion real en la
+necropolis. Los glifos `^` y `v` siguen incrustados en el peldaño interactivo, de
+modo que el dibujo mejora la orientacion sin cambiar el control ni la progresion.

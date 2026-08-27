@@ -3,10 +3,22 @@ const { style } = require('bare-tui')
 const fs = require('bare-fs')
 const os = require('bare-os')
 const path = require('bare-path')
-const { Runa, COMBAT_TURN_TICKS, QUESTS, REALMS, normalizeRealm } = require('../lib/game.js')
+const {
+  Runa,
+  COMBAT_TURN_TICKS,
+  QUESTS,
+  REALMS,
+  normalizeRealm,
+  DEFAULT_SCRIPT,
+  LEGACY_DEFAULT_SCRIPT,
+  isLegacyDefaultScript
+} = require('../lib/game.js')
 const { MAPS, TILES, NPC_MASTER_SPRITES, NPC_SPRITES, tileAt } = require('../lib/map.js')
 const {
   Field,
+  RUNA_GATE_ART,
+  NOX_GATE_ART,
+  KINGDOM_GATE_CLEARANCE,
   DUNGEON_ENTRANCE_ART,
   DUNGEON_CLEARANCE,
   WORLD_BOSS_PORTAL_ART,
@@ -133,6 +145,100 @@ test('title screen falls back cleanly in a small terminal', (t) => {
   t.ok(lines.every((line) => line.length === 40))
 })
 
+test('the controls button opens a complete overlay and returns to the previous state', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 80, height: 24 })
+
+  const menu = style.stripAnsi(game.view())
+  t.ok(menu.includes('CONTROLES'), 'the main menu exposes a controls button')
+  game.menuCursor = 3
+  press(game, 'enter')
+  t.is(game.controlsOpen, true, 'the selected button opens the overlay')
+
+  let screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('lista de controles'))
+  t.ok(screen.includes('EXPLORACION'))
+  t.ok(screen.includes('COMBATE'))
+  t.ok(screen.includes('WASD / flechas  mover'))
+  t.ok(screen.includes('ESC  cerrar / volver'))
+  t.ok(screen.split('\n').every((line) => line.length === 80))
+
+  press(game, 'escape')
+  t.is(game.controlsOpen, false)
+  t.is(game.title, true, 'closing controls returns to the title menu')
+
+  game.menuCursor = 1
+  startGame(game, 'Ayla')
+  const position = { mapId: game.walker.mapId, x: game.walker.x, y: game.walker.y }
+  screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('[? CONTROLES]'), 'gameplay keeps a visible controls button')
+  t.ok(screen.includes('[I INVENTARIO]'), 'gameplay keeps a visible inventory button')
+
+  press(game, '?')
+  t.is(game.controlsOpen, true, 'question mark opens controls from gameplay')
+  press(game, 'down')
+  t.is(game.controlsOpen, true, 'movement input cannot leak through the overlay')
+  press(game, 'enter')
+  t.is(game.controlsOpen, false)
+  t.alike(
+    { mapId: game.walker.mapId, x: game.walker.x, y: game.walker.y },
+    position,
+    'closing the list restores gameplay without moving the hero'
+  )
+
+  game.update({ type: 'resize', width: 64, height: 16 })
+  press(game, '?')
+  screen = style.stripAnsi(game.view())
+  t.is(screen.split('\n').length, 16)
+  t.ok(screen.split('\n').every((line) => line.length === 64))
+  t.ok(screen.includes('CTRL+C'), 'the full list survives at the minimum supported size')
+})
+
+test('the HUD coordinates follow the hero across city and field movement', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 100, height: 30 })
+  startGame(game, 'Cartografa')
+  game.walker.placeAt('city', 160, 130)
+
+  let screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('X:160 Y:130'), 'the city position is visible in the HUD')
+  t.ok(game.sheet().coordinates.area === 'RUNA', 'the coordinates name their map')
+
+  const directions = [
+    { key: 'right', dx: 1, dy: 0 },
+    { key: 'left', dx: -1, dy: 0 },
+    { key: 'down', dx: 0, dy: 1 },
+    { key: 'up', dx: 0, dy: -1 }
+  ]
+  const step = directions.find(({ dx, dy }) => {
+    const x = game.walker.x + dx
+    const y = game.walker.y + dy
+    return !tileAt(MAPS.city, x, y).solid && !game.npcAt(x, y)
+  })
+  t.ok(step, 'the fixture has a free neighbouring tile')
+  press(game, step.key)
+  screen = style.stripAnsi(game.view())
+  t.ok(
+    screen.includes(`X:${game.walker.x} Y:${game.walker.y}`),
+    'the displayed city coordinates change with movement'
+  )
+
+  game.field = new Field({ player: game.player, seed: 27 })
+  let coords = game.sheet().coordinates
+  t.alike(coords, { x: game.field.player.x, y: game.field.player.y, area: 'pradera' })
+  press(game, 'right')
+  coords = game.sheet().coordinates
+  t.alike(
+    coords,
+    { x: game.field.player.x, y: game.field.player.y, area: 'pradera' },
+    'field coordinates update and preserve the broad zone name'
+  )
+  t.ok(
+    style.stripAnsi(game.view()).includes(`X:${coords.x} Y:${coords.y}`),
+    'field coordinates remain visible in the rendered HUD'
+  )
+})
+
 test('new game asks for a name and puts its initial on the hero', (t) => {
   const game = new Runa({ presence: false })
   game.onKey({ type: 'key', is: (...keys) => keys.includes('x') })
@@ -222,6 +328,55 @@ test('the two enemy kingdoms are joined by visible two-way frontier gates', (t) 
     MAPS.city.arrivals.noxBorder,
     'returning lands beside the eastern frontier instead of the southern meadow gate'
   )
+})
+
+test('NOX is a connected dark-elf capital with distinct living districts', (t) => {
+  const nox = MAPS.nox
+  const art = nox.rows.join('\n')
+  for (const label of [
+    'palacio del eclipse',
+    'corte de sombras',
+    'jardin luminiscente',
+    'mercado velado',
+    'santuario lunar',
+    'casa del linaje'
+  ]) {
+    t.ok(art.includes(label), `${label} gives NOX a readable district`)
+  }
+  t.ok((art.match(/\^/g) || []).length >= 20, 'pointed spires establish a vertical skyline')
+  t.ok((art.match(/~/g) || []).length >= 20, 'luminous pools break up the volcanic stone')
+  t.ok(nox.npcs.length >= 6, 'the kingdom is inhabited instead of being an empty service map')
+  t.ok(
+    nox.npcs.some((npc) => npc.role.includes('micologo')),
+    'a fungal gardener explains the luminous ecosystem'
+  )
+  t.ok(
+    nox.npcs.some((npc) => npc.role.includes('eclipse')),
+    'the palace has its own dark-elf sentinel'
+  )
+  t.is(nox.animations.length, 1, 'the garden publishes a dedicated glow animation')
+  t.is(nox.animations[0].frames.length, 3, 'the fungal light pulses through three phases')
+
+  const queue = [[nox.spawn.x, nox.spawn.y]]
+  const reached = new Set()
+  while (queue.length) {
+    const [x, y] = queue.shift()
+    const key_ = `${x},${y}`
+    if (reached.has(key_) || tileAt(nox, x, y).solid) continue
+    reached.add(key_)
+    queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1])
+  }
+  for (const glyph of ['C', 'I', 'P', 'A', 'D', 'R']) {
+    const point = locateGlyph(nox, glyph)
+    t.ok(point && reached.has(`${point.x},${point.y}`), `${glyph} is reachable from the plaza`)
+  }
+  for (const point of [
+    { x: 90, y: 31, name: 'palace court' },
+    { x: 32, y: 44, name: 'luminous garden bridge' },
+    { x: 130, y: 50, name: 'veiled market' }
+  ]) {
+    t.ok(reached.has(`${point.x},${point.y}`), `${point.name} belongs to the public route`)
+  }
 })
 
 test('three save slots create, autosave and load persistent progress', (t) => {
@@ -557,9 +712,14 @@ test('inventory equips five slots and the home chest deposits persistent items',
     game.player.equip(id)
   }
 
-  press(game, 'i')
   let screen = style.stripAnsi(game.view())
+  t.ok(screen.includes('[I INVENTARIO]'), 'the city footer announces the inventory key')
+  press(game, 'i')
+  screen = style.stripAnsi(game.view())
   t.ok(screen.includes('INVENTARIO'))
+  t.ok(screen.includes('[I / ESC CERRAR]'), 'the inventory shows how to close it')
+  t.ok(screen.includes('ENTER equipar'), 'the inventory shows how to equip selected gear')
+  t.ok(screen.includes('X quitar'), 'the inventory shows how to remove equipped gear')
   t.ok(screen.includes('izq / espada'))
   t.ok(screen.includes('der 0 escudo'))
   t.ok(screen.includes('pecho { cuero liviano'))
@@ -572,7 +732,11 @@ test('inventory equips five slots and the home chest deposits persistent items',
     game.update({ type: 'resize', width, height })
     const lines = style.stripAnsi(game.view()).split('\n')
     t.is(lines.length, height, `inventory keeps ${height} terminal rows`)
-    t.ok(lines.every((line) => line.length === width), `inventory keeps ${width} columns`)
+    t.ok(lines.join('\n').includes('[I / ESC CERRAR]'), `inventory key stays visible at ${width}`)
+    t.ok(
+      lines.every((line) => line.length === width),
+      `inventory keeps ${width} columns`
+    )
   }
   game.update({ type: 'resize', width: 100, height: 30 })
   press(game, 'escape')
@@ -1363,28 +1527,60 @@ test('the equipment rows follow what is actually in hand', (t) => {
 
   t.ok(pickAFight(game), 'a fight starts out in the field')
 
-  // The script equips at fight time, so mid fight the sheet has to follow the
-  // world rather than the persistent record. Both rows used to read `-` here
-  // while the arena printed `alcance 14` right beside them.
-  //
-  // Equipping costs a few ticks: the rules are re-read every tick and a swap
-  // only lands between swings, so at the instant the fight opens both hands
-  // are still empty. Waiting for the hand to fill is the point of the test,
-  // not an accident of timing.
-  for (let i = 0; i < 60; i++) {
-    const c = game.field.combat
-    if (!c || c.world.held.left || c.world.held.right) break
-    press(game, 'f')
-  }
+  // The inventory loadout enters combat immediately. The sheet keeps reading
+  // the live world because an explicit, owned `equip` rule may still switch it.
   t.ok(game.field.combat, 'the fight is still running')
   const held = game.field.combat.world.held
-  t.ok(held.left || held.right, 'the script put something in a hand')
+  t.is(held.left && held.left.id, 'sword', 'the equipped weapon entered the fight')
 
   const fight = style.stripAnsi(game.view())
   const wielded = held.left || held.right
   t.ok(fight.indexOf(wielded.name) !== -1, 'the sheet names the weapon actually in hand')
   t.is(game.sheet().left, held.left, 'the left row is the world truth, not a stale copy')
   t.is(game.sheet().right, held.right, 'and so is the right row')
+})
+
+test('combat keeps the equipped weapon instead of silently changing to a sword', (t) => {
+  t.ok(isLegacyDefaultScript(LEGACY_DEFAULT_SCRIPT), 'the shipped legacy strategy is detected')
+  t.absent(isLegacyDefaultScript(DEFAULT_SCRIPT), 'the new strategy no longer auto-equips weapons')
+
+  for (const id of ['spear', 'longbow']) {
+    const game = new Runa({ presence: false })
+    game.update({ type: 'resize', width: 100, height: 30 })
+    startGame(game, id)
+    game.player.items.add(id)
+    t.ok(game.player.equip(id).ok, `${id} can be equipped from inventory`)
+    t.ok(pickAFight(game), `${id} reaches a field fight`)
+
+    const world = game.field.combat.world
+    const before = world.foe.hp
+    t.is(world.held.left && world.held.left.id, id, `${id} starts in the left hand`)
+    press(game, 'f')
+    t.is(world.held.left && world.held.left.id, id, `${id} remains after attacking`)
+    t.is(before - world.foe.hp, 1 + CONTENT.items[id].atk, `${id} supplies its own damage`)
+    t.ok(
+      world.log.some((line) => line.text.includes(`con ${CONTENT.items[id].name}`)),
+      `the combat log names ${id}`
+    )
+  }
+})
+
+test('combat scripts cannot replace equipment with an unowned weapon', (t) => {
+  const game = new Runa({ presence: false })
+  game.update({ type: 'resize', width: 100, height: 30 })
+  startGame(game)
+  game.player.items.add('spear')
+  game.player.equip('spear')
+  t.ok(pickAFight(game), 'the equipped spear enters combat')
+
+  game.field.setScript('equip sword')
+  press(game, 'f')
+
+  t.is(game.field.combat.world.held.left.id, 'spear', 'the unowned sword is rejected')
+  t.ok(
+    game.field.combat.world.log.some((line) => line.text.includes('no tenes espada')),
+    'the rejection explains why the weapon did not change'
+  )
 })
 
 test('the payout stays on the numbers the game was actually tuned against', (t) => {
@@ -1412,6 +1608,8 @@ test('the gold the log announces is the gold the purse receives', (t) => {
   const game = new Runa({ presence: false })
   game.update({ type: 'resize', width: 88, height: 26 })
   startGame(game)
+  game.player.items.add('dagger')
+  game.player.equip('dagger')
 
   t.ok(pickAFight(game), 'a fight starts out in the field')
 
@@ -1633,7 +1831,9 @@ test('t returns from the field to the city outside combat', (t) => {
   game.walker.placeAt('city', gate.x, gate.y)
   press(game, 'e')
   t.ok(game.field, 'the player is in the field')
-  t.ok(style.stripAnsi(game.view()).includes('t volver a la ciudad'))
+  const fieldScreen = style.stripAnsi(game.view())
+  t.ok(fieldScreen.includes('t volver a la ciudad'))
+  t.ok(fieldScreen.includes('[I INVENTARIO]'), 'the meadow also exposes the inventory button')
 
   press(game, 't')
   t.absent(game.field, 't closes the excursion')
@@ -1866,6 +2066,10 @@ test('the expanded meadow exposes a visible entrance to the crypt', (t) => {
   const field = new Field({ seed: 27 })
   t.ok(field.width >= 160, 'the meadow is substantially wider than before')
   t.ok(field.height >= 48, 'the meadow gained room in both axes')
+  t.ok(
+    field.noxGate.x - field.dungeonEntrance.x > KINGDOM_GATE_CLEARANCE.x + 10,
+    'the crypt is in the southern interior, not beside NOX'
+  )
   field.player.x = field.dungeonEntrance.x - 3
   field.player.y = field.dungeonEntrance.y
   const rows = field.render(48, 18, false)
@@ -1901,15 +2105,82 @@ test('the expanded meadow exposes a visible entrance to the crypt', (t) => {
   )
 })
 
+test('the meadow has monumental kingdom gates on opposite map edges', (t) => {
+  const meadow = new Field({ seed: 27 })
+  t.is(meadow.gate.x, 0, 'the RUNA gate touches the western edge')
+  t.is(meadow.noxGate.x, meadow.width - 1, 'the NOX gate touches the eastern edge')
+  t.ok(meadow.noxGate.x - meadow.gate.x >= 150, 'the kingdoms occupy opposite ends')
+
+  meadow.player.x = meadow.gate.x
+  meadow.player.y = meadow.gate.y
+  const runaRows = meadow.render(44, 18, false)
+  t.ok(
+    runaRows.some((row) => row.includes('REINO DE RUNA')),
+    'the common realm names itself'
+  )
+  t.ok(
+    runaRows.some((row) => row.includes('<==|#===')),
+    'RUNA has a built gate, not one glyph'
+  )
+
+  meadow.player.x = meadow.noxGate.x
+  meadow.player.y = meadow.noxGate.y
+  const noxRows = meadow.render(44, 18, false)
+  t.ok(
+    noxRows.some((row) => row.includes('REINO DE NOX')),
+    'the dark realm names itself'
+  )
+  t.ok(
+    noxRows.some((row) => row.includes('#|==N')),
+    'NOX has a built gate on the edge'
+  )
+  t.is(RUNA_GATE_ART.length, 13)
+  t.is(NOX_GATE_ART.length, 13)
+
+  const outsideGate = (foe, gate) =>
+    Math.abs(foe.x - gate.x) >= KINGDOM_GATE_CLEARANCE.x ||
+    Math.abs(foe.y - gate.y) >= KINGDOM_GATE_CLEARANCE.y
+  t.ok(
+    meadow.foes.every((foe) => outsideGate(foe, meadow.gate) && outsideGate(foe, meadow.noxGate)),
+    'both monumental approaches remain free of monster spawns'
+  )
+
+  meadow.player.x = meadow.gate.x + 1
+  meadow.player.y = meadow.gate.y
+  const events = meadow.walk(-1, 0)
+  t.ok(
+    events.some((event) => event.type === 'town'),
+    'walking through < returns to RUNA'
+  )
+
+  const game = new Runa({ presence: false })
+  startGame(game, 'Ayla')
+  game.field = new Field({ player: game.player, seed: 27 })
+  game.field.player.x = game.field.noxGate.x - 1
+  game.field.player.y = game.field.noxGate.y
+  press(game, 'right')
+  t.absent(game.field, 'walking through N closes the meadow excursion')
+  t.is(game.walker.mapId, 'nox', 'the eastern gate enters the dark realm')
+  t.ok(game.log.some((line) => line.includes('porton oriental')))
+})
+
 test('the yermo portal owns a separate volcanic world-boss map', (t) => {
   const meadow = new Field({ seed: 27 })
   t.absent(meadow.boss, 'the Colossus was removed from the open meadow')
+  t.ok(
+    meadow.noxGate.x - meadow.worldBossPortal.x > KINGDOM_GATE_CLEARANCE.x + 10,
+    'the portal is separated from the NOX border'
+  )
+  t.ok(
+    Math.abs(meadow.worldBossPortal.x - meadow.dungeonEntrance.x) >= 20,
+    'portal and crypt occupy distinct sectors'
+  )
   meadow.player.x = meadow.worldBossPortal.x - 5
   meadow.player.y = meadow.worldBossPortal.y
   const portalRows = meadow.render(48, 18, false)
   t.ok(
     portalRows.some((row) => row.includes('~~O~~')),
-    'the north-east portal has a visible energy core'
+    'the northern yermo portal has a visible energy core'
   )
   t.ok(
     portalRows.some((row) => row.includes('portal-del-coloso')),
@@ -2077,6 +2348,11 @@ test('the crypt progresses through three cleared monster floors', (t) => {
 test('every dungeon floor has a sourced identity and a traversable authored route', (t) => {
   const layouts = [1, 2, 3].map((floor) => floorRows(floor))
   const blocked = new Set(['#', '|', '-', '=', '[', ']', '~', '%', 'o', '+'])
+  const stairWindow = (layout, point) =>
+    layout.rows
+      .slice(Math.max(0, point.y - 5), Math.min(layout.rows.length, point.y + 6))
+      .map((row) => row.slice(Math.max(0, point.x - 10), point.x + 11))
+      .join('\n')
   const reachable = (layout) => {
     const queue = [layout.up]
     const visited = new Set([`${layout.up.x},${layout.up.y}`])
@@ -2132,6 +2408,20 @@ test('every dungeon floor has a sourced identity and a traversable authored rout
   for (const layout of layouts) {
     const visited = reachable(layout)
     const destination = layout.down || layout.spawnPoints[layout.spawnPoints.length - 1]
+    const upArt = stairWindow(layout, layout.up)
+    t.ok(upArt.includes('/___^___/'), `${layout.name} draws a complete ascent in ASCII`)
+    t.ok(
+      (upArt.match(/_{3,}/g) || []).length >= 4,
+      `${layout.name} gives the ascent several visible steps`
+    )
+    if (layout.down) {
+      const downArt = stairWindow(layout, layout.down)
+      t.ok(downArt.includes('___v___'), `${layout.name} draws a complete descent in ASCII`)
+      t.ok(
+        (downArt.match(/_{3,}/g) || []).length >= 4,
+        `${layout.name} gives the descent several visible steps`
+      )
+    }
     t.ok(
       visited.has(`${destination.x},${destination.y}`),
       `${layout.name} connects its entrance to its destination`

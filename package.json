@@ -1,7 +1,7 @@
 {
   "name": "runa",
-  "version": "0.1.0",
-  "description": "Pear Runtime CLI boilerplate using Bare with OTA updater support.",
+  "version": "0.2.0",
+  "description": "RPG ASCII de exploración, combate e inventario para terminal.",
   "private": true,
   "bin": "bin.mjs",
   "upgrade": "pear://hg11t8ipq5kkc7d4prdmu4mapi18yqm7p43ee5dzmnf7y1yjyo9o",
@@ -49,11 +49,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/holepunchto/hello-pear-bare.git"
+    "url": "https://github.com/Bitcoindefi/runa.git"
   },
-  "author": "Holepunch Inc",
+  "author": "Bitcoindefi",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/holepunchto/hello-pear-bare/issues"
+    "url": "https://github.com/Bitcoindefi/runa/issues"
   }
 }

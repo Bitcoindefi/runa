@@ -2,24 +2,45 @@
 
 Un RPG ASCII para terminal donde exploras una ciudad, recorres la pradera y escribes las reglas que usa tu personaje al combatir.
 
+**Versión actual: 0.2.0 — Reinos y exploración**
+
 El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el arte dentro de una grilla ASCII estable. El personaje, los NPC y los monstruos se mueven sin borrar el terreno ni romper las líneas de la consola.
 
 ![Menú principal de RUNA](docs/screens/menu.png)
 
+## Novedades de la versión 0.2.0
+
+- El mundo ahora une los reinos rivales de RUNA y NOX mediante portones completos en los extremos de la pradera; el reino natal se elige al crear el personaje.
+- NOX fue reconstruido como una capital élfica oscura explorable, con Palacio del Eclipse, corte lunar, jardín bioluminiscente animado, Mercado Velado, servicios y habitantes propios.
+- La nueva cripta tiene tres niveles consecutivos, escaleras ASCII, slimes, cuatro clases de esqueletos y un Rey Esqueleto final.
+- El Coloso Rúnico fue reubicado en un mapa independiente de ruinas volcánicas, lava y puentes, al que se entra por un portal monumental del yermo.
+- El inventario incorpora mano izquierda, mano derecha, pecho, casco y botas. Armas, escudo y armaduras pueden equiparse simultáneamente y guardarse en el cofre del hogar.
+- La plaza suma estatua con rankings de nivel y PvP, caballero de misiones, fuente animada y controles desplegables.
+- El combate conserva el arma elegida —lanza, arco, ballesta, daga o martillo— y la ficha muestra coordenadas `X/Y` para ubicar cualquier punto del mundo.
+
+![Capital élfica oscura de NOX](docs/screens/nox.png)
+
+![Nivel 2 de la cripta](docs/screens/dungeon.png)
+
+![Ruinas volcánicas del Coloso](docs/screens/world-boss.png)
+
+![Inventario y cinco ranuras de equipo](docs/screens/inventario.png)
+
 ## Características actuales
 
 - Ciudad de `320x200` caracteres con barrios, iglesia, taberna, herrería, armería y un castillo explorable.
-- Dos reinos rivales, RUNA y NOX, con elección de origen y una frontera transitable en ambos sentidos.
+- Dos reinos rivales, RUNA y NOX, con elección de origen y portones monumentales en extremos opuestos de la pradera.
 - Salón del trono con rey, mobiliario real y una escalera propia hacia las ruinas.
 - Portón funcional que transporta al jugador a la pradera.
-- Pradera ampliada con una cripta de tres niveles y un portal al world boss.
+- Pradera ampliada con una cripta de tres niveles, escalinatas ASCII monumentales y un portal al world boss.
 - Arena volcánica independiente con lava, ruinas y el Coloso Rúnico.
 - NPC con arte y oficios diferenciados.
 - Monstruos que patrullan el mapa sin detener el movimiento del mundo.
 - Combate sobre la propia pradera, sin cambiar a una pantalla separada.
 - Nueva partida con nombre personalizado e inicial visible en el pecho del héroe.
 - Tres ranuras persistentes con carga y autoguardado de progreso.
-- Inventario y equipamiento separados, con ranuras para arma y armadura.
+- Botón permanente `[I INVENTARIO]`, depósito en el hogar y cinco ranuras de equipo independientes.
+- Botón `[? CONTROLES]` y ayuda desplegable disponible desde el menú o la partida.
 - Estrategias de combate escritas en `script.txt` y recargadas mientras juegas.
 - Presencia opcional entre jugadores mediante Hyperswarm.
 - Estatua de los héroes en la plaza con rankings por nivel y resultados PvP.
@@ -31,7 +52,9 @@ El menú principal separa claramente `Continuar`, `Nueva partida`, `Cargar parti
 
 La creación permite elegir con izquierda/derecha si el personaje nace en RUNA o en el reino enemigo de NOX. Cada origen tiene su propio punto de inicio y templo de reaparición. La frontera oriental de RUNA conecta con la frontera occidental de NOX, y se puede cruzar caminando en ambos sentidos.
 
-El juego autoguarda después de cada acción y al salir. Conserva nombre, reino natal, nivel, vida, oro, experiencia, pociones, inventario, equipo y posición en la ciudad, NOX, el castillo, las ruinas, la pradera, la cripta o la arena volcánica. También conserva el progreso de la mazmorra y la vida del world boss. La ranura activa aparece en el pie de la pantalla como `autoguardado R1`, `R2` o `R3`.
+NOX es una capital élfica oscura excavada en una caverna volcánica. El Palacio del Eclipse, la corte lunar, un jardín de hongos bioluminiscentes, el Mercado Velado y los barrios de artesanos sustituyen la antigua explanada vacía. Seis habitantes propios explican su cultura y sus servicios; las dos avenidas principales mantienen todas las puertas y distritos conectados. Las decisiones visuales y sus [fuentes de inspiración están documentadas](docs/nox-design.md).
+
+El juego autoguarda después de cada acción y al salir. Conserva nombre, reino natal, nivel, vida, oro, experiencia, pociones, inventario, equipo, depósito del hogar y posición en la ciudad, NOX, el castillo, las ruinas, la pradera, la cripta o la arena volcánica. También conserva el progreso de la mazmorra y la vida del world boss. La ranura activa aparece en el pie de la pantalla como `autoguardado R1`, `R2` o `R3`.
 
 La primera letra alfanumérica se convierte en el emblema del pecho. Por ejemplo, **Ayla** aparece como `A`:
 
@@ -57,7 +80,9 @@ Las puertas se activan al pisarlas. El gran portón del sur conecta con la prade
 
 ## La pradera
 
-La pradera combina caminos, vegetación, agua y zonas de distinta dificultad. Mosquitos, espectros y gólems tienen sprites compactos y se mueven por su cuenta. En el sudeste, la entrada `X` abre una cripta de tres niveles; en el nordeste del yermo, el portal `O` lleva a las ruinas volcánicas del Coloso Rúnico.
+La pradera combina caminos, vegetación, agua y zonas de distinta dificultad. Mosquitos, espectros y gólems tienen sprites compactos y se mueven por su cuenta. El borde oeste contiene el portón completo de RUNA, cuyo paso `<` vuelve a la ciudad; en la punta opuesta, contra el borde este, el portón oscuro `N` entra al reino de NOX. Ambos accesos tienen fachada, nombre y una zona despejada de monstruos. Lejos de esa frontera, la entrada `X` abre una cripta de tres niveles en el sur interior y el portal `O` espera en el norte-central del yermo para llevar a las ruinas volcánicas del Coloso Rúnico.
+
+La ficha muestra siempre la posición actual como `X:n Y:n` junto al mapa o zona. Las coordenadas cambian con cada paso y distinguen RUNA, NOX, castillo, ruinas, coliseo, pradera, yermo, cada nivel del dungeon y el mapa del world boss. Podés usar esa referencia para señalar un lugar concreto al reportar un problema o pedir un cambio.
 
 La arena del world boss es un mapa independiente de ceniza, edificios destruidos y ríos de lava. La lava bloquea el paso: hay que cruzar por los puentes de piedra y conservar espacio para esquivar los poderes del Coloso. El mismo portal `O` permite volver al yermo.
 
@@ -73,29 +98,28 @@ El combate empieza cuando la hitbox del jugador toca la de un monstruo. Los dos 
 
 ![Combate dentro de la pradera](docs/screens/combate.png)
 
-Cada pulsación de `F`, `Espacio` o una dirección contra el enemigo resuelve un intercambio. La estrategia decide qué arma usar; la tecla solamente hace avanzar el turno visible.
+Cada pulsación de `F`, `Espacio` o una dirección contra el enemigo resuelve un intercambio. El arma elegida en `I INVENTARIO` permanece en la mano durante el combate: lanza, arco, ballesta, daga y martillo conservan su daño, alcance, velocidad y dibujo propios al golpear. La tecla solamente hace avanzar el turno visible.
 
 El archivo `script.txt` se vuelve a leer durante el combate:
 
 ```text
 ?hp < 8
  use potion
-:?foe.dist >= 5
- equip crossbow
-:
- equip sword
 ```
 
-Una estrategia solo puede equipar objetos que el jugador realmente posee.
+La estrategia inicial no cambia armas por su cuenta. Si querés una estrategia que alterne equipo durante la pelea, podés añadir reglas `equip`, pero solo se aplican a objetos que el jugador realmente posee; una orden inválida nunca reemplaza el arma equipada desde el inventario.
 
 ## Armas, armaduras y tiendas
 
-Inventario y equipo no son lo mismo. Podés llevar **dos piezas equipadas al mismo tiempo**: un arma y una armadura. Comprar un objeto lo añade al inventario y lo equipa automáticamente en su ranura sin quitar la pieza de la otra ranura:
+Inventario y equipo no son lo mismo. Podés llevar simultáneamente un arma en la mano izquierda, un escudo en la derecha, armadura de pecho, casco y botas. Comprar un objeto lo añade a la mochila y lo equipa automáticamente en su ranura sin quitar objetos de las otras cuatro:
 
-| Ranura   | Objetos                                             | Efecto                               |
-| -------- | --------------------------------------------------- | ------------------------------------ |
-| Arma     | daga, espada, lanza, ballesta, martillo, arco largo | Ataque, alcance y velocidad de golpe |
-| Armadura | cuero, escudo, botas, cota de malla, placas         | Defensa o velocidad de movimiento    |
+| Ranura         | Objetos                                             | Efecto                               |
+| -------------- | --------------------------------------------------- | ------------------------------------ |
+| Mano izquierda | daga, espada, lanza, ballesta, martillo, arco largo | Ataque, alcance y velocidad de golpe |
+| Mano derecha   | escudo                                              | Defensa sin quitar el arma           |
+| Pecho          | cuero, cota de malla, placas                        | Defensa y movilidad                  |
+| Casco          | capucha de cuero, yelmo de hierro                   | Defensa de la cabeza                 |
+| Botas          | botas                                               | Velocidad de movimiento              |
 
 ![Tienda de armaduras y equipo](docs/screens/equipo.png)
 
@@ -107,33 +131,42 @@ En una tienda:
 
 El escudo solo aparece junto al personaje cuando está equipado y reduce en `2` el daño de cada golpe, con un daño mínimo de `1`.
 
-La daga y el cuero liviano cuestan `15` de oro cada uno, así que una partida nueva puede probar inmediatamente las dos ranuras con sus `30` de oro iniciales. Las piezas posteriores intercambian alcance, daño, defensa y velocidad; no son mejoras lineales.
+El botón `[I INVENTARIO]` permanece visible en ciudad, pradera, dungeon y world boss. La tecla `I` abre la mochila para equipar o quitar objetos; dentro, `Enter` equipa el arma o armadura seleccionada y `X` la quita. Al interactuar con `C`, el hogar abre un cofre personal: izquierda/derecha cambia entre mochila y depósito, y `Enter` deposita o retira. Depositar una pieza equipada la quita de su ranura de forma segura; el objeto y el contenido del cofre persisten en el autoguardado.
+
+La daga y el cuero liviano cuestan `15` de oro cada uno, así que una partida nueva puede probar inmediatamente arma y pecho con sus `30` de oro iniciales. Las piezas posteriores intercambian alcance, daño, defensa y velocidad; no son mejoras lineales.
 
 ## Controles
 
-| Contexto         | Teclas                        | Acción                              |
-| ---------------- | ----------------------------- | ----------------------------------- |
-| Menú principal   | flechas / `W` / `S`           | Elegir una opción                   |
-| Menú principal   | `Enter` / `Espacio`           | Aceptar la opción                   |
-| Menú principal   | `N`                           | Comenzar una partida nueva          |
-| Ranuras          | flechas / `W` / `S`           | Elegir una ranura                   |
-| Ranuras          | `Enter`, `N`, `Esc`           | Cargar, reemplazar o volver         |
-| Nombre y reino   | escribir, ←/→, `Enter`, `Esc` | Editar, elegir origen o volver      |
-| Ciudad y pradera | `WASD` / flechas              | Moverse                             |
-| Mundo            | `E` / `Enter` / `Espacio`     | Hablar o interactuar                |
-| Jugador cercano  | `E`                           | Enviar un desafío PvP               |
-| Estatua central  | `E`                           | Abrir rankings de nivel y PvP       |
-| Rankings         | izquierda/derecha / `Tab`     | Cambiar clasificación               |
-| Invitación PvP   | `Enter` / `N`                 | Aceptar o rechazar                  |
-| Coliseo PvP      | `WASD`, `F`, `R`              | Moverse, atacar o rendirse          |
-| Ciudad           | `V`                           | Abrir Wallet y PvP                  |
-| Wallet           | `A` / `Enter`, `X`, `Esc`     | Vincular, desvincular o volver      |
-| Pradera          | `T`                           | Volver a la ciudad fuera de combate |
-| Combate          | `F` / `Espacio` / `Enter`     | Resolver un intercambio             |
-| Tienda           | flechas, `Enter`, `X`, `Esc`  | Elegir, equipar, quitar o salir     |
-| Juego            | `R`                           | Recargar `script.txt`               |
-| Juego            | `?`                           | Mostrar dónde está el script        |
-| Juego            | `Q` / `Ctrl+C`                | Salir                               |
+El botón `CONTROLES` del menú principal y el botón `[? CONTROLES]` del pie abren
+la misma lista de ayuda. También puede abrirse directamente con `?`; `Esc`, `?`
+o `Enter` la cierran y devuelven a la pantalla anterior.
+
+| Contexto         | Teclas                        | Acción                               |
+| ---------------- | ----------------------------- | ------------------------------------ |
+| Menú principal   | flechas / `W` / `S`           | Elegir una opción                    |
+| Menú principal   | `Enter` / `Espacio`           | Aceptar la opción                    |
+| Menú principal   | `N`                           | Comenzar una partida nueva           |
+| Ranuras          | flechas / `W` / `S`           | Elegir una ranura                    |
+| Ranuras          | `Enter`, `N`, `Esc`           | Cargar, reemplazar o volver          |
+| Nombre y reino   | escribir, ←/→, `Enter`, `Esc` | Editar, elegir origen o volver       |
+| Ciudad y pradera | `WASD` / flechas              | Moverse                              |
+| Mundo            | `E` / `Enter` / `Espacio`     | Hablar o interactuar                 |
+| Jugador cercano  | `E`                           | Enviar un desafío PvP                |
+| Estatua central  | `E`                           | Abrir rankings de nivel y PvP        |
+| Rankings         | izquierda/derecha / `Tab`     | Cambiar clasificación                |
+| Invitación PvP   | `Enter` / `N`                 | Aceptar o rechazar                   |
+| Coliseo PvP      | `WASD`, `F`, `R`              | Moverse, atacar o rendirse           |
+| Ciudad           | `V`                           | Abrir Wallet y PvP                   |
+| Wallet           | `A` / `Enter`, `X`, `Esc`     | Vincular, desvincular o volver       |
+| Pradera          | `T`                           | Volver a la ciudad fuera de combate  |
+| Bordes pradera   | caminar sobre `<` / `N`       | Entrar a RUNA o al reino de NOX      |
+| Combate          | `F` / `Espacio` / `Enter`     | Resolver un intercambio              |
+| Tienda           | flechas, `Enter`, `X`, `Esc`  | Elegir, equipar, quitar o salir      |
+| Inventario       | `I`, flechas, `Enter`, `X`    | Abrir, elegir, equipar o quitar      |
+| Hogar `C`        | `E`, ←/→, `Enter`, `X`, `Esc` | Depositar, retirar o equipar         |
+| Juego            | `R`                           | Recargar `script.txt`                |
+| Juego            | `?`                           | Abrir o cerrar la lista de controles |
+| Juego            | `Q` / `Ctrl+C`                | Salir                                |
 
 La terminal mínima es de **64x16**. Para apreciar el mapa y la ficha lateral se recomienda **120x34** o más.
 
@@ -148,7 +181,7 @@ externo. Consulta [docs/wallet.md](docs/wallet.md).
 Requiere Node.js y npm para instalar las dependencias. El juego se ejecuta con el runtime Bare incluido en el proyecto.
 
 ```bash
-git clone https://github.com/leocagli/runa.git
+git clone https://github.com/Bitcoindefi/runa.git
 cd runa
 npm install
 npm start -- --solo
@@ -176,15 +209,15 @@ npx bare test/map.smoke.js
 
 Estado revisado de esta versión:
 
-- `127/127` pruebas correctas.
-- `1039/1039` aserciones correctas.
+- `134/134` pruebas correctas.
+- `1166/1166` aserciones correctas.
 - Formato y lint limpios.
 - RUNA, NOX, fronteras, puertas, portón, pradera y dungeon validados por el smoke test.
 - Capturas inspeccionadas y recortadas al borde exacto de la terminal.
 
 ## Capturas reproducibles
 
-Las imágenes de este README no son maquetas escritas a mano. El script [scripts/readme-screens.js](scripts/readme-screens.js) construye cada estado usando `Runa`, `Field` y el render real del juego, y genera HTML con los colores ANSI listo para capturar.
+Las imágenes de este README no son maquetas escritas a mano. El script [scripts/readme-screens.js](scripts/readme-screens.js) construye cada estado usando `Runa`, `Field`, `Dungeon`, `BossZone` y el render real del juego, y genera HTML con los colores ANSI listo para capturar.
 
 ```bash
 npx bare scripts/readme-screens.js .readme-screens
