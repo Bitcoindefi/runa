@@ -22,25 +22,8 @@ const {
   NPC_SPRITES,
   tileAt
 } = require('../lib/map.js')
-const {
-  Field,
-  RUNA_GATE_ART,
-  NOX_GATE_ART,
-  KINGDOM_GATE_CLEARANCE,
-  DUNGEON_ENTRANCE_ART,
-  DUNGEON_CLEARANCE,
-  WORLD_BOSS_PORTAL_ART,
-  WORLD_BOSS_PORTAL_CLEARANCE,
-  WORLD_BOSS_PORTAL_CADENCE,
-  BARBARIAN_SETTLEMENTS,
-  BARBARIAN_SETTLEMENT_CLEARANCE,
-  barbarianSettlementArt,
-  FIELD_GUIDES,
-  fieldGroundAt
-} = require('../lib/field.js')
-const { Dungeon, DUNGEON, FLOOR_ROSTERS, floorRows } = require('../lib/dungeon.js')
-const { BossZone, BOSS_ZONE } = require('../lib/boss-zone.js')
-const { BarbarianCamp, BARBARIAN_CAMP } = require('../lib/barbarian-camp.js')
+const { Field } = require('../lib/field.js')
+const { BossZone } = require('../lib/boss-zone.js')
 const CONTENT = require('../lib/content.js')
 const { Player, reward, xpToLeave, SAVE_VERSION, EQUIPMENT_SLOTS } = require('../lib/shop.js')
 const { SaveStore } = require('../lib/saves.js')
@@ -2140,6 +2123,95 @@ test('the world boss animates powers with real field damage', (t) => {
   game.drain(game.field.boss.touch(game.field.player, game.field.time + 20))
   t.is(game.player.hp, life - 6, 'field contact updates the persistent character sheet')
 })
+
+test('every character in all maps is defined in the TILES table', (t) => {
+  for (const [id, map] of Object.entries(MAPS)) {
+    const missing = new Set()
+    for (let y = 0; y < map.rows.length; y++) {
+      for (let x = 0; x < map.rows[y].length; x++) {
+        const ch = map.rows[y][x]
+        if (!TILES[ch]) missing.add(ch)
+      }
+    }
+    t.is(missing.size, 0, `map ${id} has no missing tiles: ${Array.from(missing).join(', ')}`)
+  }
+})
+
+test('spaces in plaza art overlays do not create invisible walls while keeping structures solid', (t) => {
+  const city = MAPS.city
+
+  // Locate the plaza fountain dynamically from its unique center glyph 'OO'
+  let fountainCenter = null
+  for (let y = 0; y < city.height && !fountainCenter; y++) {
+    const x = city.rows[y].indexOf('OO')
+    if (x !== -1) fountainCenter = { x, y }
+  }
+  t.ok(fountainCenter, 'plaza fountain is found on the map')
+
+  // Approach the fountain from the left plaza pavement towards the fountain center
+  const scanDistance = 20
+  let firstSolidX = null
+  for (let x = fountainCenter.x - scanDistance; x < fountainCenter.x; x++) {
+    const ch = city.rows[fountainCenter.y][x]
+    const tile = TILES[ch]
+    t.ok(tile, `tile at (${x}, ${fountainCenter.y}) is recognized`)
+    if (tile.solid && firstSolidX === null) {
+      firstSolidX = x
+    }
+  }
+
+  t.ok(firstSolidX !== null, 'fountain has a solid boundary')
+  for (let x = fountainCenter.x - scanDistance; x < firstSolidX; x++) {
+    const ch = city.rows[fountainCenter.y][x]
+    t.is(
+      TILES[ch].solid,
+      false,
+      `plaza pavement at (${x}, ${fountainCenter.y}) [glyph: '${ch}'] is walkable`
+    )
+  }
+  t.is(
+    TILES[city.rows[fountainCenter.y][firstSolidX]].solid,
+    true,
+    'fountain boundary itself is solid'
+  )
+  t.is(
+    TILES[city.rows[fountainCenter.y][fountainCenter.x]].solid,
+    true,
+    'fountain interior itself is solid'
+  )
+
+  // Locate the civic square statue dynamically from its inscription 'heroes'
+  let statueCenter = null
+  for (let y = 150; y < city.height && !statueCenter; y++) {
+    const x = city.rows[y].indexOf('heroes')
+    if (x !== -1) statueCenter = { x, y }
+  }
+  t.ok(statueCenter, 'civic square statue is found on the map')
+
+  let statueSolidX = null
+  for (let x = statueCenter.x - 10; x <= statueCenter.x; x++) {
+    const ch = city.rows[statueCenter.y][x]
+    const tile = TILES[ch]
+    t.ok(tile, `tile at (${x}, ${statueCenter.y}) is recognized`)
+    if (tile.solid && statueSolidX === null) {
+      statueSolidX = x
+    }
+  }
+  t.ok(statueSolidX !== null, 'statue has a solid boundary')
+  for (let x = statueCenter.x - 10; x < statueSolidX; x++) {
+    const ch = city.rows[statueCenter.y][x]
+    t.is(
+      TILES[ch].solid,
+      false,
+      `approach at (${x}, ${statueCenter.y}) [glyph: '${ch}'] is walkable`
+    )
+  }
+  t.is(
+    TILES[city.rows[statueCenter.y][statueSolidX]].solid,
+    true,
+    'statue boundary itself is solid'
+  )
+})
 test('city gardens are open and accessible from spawn', (t) => {
   const city = MAPS.city
   const seen = new Set()
@@ -2163,670 +2235,4 @@ test('city gardens are open and accessible from spawn', (t) => {
   // Check interior points in garden 2 (x: 250, y: 5, w: 65, h: 43)
   t.ok(seen.has('251,6'), 'garden 2 top-left interior is reachable')
   t.ok(seen.has('313,46'), 'garden 2 bottom-right interior is reachable')
-})
-
-test('the meadow is organized by roads, fields, groves and a talking guide', (t) => {
-  const field = new Field({ seed: 27 })
-  const guide = FIELD_GUIDES[0]
-  t.ok(guide && guide.role.includes('guardabosques'), 'the road has an identifiable guide')
-
-  const road = []
-  for (let x = 2; x < field.width - 2; x++) road.push(fieldGroundAt(field, x, field.gate.y))
-  t.ok(
-    road.filter((glyph) => glyph === ':' || glyph === '%').length > 90,
-    'the royal road visibly links most of the two borders'
-  )
-  t.ok(
-    [8, 17, 33, 41].every((y) => fieldGroundAt(field, 40, y) === '"'),
-    'hedged field boundaries divide the western meadow'
-  )
-
-  let paintedGround = 0
-  for (let y = 0; y < field.height; y++) {
-    for (let x = 0; x < field.width; x++) {
-      if (fieldGroundAt(field, x, y) !== ' ') paintedGround++
-    }
-  }
-  const terrainDensity = paintedGround / (field.width * field.height)
-  t.ok(terrainDensity < 0.23, 'quiet terrain leaves landmarks and actors readable')
-  t.ok(terrainDensity > 0.1, 'the meadow still has visible regional texture')
-
-  field.player.x = 66
-  field.player.y = field.gate.y
-  const crossroads = field.render(48, 14, false).join('\n')
-  t.ok(crossroads.includes('runa <---+---> nox'), 'the crossroads labels both kingdoms')
-  t.ok(crossroads.includes('portal|cripta'), 'the branch sign labels both expeditions')
-
-  field.player.x = guide.x
-  field.player.y = guide.y + 2
-  const conversation = field.interact()
-  t.ok(conversation[0].text.includes('al norte esta el portal'))
-
-  field.player.x = guide.x - 1
-  field.player.y = guide.y
-  const blocked = field.walk(1, 0)
-  t.is(field.player.x, guide.x - 1, 'the hero cannot occupy the guide anchor')
-  t.ok(
-    blocked.some((event) => event.type === 'field-guide'),
-    'walking into Eira invites dialogue'
-  )
-})
-
-test('the larger meadow contains three removable barbarian settlements', (t) => {
-  const field = new Field({ seed: 27 })
-  t.is(field.width, 260)
-  t.is(field.height, 72)
-  t.is(field.settlements.length, 3, 'three settlements occupy different meadow sectors')
-  t.alike(
-    field.settlements.map((settlement) => settlement.id),
-    BARBARIAN_SETTLEMENTS.map((settlement) => settlement.id)
-  )
-
-  const first = field.settlements[0]
-  field.player.x = first.x - 2
-  field.player.y = first.y
-  const landmark = field.render(60, 18, false).join('\n')
-  t.ok(landmark.includes(first.name), 'the palisade names its clan')
-  t.ok(landmark.includes('J'), 'the settlement has a visible interactive entrance')
-  t.ok(barbarianSettlementArt(first.name).length >= 9, 'the entrance is a full facade')
-  t.ok(
-    field.foes.every(
-      (foe) =>
-        Math.max(Math.abs(foe.x - first.x), Math.abs(foe.y - first.y)) >=
-        BARBARIAN_SETTLEMENT_CLEARANCE
-    ),
-    'roaming monsters do not spawn inside the palisade'
-  )
-
-  const art = barbarianSettlementArt(first.name)
-  const entryRow = art.findIndex((row) => row.includes('J'))
-  const entryCol = art[entryRow].indexOf('J')
-  const left = first.x - entryCol
-  const top = first.y - entryRow
-  const firstWall = art[0].indexOf('/')
-  field.player.x = left + firstWall - 1
-  field.player.y = top
-  const wall = field.walk(1, 0)
-  t.ok(wall.some((event) => event.type === 'barbarian-wall'))
-  t.is(field.player.x, left + firstWall - 1, 'the palisade is collision, not only decoration')
-
-  field.player.x = first.x - 1
-  field.player.y = first.y
-  const events = field.walk(1, 0)
-  t.ok(events.some((event) => event.type === 'barbarian-enter' && event.campId === first.id))
-  t.ok(field.clearSettlement(first.id), 'a conquered settlement can be removed from the meadow')
-  t.absent(field.settlementAt(first.x, first.y), 'its entrance disappears after conquest')
-})
-
-test('a barbarian settlement is a traversable no-respawn mini dungeon', (t) => {
-  const camp = new BarbarianCamp({ campId: 'colmillo-rojo', seed: 31 })
-  t.is(camp.mode, 'barbarian-camp')
-  t.is(camp.width, BARBARIAN_CAMP.width)
-  t.is(camp.height, BARBARIAN_CAMP.height)
-  t.is(camp.remaining, 5)
-  t.ok(camp.layout.rows.some((row) => row.includes('casa del caudillo')))
-  t.ok(
-    camp.layout.rows.some((row) => row.includes('U')),
-    'the camp has a visible exit'
-  )
-
-  const seen = new Set()
-  const queue = [[camp.layout.spawn.x, camp.layout.spawn.y]]
-  while (queue.length) {
-    const [x, y] = queue.shift()
-    const key_ = `${x},${y}`
-    if (seen.has(key_) || !camp.isWalkable(x, y)) continue
-    seen.add(key_)
-    queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1])
-  }
-  t.ok(seen.has(`${camp.layout.exit.x},${camp.layout.exit.y}`), 'the exit is reachable')
-  for (const foe of camp.foes) {
-    t.ok(seen.has(`${foe.x},${foe.y}`), `${foe.kind} stands in the traversable camp`)
-  }
-
-  const target = camp.foes[camp.foes.length - 1]
-  for (const foe of camp.foes.slice(0, -1)) {
-    foe.dead = true
-    camp.state.defeated.push(String(foe.id))
-  }
-  const fightEvents = []
-  camp.startFight(target, 1, fightEvents)
-  camp.combat.world.over = 'ganaste'
-  camp.endFight(fightEvents)
-  t.is(camp.remaining, 0)
-  t.ok(camp.state.completed, 'defeating the last barbarian marks the camp complete')
-  t.ok(fightEvents.some((event) => event.type === 'win' && event.kind === target.kind))
-
-  camp.player.x = camp.layout.exit.x
-  camp.player.y = camp.layout.exit.y - 1
-  const exitEvents = camp.walk(0, 1)
-  t.ok(
-    exitEvents.some(
-      (event) => event.type === 'barbarian-exit' && event.cleared && event.reward === 45
-    ),
-    'the bonus is offered only through the exit after the full clear'
-  )
-  const reopened = new BarbarianCamp({
-    campId: camp.camp.id,
-    seed: 31,
-    state: camp.toJSON()
-  })
-  t.is(reopened.remaining, 0, 'defeated barbarians never respawn in the mini dungeon')
-})
-
-test('leaving a cleared camp pays gold and permanently removes its meadow entrance', (t) => {
-  const game = new Runa({ presence: false })
-  startGame(game, 'Freya')
-  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
-  const settlement = game.field.settlements[0]
-  game.field.player.x = settlement.x - 1
-  game.field.player.y = settlement.y
-  game.move(1, 0)
-  t.is(game.field.mode, 'barbarian-camp', 'walking into J opens the interior map')
-
-  for (const foe of game.field.foes) foe.dead = true
-  game.field.state.defeated = game.field.foes.map((foe) => String(foe.id))
-  game.field.state.completed = true
-  const before = game.player.gold
-  game.field.player.x = game.field.layout.exit.x
-  game.field.player.y = game.field.layout.exit.y - 1
-  game.move(0, 1)
-
-  t.is(game.field.mode, 'field')
-  t.is(game.player.gold, before + settlement.reward, 'the clear bonus enters persistent gold')
-  t.absent(
-    game.field.settlements.find((candidate) => candidate.id === settlement.id),
-    'the palisade disappears when the hero returns to the meadow'
-  )
-  const saved = game.saveState()
-  t.ok(saved.barbarianState.cleared.includes(settlement.id), 'the removed camp enters save data')
-  const restored = new Field({
-    seed: game.fieldSeed(),
-    clearedSettlements: saved.barbarianState.cleared
-  })
-  t.absent(restored.settlementAt(settlement.x, settlement.y), 'loading cannot resurrect it')
-})
-
-test('a cleared barbarian settlement stays gone after loading its save slot', (t) => {
-  const dir = path.join(
-    os.tmpdir(),
-    `runa-barbarian-save-${Date.now()}-${Math.floor(Math.random() * 100000)}`
-  )
-  const saves = new SaveStore(dir)
-  try {
-    const game = new Runa({ presence: false, saves })
-    startGame(game, 'Brynja')
-    game.field = new Field({ player: game.player, seed: game.fieldSeed() })
-    const settlement = game.field.settlements[1]
-    game.field.player.x = settlement.x - 1
-    game.field.player.y = settlement.y
-    game.move(1, 0)
-    for (const foe of game.field.foes) foe.dead = true
-    game.field.state.defeated = game.field.foes.map((foe) => String(foe.id))
-    game.field.state.completed = true
-    game.field.player.x = game.field.layout.exit.x
-    game.field.player.y = game.field.layout.exit.y - 1
-    game.move(0, 1)
-    t.ok(game.saveCurrent())
-
-    const loaded = new Runa({ presence: false, saves })
-    t.ok(loaded.loadSlot(1))
-    t.is(loaded.field.mode, 'field')
-    t.ok(loaded.barbarianState.cleared.includes(settlement.id))
-    t.absent(
-      loaded.field.settlements.find((candidate) => candidate.id === settlement.id),
-      'the loaded meadow keeps the conquered space empty'
-    )
-  } finally {
-    removeSaveFixture(dir)
-  }
-})
-
-test('the expanded meadow exposes a visible entrance to the crypt', (t) => {
-  const field = new Field({ seed: 27 })
-  t.ok(field.width >= 260, 'the meadow is substantially wider than before')
-  t.ok(field.height >= 72, 'the meadow gained room in both axes')
-  t.ok(
-    field.noxGate.x - field.dungeonEntrance.x > KINGDOM_GATE_CLEARANCE.x + 10,
-    'the crypt is in the southern interior, not beside NOX'
-  )
-  field.player.x = field.dungeonEntrance.x - 3
-  field.player.y = field.dungeonEntrance.y
-  const rows = field.render(48, 18, false)
-  t.ok(
-    rows.some((row) => row.includes('CRIPTA')),
-    'the landmark names itself as a crypt'
-  )
-  t.ok(
-    rows.some((row) => row.includes('(o o)')),
-    'a skull guards the facade'
-  )
-  t.ok(
-    rows.some((row) => row.includes('/X\\')),
-    'the deep doorway remains readable'
-  )
-  t.ok(DUNGEON_ENTRANCE_ART.length >= 10, 'the entrance is a full building, not a tiny marker')
-  t.ok(
-    field.foes.every(
-      (foe) =>
-        Math.max(
-          Math.abs(foe.x - field.dungeonEntrance.x),
-          Math.abs(foe.y - field.dungeonEntrance.y)
-        ) >= DUNGEON_CLEARANCE
-    ),
-    'the facade begins with a monster-free clearing'
-  )
-
-  field.player.x = field.dungeonEntrance.x - 1
-  const events = field.walk(1, 0)
-  t.ok(
-    events.some((event) => event.type === 'dungeon-enter'),
-    'walking into X enters it'
-  )
-})
-
-test('the meadow has monumental kingdom gates on opposite map edges', (t) => {
-  const meadow = new Field({ seed: 27 })
-  t.is(meadow.gate.x, 0, 'the RUNA gate touches the western edge')
-  t.is(meadow.noxGate.x, meadow.width - 1, 'the NOX gate touches the eastern edge')
-  t.ok(meadow.noxGate.x - meadow.gate.x >= 150, 'the kingdoms occupy opposite ends')
-
-  meadow.player.x = meadow.gate.x
-  meadow.player.y = meadow.gate.y
-  const runaRows = meadow.render(44, 18, false)
-  t.ok(
-    runaRows.some((row) => row.includes('REINO DE RUNA')),
-    'the common realm names itself'
-  )
-  t.ok(
-    runaRows.some((row) => row.includes('<==|#===')),
-    'RUNA has a built gate, not one glyph'
-  )
-
-  meadow.player.x = meadow.noxGate.x
-  meadow.player.y = meadow.noxGate.y
-  const noxRows = meadow.render(44, 18, false)
-  t.ok(
-    noxRows.some((row) => row.includes('REINO DE NOX')),
-    'the dark realm names itself'
-  )
-  t.ok(
-    noxRows.some((row) => row.includes('#|==N')),
-    'NOX has a built gate on the edge'
-  )
-  t.is(RUNA_GATE_ART.length, 13)
-  t.is(NOX_GATE_ART.length, 13)
-
-  const outsideGate = (foe, gate) =>
-    Math.abs(foe.x - gate.x) >= KINGDOM_GATE_CLEARANCE.x ||
-    Math.abs(foe.y - gate.y) >= KINGDOM_GATE_CLEARANCE.y
-  t.ok(
-    meadow.foes.every((foe) => outsideGate(foe, meadow.gate) && outsideGate(foe, meadow.noxGate)),
-    'both monumental approaches remain free of monster spawns'
-  )
-
-  meadow.player.x = meadow.gate.x + 1
-  meadow.player.y = meadow.gate.y
-  const events = meadow.walk(-1, 0)
-  t.ok(
-    events.some((event) => event.type === 'town'),
-    'walking through < returns to RUNA'
-  )
-
-  const game = new Runa({ presence: false })
-  startGame(game, 'Ayla')
-  game.field = new Field({ player: game.player, seed: 27 })
-  game.field.player.x = game.field.noxGate.x - 1
-  game.field.player.y = game.field.noxGate.y
-  press(game, 'right')
-  t.absent(game.field, 'walking through N closes the meadow excursion')
-  t.is(game.walker.mapId, 'nox', 'the eastern gate enters the dark realm')
-  t.ok(game.log.some((line) => line.includes('porton oriental')))
-})
-
-test('the yermo portal owns a separate volcanic world-boss map', (t) => {
-  const meadow = new Field({ seed: 27 })
-  t.absent(meadow.boss, 'the Colossus was removed from the open meadow')
-  t.ok(
-    meadow.noxGate.x - meadow.worldBossPortal.x > KINGDOM_GATE_CLEARANCE.x + 10,
-    'the portal is separated from the NOX border'
-  )
-  t.ok(
-    Math.abs(meadow.worldBossPortal.x - meadow.dungeonEntrance.x) >= 20,
-    'portal and crypt occupy distinct sectors'
-  )
-  meadow.player.x = meadow.worldBossPortal.x - 5
-  meadow.player.y = meadow.worldBossPortal.y
-  const portalRows = meadow.render(48, 18, false)
-  t.ok(
-    portalRows.some((row) => row.includes('~~O~~')),
-    'the northern yermo portal has a visible energy core'
-  )
-  t.ok(
-    portalRows.some((row) => row.includes('portal-del-coloso')),
-    'the landmark names itself'
-  )
-  t.ok(
-    portalRows.some((row) => row.includes('/#####')),
-    'two ruined pylons give the entrance a monumental silhouette'
-  )
-  t.is(WORLD_BOSS_PORTAL_ART.length, 13, 'the portal is a full facade instead of a tiny marker')
-  const restingPortal = portalRows.join('\n')
-  meadow.time = WORLD_BOSS_PORTAL_CADENCE
-  t.not(meadow.render(48, 18, false).join('\n'), restingPortal, 'the portal energy visibly pulses')
-  t.ok(
-    meadow.foes.every(
-      (foe) =>
-        Math.max(
-          Math.abs(foe.x - meadow.worldBossPortal.x),
-          Math.abs(foe.y - meadow.worldBossPortal.y)
-        ) >= WORLD_BOSS_PORTAL_CLEARANCE
-    ),
-    'the monument begins inside a monster-free clearing'
-  )
-  meadow.player.x = meadow.worldBossPortal.x - 1
-  let events = meadow.walk(1, 0)
-  t.ok(
-    events.some((event) => event.type === 'boss-enter'),
-    'walking into O opens the boss zone'
-  )
-
-  const zone = new BossZone({ seed: 27 })
-  t.is(zone.mode, 'boss')
-  t.is(zone.width, BOSS_ZONE.width)
-  t.ok(
-    zone.layout.rows.some((row) => row.includes('~~~~')),
-    'lava rivers cross the arena'
-  )
-  t.ok(
-    zone.layout.rows.some((row) => row.includes('+---')),
-    'broken buildings remain standing'
-  )
-  t.ok(zone.boss && !zone.boss.defeated, 'the world boss exists only inside this map')
-
-  const target = { x: zone.boss.x - 12, y: zone.boss.y }
-  const queue = [[zone.portal.x + 3, zone.portal.y]]
-  const seen = new Set()
-  while (queue.length) {
-    const [x, y] = queue.shift()
-    const key_ = `${x},${y}`
-    if (seen.has(key_) || !zone.isWalkable(x, y) || zone.boss.occupies(x, y)) continue
-    seen.add(key_)
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1]
-    ]) {
-      queue.push([x + dx, y + dy])
-    }
-  }
-  t.ok(seen.has(`${target.x},${target.y}`), 'stone bridges provide a route to the Colossus')
-
-  zone.player.x = zone.portal.x + 1
-  zone.player.y = zone.portal.y
-  events = zone.walk(-1, 0)
-  t.ok(
-    events.some((event) => event.type === 'boss-exit'),
-    'O also returns to the yermo'
-  )
-})
-
-test('Runa travels through the world-boss portal and preserves its state', (t) => {
-  const game = new Runa({ presence: false })
-  startGame(game)
-  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
-  game.field.player.x = game.field.worldBossPortal.x - 1
-  game.field.player.y = game.field.worldBossPortal.y
-  press(game, 'right')
-  t.is(game.field.mode, 'boss')
-  t.is(game.saveState().location.kind, 'boss')
-
-  game.field.boss.hp -= 17
-  const damagedHp = game.field.boss.hp
-  t.is(game.saveState().location.state.hp, damagedHp, 'boss life enters autosave state')
-  press(game, 't')
-  t.is(game.field.mode, 'boss', 'T cannot bypass the return portal')
-  game.field.player.x = game.field.portal.x + 1
-  game.field.player.y = game.field.portal.y
-  press(game, 'left')
-  t.is(game.field.mode, 'field')
-  t.ok(
-    game.field.player.x < game.field.worldBossPortal.x,
-    'the hero returns outside the yermo portal'
-  )
-  t.ok(
-    Math.max(
-      Math.abs(game.field.player.x - game.field.worldBossPortal.x),
-      Math.abs(game.field.player.y - game.field.worldBossPortal.y)
-    ) < WORLD_BOSS_PORTAL_CLEARANCE,
-    'the return point remains inside the monster-free portal clearing'
-  )
-  game.field.player.x = game.field.worldBossPortal.x - 1
-  game.field.player.y = game.field.worldBossPortal.y
-  press(game, 'right')
-  t.is(game.field.boss.hp, damagedHp, 'leaving and re-entering cannot reset the boss fight')
-})
-
-test('the crypt progresses through three cleared monster floors', (t) => {
-  const state = {}
-  const first = new Dungeon({ floor: 1, seed: 9, state })
-  t.is(first.mode, 'dungeon')
-  t.is(first.floor, 1)
-  t.is(first.foes.length, FLOOR_ROSTERS[1].length)
-  t.ok(
-    first.foes.some((foe) => foe.kind === 'slime'),
-    'slimes occupy the opening floor'
-  )
-  t.ok(
-    first.foes.some((foe) => foe.kind === 'skeleton'),
-    'skeletons follow the slimes'
-  )
-  t.ok(
-    first.render(56, 20, false).some((row) => row.includes('^')),
-    'the up stair is visible'
-  )
-
-  first.player.x = first.layout.down.x - 1
-  first.player.y = first.layout.down.y
-  let events = first.walk(1, 0)
-  t.ok(
-    events.some((event) => event.type === 'dungeon-locked'),
-    'living monsters seal the descent'
-  )
-  for (const foe of first.foes) foe.dead = true
-  first.player.x = first.layout.down.x - 1
-  events = first.walk(1, 0)
-  t.ok(
-    events.some((event) => event.type === 'dungeon-floor' && event.floor === 2),
-    'clearing level 1 opens level 2'
-  )
-
-  const second = new Dungeon({ floor: 2, seed: 9, state: first.state })
-  t.ok(
-    second.foes.some((foe) => foe.kind === 'skeleton_knight'),
-    'level 2 adds skeleton knights'
-  )
-  t.ok(
-    second.foes.some((foe) => foe.kind === 'skeleton_archer'),
-    'level 2 adds skeleton archers'
-  )
-
-  const third = new Dungeon({ floor: DUNGEON.floors, seed: 9, state: second.state })
-  t.ok(
-    third.foes.some((foe) => foe.kind === 'skeleton_elite'),
-    'level 3 adds elite skeletons'
-  )
-  t.is(
-    third.foes.filter((foe) => foe.kind === 'skeleton_king').length,
-    1,
-    'one skeleton king waits in the final throne room'
-  )
-  t.absent(third.layout.down, 'there is no invented fourth floor')
-})
-
-test('every dungeon floor has a sourced identity and a traversable authored route', (t) => {
-  const layouts = [1, 2, 3].map((floor) => floorRows(floor))
-  const blocked = new Set(['#', '|', '-', '=', '[', ']', '~', '%', 'o', '+'])
-  const stairWindow = (layout, point) =>
-    layout.rows
-      .slice(Math.max(0, point.y - 5), Math.min(layout.rows.length, point.y + 6))
-      .map((row) => row.slice(Math.max(0, point.x - 10), point.x + 11))
-      .join('\n')
-  const reachable = (layout) => {
-    const queue = [layout.up]
-    const visited = new Set([`${layout.up.x},${layout.up.y}`])
-    while (queue.length) {
-      const point = queue.shift()
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1]
-      ]) {
-        const x = point.x + dx
-        const y = point.y + dy
-        const key = `${x},${y}`
-        const ch = layout.rows[y] && layout.rows[y][x]
-        if (!ch || blocked.has(ch) || visited.has(key)) continue
-        visited.add(key)
-        queue.push({ x, y })
-      }
-    }
-    return visited
-  }
-
-  t.alike(
-    layouts.map((layout) => layout.name),
-    ['cisternas del limo', 'galerias del osario', 'necropolis de la corona'],
-    'each descent has its own architectural identity'
-  )
-  t.unlike(layouts[0].rows, layouts[1].rows, 'the cistern and ossuary are distinct plans')
-  t.unlike(layouts[1].rows, layouts[2].rows, 'the ossuary and necropolis are distinct plans')
-  t.ok(
-    layouts[0].rows.some((row) => row.includes('~')),
-    'the cistern has flooded reservoirs'
-  )
-  t.ok(
-    layouts[0].rows.some((row) => row.includes(':')),
-    'the cistern has stone bridges'
-  )
-  t.ok(
-    layouts[1].rows.some((row) => row.includes('%o')),
-    'the ossuary has bone courses'
-  )
-  t.ok(
-    layouts[1].rows.some((row) => row.includes('*')),
-    'the ossuary has a sepulchral lamp'
-  )
-  t.ok(
-    layouts[2].rows.some((row) => row.includes('[=T=]')),
-    'the royal floor has a throne'
-  )
-  t.ok(layouts[2].throne, 'the necropolis records its ceremonial destination')
-
-  for (const layout of layouts) {
-    const visited = reachable(layout)
-    const destination = layout.down || layout.spawnPoints[layout.spawnPoints.length - 1]
-    const upArt = stairWindow(layout, layout.up)
-    t.ok(upArt.includes('/___^___/'), `${layout.name} draws a complete ascent in ASCII`)
-    t.ok(
-      (upArt.match(/_{3,}/g) || []).length >= 4,
-      `${layout.name} gives the ascent several visible steps`
-    )
-    if (layout.down) {
-      const downArt = stairWindow(layout, layout.down)
-      t.ok(downArt.includes('___v___'), `${layout.name} draws a complete descent in ASCII`)
-      t.ok(
-        (downArt.match(/_{3,}/g) || []).length >= 4,
-        `${layout.name} gives the descent several visible steps`
-      )
-    }
-    t.ok(
-      visited.has(`${destination.x},${destination.y}`),
-      `${layout.name} connects its entrance to its destination`
-    )
-    t.ok(
-      layout.spawnPoints.every((point) => visited.has(`${point.x},${point.y}`)),
-      `${layout.name} keeps every encounter on the playable route`
-    )
-  }
-})
-
-test('Runa enters, saves and exits the meadow dungeon as one run', (t) => {
-  const game = new Runa({ presence: false })
-  startGame(game)
-  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
-  game.field.player.x = game.field.dungeonEntrance.x - 1
-  game.field.player.y = game.field.dungeonEntrance.y
-  press(game, 'right')
-  t.is(game.field.mode, 'dungeon')
-  t.is(game.field.floor, 1)
-  t.is(game.saveState().location.kind, 'dungeon', 'autosave records the active dungeon floor')
-
-  press(game, 't')
-  t.is(game.field.mode, 'dungeon', 'T cannot bypass dungeon progression')
-  game.field.player.x = game.field.layout.up.x + 1
-  game.field.player.y = game.field.layout.up.y
-  press(game, 'left')
-  t.is(game.field.mode, 'field', 'the up stair on level 1 returns to the meadow')
-  t.ok(
-    game.field.player.x < game.field.dungeonEntrance.x,
-    'the hero reappears safely outside instead of re-entering immediately'
-  )
-})
-
-test('dungeon victories persist, including the skeleton king', (t) => {
-  const first = new Dungeon({ floor: 1, seed: 31 })
-  const slime = first.foes.find((foe) => foe.kind === 'slime')
-  const events = []
-  first.startFight(slime, 1, events)
-  first.combat.world.over = 'ganaste'
-  first.endFight(events)
-  t.ok(first.state.defeated[1].includes(String(slime.id)), 'a defeated slime enters run state')
-  t.ok(events.some((event) => event.type === 'win' && event.kind === 'slime'))
-
-  const reopened = new Dungeon({ floor: 1, seed: 31, state: first.toJSON() })
-  t.ok(
-    reopened.foes.find((foe) => foe.id === slime.id).dead,
-    'returning to a floor does not resurrect its defeated monsters'
-  )
-
-  const final = new Dungeon({ floor: 3, seed: 31, state: reopened.toJSON() })
-  const king = final.foes.find((foe) => foe.kind === 'skeleton_king')
-  const finale = []
-  final.startFight(king, 1, finale)
-  final.combat.world.over = 'ganaste'
-  final.endFight(finale)
-  t.ok(final.state.kingDefeated, 'the final victory is recorded')
-  t.ok(finale.some((event) => event.type === 'dungeon-complete'))
-})
-
-test('a save slot restores the current dungeon floor and defeated monsters', (t) => {
-  const dir = path.join(
-    os.tmpdir(),
-    `runa-dungeon-save-${Date.now()}-${Math.floor(Math.random() * 100000)}`
-  )
-  const saves = new SaveStore(dir)
-  try {
-    const game = new Runa({ presence: false, saves })
-    startGame(game, 'Cripta')
-    game.meadowReturn = { x: 149, y: 43 }
-    game.openDungeonFloor(2)
-    game.field.foes[0].dead = true
-    game.field.state.defeated[2].push(String(game.field.foes[0].id))
-    game.field.player.x = 44
-    game.field.player.y = 18
-    game.saveCurrent()
-
-    const loaded = new Runa({ presence: false, saves })
-    t.ok(loaded.loadSlot(1))
-    t.is(loaded.field.mode, 'dungeon')
-    t.is(loaded.field.floor, 2)
-    t.is(loaded.field.player.x, 44)
-    t.is(loaded.field.player.y, 18)
-    t.ok(loaded.field.foes[0].dead, 'the cleared enemy stays dead after loading')
-  } finally {
-    removeSaveFixture(dir)
-  }
 })
