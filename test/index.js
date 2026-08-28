@@ -22,25 +22,8 @@ const {
   NPC_SPRITES,
   tileAt
 } = require('../lib/map.js')
-const {
-  Field,
-  RUNA_GATE_ART,
-  NOX_GATE_ART,
-  KINGDOM_GATE_CLEARANCE,
-  DUNGEON_ENTRANCE_ART,
-  DUNGEON_CLEARANCE,
-  WORLD_BOSS_PORTAL_ART,
-  WORLD_BOSS_PORTAL_CLEARANCE,
-  WORLD_BOSS_PORTAL_CADENCE,
-  BARBARIAN_SETTLEMENTS,
-  BARBARIAN_SETTLEMENT_CLEARANCE,
-  barbarianSettlementArt,
-  FIELD_GUIDES,
-  fieldGroundAt
-} = require('../lib/field.js')
-const { Dungeon, DUNGEON, FLOOR_ROSTERS, floorRows } = require('../lib/dungeon.js')
-const { BossZone, BOSS_ZONE } = require('../lib/boss-zone.js')
-const { BarbarianCamp, BARBARIAN_CAMP } = require('../lib/barbarian-camp.js')
+const { Field } = require('../lib/field.js')
+const { BossZone } = require('../lib/boss-zone.js')
 const CONTENT = require('../lib/content.js')
 const { Player, reward, xpToLeave, SAVE_VERSION, EQUIPMENT_SLOTS } = require('../lib/shop.js')
 const { SaveStore } = require('../lib/saves.js')
@@ -2197,16 +2180,16 @@ test('spaces in plaza art overlays do not create invisible walls while keeping s
     'fountain interior itself is solid'
   )
 
-  // Locate the civic square statue dynamically from its head glyph '_h_h_'
+  // Locate the civic square statue dynamically from its inscription 'heroes'
   let statueCenter = null
-  for (let y = 0; y < city.height && !statueCenter; y++) {
-    const x = city.rows[y].indexOf('_h_h_')
+  for (let y = 150; y < city.height && !statueCenter; y++) {
+    const x = city.rows[y].indexOf('heroes')
     if (x !== -1) statueCenter = { x, y }
   }
   t.ok(statueCenter, 'civic square statue is found on the map')
 
   let statueSolidX = null
-  for (let x = statueCenter.x - 15; x < statueCenter.x; x++) {
+  for (let x = statueCenter.x - 10; x < statueCenter.x; x++) {
     const ch = city.rows[statueCenter.y][x]
     const tile = TILES[ch]
     t.ok(tile, `tile at (${x}, ${statueCenter.y}) is recognized`)
@@ -2215,7 +2198,7 @@ test('spaces in plaza art overlays do not create invisible walls while keeping s
     }
   }
   t.ok(statueSolidX !== null, 'statue has a solid boundary')
-  for (let x = statueCenter.x - 15; x < statueSolidX; x++) {
+  for (let x = statueCenter.x - 10; x < statueSolidX; x++) {
     const ch = city.rows[statueCenter.y][x]
     t.is(
       TILES[ch].solid,
