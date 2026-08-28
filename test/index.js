@@ -2189,7 +2189,7 @@ test('spaces in plaza art overlays do not create invisible walls while keeping s
   t.ok(statueCenter, 'civic square statue is found on the map')
 
   let statueSolidX = null
-  for (let x = statueCenter.x - 10; x < statueCenter.x; x++) {
+  for (let x = statueCenter.x - 10; x <= statueCenter.x; x++) {
     const ch = city.rows[statueCenter.y][x]
     const tile = TILES[ch]
     t.ok(tile, `tile at (${x}, ${statueCenter.y}) is recognized`)
