@@ -10,3 +10,9 @@ save.json.tmp
 *.roto
 save.test-*.json
 test_snapshots/
+
+# Tripo: la key vive en el entorno, los GLB y el visor en la notebook del demo.
+.env
+.env.*
+assets/tripo/
+vendor/model-viewer.min.js
