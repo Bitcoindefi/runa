@@ -1,6 +1,6 @@
 # RUNA
 
-**Un videojuego donde los gráficos evolucionan a medida que subís de nivel y te fortalecés.**
+**Un videojuego donde los gráficos evolucionan con vos: un regalo para quienes crecen mientras expanden su propia imaginación.**
 
 RUNA parte de un mundo ASCII: explorás dos reinos, conseguís equipo y escribís
 las reglas que usa tu personaje al combatir. La progresión visual por nivel
