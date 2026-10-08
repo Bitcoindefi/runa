@@ -159,6 +159,31 @@ test('title screen falls back cleanly in a small terminal', (t) => {
   t.ok(lines.every((line) => line.length === 40))
 })
 
+test('generated hero and helmet previews preserve character creation and equipment controls', (t) => {
+  const options = { realms: REALMS, frame: 0 }
+  const hero = style.stripAnsi(render.newGameScreen(80, 30, 'viajero', 'V', '', options))
+  const rotated = style.stripAnsi(
+    render.newGameScreen(80, 30, 'viajero', 'V', '', { ...options, frame: 6 })
+  )
+  t.not(hero, rotated, 'the generated hero rotates on the creation screen')
+  t.ok(rotated.includes('NOMBRE  viajero'))
+  t.ok(rotated.includes('ENTER  comenzar'))
+  t.ok(rotated.includes('ESC  volver'))
+  const player = new Player({ xp: 60, gold: 100 })
+  const shop = { ...require('../lib/shop.js').browse('armor', player) }
+  shop.items = shop.lines
+  shop.cursor = shop.items.findIndex((item) => item.id === 'iron_helmet')
+  const first = style.stripAnsi(render.shopPane({ ...shop, frame: 0 }, 70, 30))
+  const next = style.stripAnsi(render.shopPane({ ...shop, frame: 6 }, 70, 30))
+  t.not(first, next, 'the selected helmet preview rotates in the shop')
+  t.ok(next.includes('YELMO DE HIERRO'))
+  t.ok(next.includes('75'), 'the existing purchase price remains visible')
+  const model = { items: [CONTENT.items.iron_helmet], cursor: 0, frame: 0 }
+  const inventory = style.stripAnsi(render.inventoryPane(model, 70, 30))
+  t.ok(inventory.includes('YELMO DE HIERRO'))
+  t.ok(inventory.includes('defensa +2'), 'the equipment bonus remains visible')
+})
+
 test('title turntable rotates on ticks without hiding menu controls', (t) => {
   const game = new Runa({ presence: false })
   for (const [width, height] of [
@@ -184,9 +209,10 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
   const menu = { page: 'main', slots: [], frame: 0 }
   t.is(
     render.titleScreen(80, 44, '', menu),
-    render.titleScreen(80, 44, '', { ...menu, frame: 24 }),
-    'one rotation wraps at 24 frames'
+    render.titleScreen(80, 44, '', { ...menu, frame: 48 }),
+    'the two-model sequence wraps after two rotations'
   )
+  t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('HEROE'))
 })
 
 test('the controls button opens a complete overlay and returns to the previous state', (t) => {

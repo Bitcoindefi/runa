@@ -263,6 +263,37 @@ function frames() {
   const inventory = equippedGame('Ayla')
   inventory.openInventory()
 
+  const tripoMenu = new Runa({ presence: false })
+  tripoMenu.width = WIDTH
+  tripoMenu.height = 44
+  tripoMenu.animationTick = 12
+  const colossusFrame = tripoMenu.view()
+  tripoMenu.animationTick = 57
+
+  const tripoName = new Runa({ presence: false })
+  tripoName.width = WIDTH
+  tripoName.height = 44
+  tripoName.onKey(key('enter'))
+  for (const ch of 'Ayla') tripoName.onKey(type(ch))
+
+  const tripoShop = equippedGame('Ayla')
+  tripoShop.height = 44
+  tripoShop.player.xp = 60
+  tripoShop.player.gold = 100
+  tripoShop.player.hp = tripoShop.player.maxHp
+  tripoShop.shop = 'armor'
+  tripoShop.cursor = 5
+
+  const tripoInventory = equippedGame('Ayla')
+  tripoInventory.height = 44
+  tripoInventory.player.xp = 60
+  tripoInventory.player.gold = 100
+  tripoInventory.player.hp = tripoInventory.player.maxHp
+  tripoInventory.openInventory()
+  tripoInventory.inventoryCursor = tripoInventory
+    .inventoryItems('carried')
+    .findIndex((item) => item.id === 'iron_helmet')
+
   return {
     menu: { title: 'menu principal', frame: menu.view() },
     nombre: { title: 'nueva partida', frame: name.view() },
@@ -277,7 +308,12 @@ function frames() {
     'nox-oficios': { title: 'barrio de oficios de nox', frame: noxWorkshops.view() },
     dungeon: { title: 'cripta - nivel 2', frame: dungeon.view() },
     'world-boss': { title: 'ruinas volcanicas del coloso', frame: worldBoss.view() },
-    inventario: { title: 'inventario y equipo', frame: inventory.view() }
+    inventario: { title: 'inventario y equipo', frame: inventory.view() },
+    'tripo-coloso': { title: 'Tripo - coloso en el menu', frame: colossusFrame },
+    'tripo-heroe': { title: 'Tripo - heroe en el menu', frame: tripoMenu.view() },
+    'tripo-personaje': { title: 'Tripo - creacion de personaje', frame: tripoName.view() },
+    'tripo-yelmo-tienda': { title: 'Tripo - yelmo en la armeria', frame: tripoShop.view() },
+    'tripo-yelmo-inventario': { title: 'Tripo - yelmo equipado', frame: tripoInventory.view() }
   }
 }
 
