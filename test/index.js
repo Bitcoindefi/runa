@@ -159,6 +159,36 @@ test('title screen falls back cleanly in a small terminal', (t) => {
   t.ok(lines.every((line) => line.length === 40))
 })
 
+test('title turntable rotates on ticks without hiding menu controls', (t) => {
+  const game = new Runa({ presence: false })
+  for (const [width, height] of [
+    [80, 44],
+    [80, 30],
+    [80, 24],
+    [40, 10]
+  ]) {
+    game.update({ type: 'resize', width, height })
+    game.animationTick = 0
+    const first = style.stripAnsi(game.view())
+    game.update({ type: 'tick' })
+    game.update({ type: 'tick' })
+    const next = style.stripAnsi(game.view())
+    t.is(next.split('\n').length, height)
+    t.ok(next.split('\n').every((line) => line.length === width))
+    if (height >= 24) {
+      t.not(first, next, 'the precomputed view advances without a keypress')
+      t.ok(next.includes('SALIR'), 'the menu remains visible')
+      t.ok(next.includes('aceptar'), 'the control hint remains visible')
+    }
+  }
+  const menu = { page: 'main', slots: [], frame: 0 }
+  t.is(
+    render.titleScreen(80, 44, '', menu),
+    render.titleScreen(80, 44, '', { ...menu, frame: 24 }),
+    'one rotation wraps at 24 frames'
+  )
+})
+
 test('the controls button opens a complete overlay and returns to the previous state', (t) => {
   const game = new Runa({ presence: false })
   game.update({ type: 'resize', width: 80, height: 24 })
