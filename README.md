@@ -1,6 +1,13 @@
 # RUNA
 
-Un RPG ASCII para terminal donde exploras una ciudad, recorres la pradera y escribes las reglas que usa tu personaje al combatir.
+**Un videojuego donde los gráficos evolucionan a medida que subís de nivel y te fortalecés.**
+
+RUNA parte de un mundo ASCII: explorás dos reinos, conseguís equipo y escribís
+las reglas que usa tu personaje al combatir. La progresión visual por nivel
+es la dirección del proyecto. Hoy el sprite refleja el equipo que llevás y
+los modelos generados con Tripo aparecen como animaciones ASCII en el menú,
+la creación de personaje y las vistas del yelmo; todavía no hay un cambio
+automático de estilo gráfico al subir de nivel.
 
 **Versión actual: 0.2.0 — Reinos, exploración y modelos Tripo en ASCII**
 
