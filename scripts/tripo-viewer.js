@@ -226,7 +226,9 @@ function sendKey(req, res, origins) {
 function item(id) {
   if (typeof id !== 'string' || !id) return null
   const known = items[id]
-  return known ? { id, name: known.name, kind: known.kind } : { id, name: id, kind: 'unknown' }
+  return known
+    ? { id, name: known.name, kind: known.kind, slot: known.slot || null }
+    : { id, name: id, kind: 'unknown', slot: null }
 }
 
 // Una escena por zona: el Coloso en sus ruinas, el reino en las ciudades y un
