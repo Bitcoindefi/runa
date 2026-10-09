@@ -1,5 +1,9 @@
 {
   "la terminal es muy chica": "terminal is too small",
+  "golpeas al Coloso:": "you hit the Colossus:",
+  "el poder runico te alcanza:": "runic power hits you:",
+  "vida": "hp",
+  "el Coloso esta fuera de alcance": "the Colossus is out of range",
   "WALLET Y PVP": "WALLET AND PVP",
   "red: Stellar TESTNET": "network: Stellar TESTNET",
   "pega tu direccion publica (empieza con G):": "paste your public address (starts with G):",

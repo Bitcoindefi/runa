@@ -2,11 +2,10 @@
 
 // Reproducible recording source: real Runa input, ticks and renderer.
 // Uses an isolated in-memory fixture; never opens a player's save store.
-// bare scripts/demo-walkthrough.js output/playwright/demo
+// bare scripts/demo-walkthrough.js output/playwright/demo-tripo-focused
 const fs = require('bare-fs')
 const path = require('bare-path')
 const { Runa } = require('../lib/game.js')
-const { Field } = require('../lib/field.js')
 const { BossZone } = require('../lib/boss-zone.js')
 const { ansiToHtml, page } = require('./readme-screens.js')
 
@@ -15,6 +14,7 @@ game.width = 120
 game.height = 44
 const frames = []
 const chapters = []
+const initialView = game.view()
 const press = (name) => game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
 const type = (letter) =>
   game.onKey({ type: 'key', sequence: letter, ctrl: false, meta: false, is: () => false })
@@ -24,54 +24,53 @@ function chapter(caption, seconds, step = () => {}) {
   for (let i = 0; i < seconds * 15; i++) {
     step(i)
     game.onTick()
-    frames.push({ caption, html: ansiToHtml(game.view()) })
+    frames.push({ caption, html: ansiToHtml(game.view()), columns: game.width, rows: game.height })
   }
 }
 
-chapter('RUNA | Tripo Colossus rotating inside the terminal', 8)
+chapter('Tripo to ASCII | A full rotation of the generated Colossus', 12)
 press('enter')
 chapter('New game | Tripo hero, player name and home kingdom', 8, (i) => {
   if (i >= 20 && i < 24) type('Ayla'[i - 20])
 })
 press('enter')
-chapter('Exploration | The world and characters live in the terminal', 10, (i) => {
-  if (i % 4 === 0) press(i < 75 ? 'up' : 'right')
-})
-game.walker.placeAt('nox', 160, 103)
-chapter('Demo route | NOX, the second kingdom', 6, (i) => {
-  if (i % 6 === 0) press('left')
-})
-game.field = new Field({ seed: 17, player: game.player })
-game.field.player.x = 111
-game.field.player.y = 10
-chapter('Meadow | Exploration and roaming creatures', 8, (i) => {
-  if (i % 5 === 0) press('right')
-})
-game.field = null
 game.walker.placeAt('city', 160, 130)
 game.player.xp = 60
 game.player.gold = 100
 game.player.hp = game.player.maxHp
 game.shop = 'armor'
 game.cursor = 5
-chapter('Demo fixture: level 3 and 100 gold | Tripo helmet at the armory', 10, (i) => {
-  if (i === 95) press('enter')
+chapter('Tripo iron helmet | Select and buy the real item (level 3 demo fixture)', 8, (i) => {
+  if (i === 75) press('enter')
 })
 press('escape')
 game.openInventory()
 game.inventoryCursor = game.inventoryItems('carried').findIndex((item) => item.id === 'iron_helmet')
-chapter('Helmet purchased and equipped | Animated ASCII, defense +2', 10)
+chapter('Tripo helmet equipped | Rotating preview and defense +2', 8)
 game.inventoryOpen = false
+// Frame the real 43x13 boss in an 80x24 terminal, enlarged for the recording.
+game.width = 80
+game.height = 24
+game.player.items.add('sword')
+game.player.equip('sword')
 game.field = new BossZone({
   seed: 27,
   player: game.player,
   script: game.scriptSource,
-  x: 101,
+  x: 91,
   y: 22
 })
-chapter('Colossus ruins | The same Tripo model now lives on the map', 8)
+const bossStartHp = game.field.boss.hp
+chapter('Tripo Colossus in combat | Full model, real hits and attack warnings', 10, (i) => {
+  if (i % 15 === 0) press('f')
+  if (i === 30 || i === 60) press('up')
+  if (i === 90 || i === 120) press('down')
+})
+if (!game.field || game.field.mode !== 'boss' || game.field.boss.hp >= bossStartHp) {
+  throw new Error('The demo must show real damage to the Colossus and stay in its arena')
+}
 
-const directory = path.resolve(Bare.argv[2] || 'output/playwright/demo')
+const directory = path.resolve(Bare.argv[2] || 'output/playwright/demo-tripo-focused')
 fs.mkdirSync(directory, { recursive: true })
 fs.writeFileSync(path.join(directory, 'frames.json'), JSON.stringify(frames))
 fs.writeFileSync(path.join(directory, 'chapters.json'), JSON.stringify(chapters, null, 2) + '\n')
@@ -80,7 +79,11 @@ window.demo = { ready: false, done: false, playing: false };
 fetch('frames.json').then(r => r.json()).then(frames => {
   const pre = document.querySelector('pre');
   const caption = document.querySelector('.caption');
-  const draw = index => { pre.innerHTML = frames[index].html; caption.textContent = frames[index].caption; };
+  const draw = index => {
+    pre.innerHTML = frames[index].html;
+    pre.style.fontSize = frames[index].columns === 80 ? '22px' : '13px';
+    caption.textContent = frames[index].caption;
+  };
   draw(0);
   window.demo.ready = true;
   window.startDemo = () => {
@@ -99,6 +102,6 @@ fetch('frames.json').then(r => r.json()).then(frames => {
 </script>`
 fs.writeFileSync(
   path.join(directory, 'index.html'),
-  page('RUNA - Demo Tripo', game.view()).replace('</body>', controls + '</body>')
+  page('RUNA - Demo Tripo', initialView).replace('</body>', controls + '</body>')
 )
 console.log(`${directory}: ${frames.length / 15}s, ${frames.length} real renderer frames`)

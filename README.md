@@ -6,21 +6,36 @@ RUNA parte de un mundo ASCII: explorás dos reinos, conseguís equipo y escribí
 las reglas que usa tu personaje al combatir. La progresión visual por nivel
 es la dirección del proyecto. Hoy el sprite refleja el equipo que llevás y
 los modelos generados con Tripo aparecen como animaciones ASCII en el menú,
-la creación de personaje y las vistas del yelmo; todavía no hay un cambio
+la creación de personaje, las vistas del yelmo y el combate con el Coloso; todavía no hay un cambio
 automático de estilo gráfico al subir de nivel.
 
 **Versión actual: 0.2.0 — Reinos, exploración y modelos Tripo en ASCII**
 
 El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el arte dentro de una grilla ASCII estable. El personaje, los NPC y los monstruos se mueven sin borrar el terreno ni romper las líneas de la consola.
 
-![Menú principal de RUNA](docs/screens/tripo-paisaje.png)
+![Coloso generado con Tripo girando dentro del menú de RUNA](docs/screens/tripo-coloso-menu.png)
 
 ## Actualización para el hackathon de Tripo
 
-[Ver la demo en inglés (MP4, 68 segundos)](docs/demo/runa-tripo-demo-colossus-en.mp4).
-Es un recorrido reproducible por el render real del juego, grabado en un
-navegador a partir de entradas y cuadros de Runa. Usa una partida de muestra
-en memoria, sin tocar guardados. [Cómo se grabó](docs/demo-walkthrough.md).
+[Ver la demo de Tripo en inglés (MP4, 46 segundos)](docs/demo/runa-tripo-focused-en.mp4).
+Muestra las integraciones de los modelos generados: el Coloso girando,
+el héroe al crear personaje, la compra y el equipamiento del yelmo y una
+pelea con el Coloso. Cada escena contiene un modelo de Tripo; el recorrido
+general por ciudad y pradera queda fuera de esta demo.
+
+La captura utiliza el render real de Runa y entradas del juego, reproducidos
+en un navegador desde una partida de muestra en memoria. El combate está
+encuadrado en una terminal de `80×24`, ampliada para ver completo el modelo
+`43×13`, los ataques y los cambios de vida. La compra consume oro y los
+golpes reducen la vida del jefe. [Cómo se grabó](docs/demo-walkthrough.md).
+
+| Tiempo      | Qué se demuestra                            | Modelo generado |
+| ----------- | ------------------------------------------- | --------------- |
+| 00:00–00:12 | Una vuelta completa en el menú              | Coloso          |
+| 00:12–00:20 | Vista previa y creación de personaje        | Héroe           |
+| 00:20–00:28 | Selección y compra por 75 de oro            | Yelmo           |
+| 00:28–00:36 | Vista animada y defensa +2 al equiparlo     | Yelmo           |
+| 00:36–00:46 | Modelo completo, golpes y avisos de ataques | Coloso          |
 
 RUNA incorpora modelos 3D generados con Tripo **dentro de la terminal**.
 Generamos un héroe medieval, un Coloso de piedra, un yelmo de hierro y un paisaje del reino con
@@ -28,7 +43,7 @@ texto a 3D, descargamos los GLB y convertimos sus geometrías a cuadros ASCII.
 El juego reproduce esos cuadros: no necesita navegador, GPU, API key ni una
 conexión a Tripo para mostrarlos. Los cuadros ya están incluidos en el repo.
 
-### Qué cambió y dónde verlo
+### Modelos generados e integración
 
 | Modelo generado con Tripo | Integración en RUNA                                                                                             |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -36,6 +51,10 @@ conexión a Tripo para mostrarlos. Los cuadros ya están incluidos en el repo.
 | Coloso de piedra          | Gira solo en el menú y aparece en su arena, reutilizando el modelo generado y conservando la lógica de combate. |
 | Héroe con espada y escudo | Gira al crear un personaje.                                                                                     |
 | Yelmo de hierro           | Gira al seleccionarlo en la armería o en la mochila, cuando hay espacio en la terminal.                         |
+
+Se generaron **cuatro GLB con Tripo** y se integraron **tres modelos** en las
+escenas de esta demo. El paisaje permanece como experimento en el visor;
+su conversión a ASCII no permitió distinguir bien la forma del reino.
 
 Cada modelo tiene **24 vistas separadas por 15 grados**. Una vuelta tarda
 10,8 segundos en el menú; el héroe y el yelmo conservan sus vueltas de tres
@@ -47,7 +66,7 @@ permite ver más detalle.
 con Tripo. Su silueta empieza de frente y gira lentamente, sin paisaje ni
 otras figuras superpuestas.
 
-![Coloso de Tripo girando solo en el menú en inglés de RUNA](docs/screens/tripo-coloso-menu.png)
+La captura de portada muestra esta integración en el render del juego.
 
 **Español e inglés.** En el menú principal, `L` alterna el idioma. También
 podés iniciar con `npm start -- --lang en` o `--lang es`. La elección se
@@ -57,12 +76,6 @@ estadísticas, equipo, diálogos de residentes y mensajes principales.
 Los nombres de jugadores, identificadores de objetos, guardados y reglas
 de combate conservan sus valores. La demo nueva usa inglés tanto en el
 juego como en sus subtítulos de recorrido.
-
-**Coloso dentro del mapa.** Su dibujo utiliza ahora el GLB real convertido a
-un lienzo `43×13`. La vida, los ataques, los avisos y las colisiones siguen
-controlados por el juego.
-
-![Coloso de Tripo dentro de las ruinas volcánicas](docs/screens/tripo-coloso-mapa.png)
 
 **Creación de personaje.** El héroe generado es una vista previa; el personaje
 que camina conserva el sprite compacto, su inicial y el equipo que posee.
@@ -78,6 +91,14 @@ el equilibrio del equipo.
 ![Yelmo de Tripo seleccionado en la armería](docs/screens/tripo-yelmo-tienda.png)
 
 ![Yelmo de Tripo equipado y seleccionado en la mochila](docs/screens/tripo-yelmo-inventario.png)
+
+**Coloso en combate, en primer plano.** El mismo GLB del menú se convierte a
+un lienzo `43×13` para su arena. Esta captura usa el encuadre real `80×24` de
+la demo: se ve el cuerpo completo, el personaje a su lado y la vida del
+Coloso en `350/360` después de recibir golpes. El sprite cambia de vista
+durante los puñetazos; los avisos, poderes y colisiones pertenecen al juego.
+
+![Modelo Tripo del Coloso completo durante una pelea, con golpes y cambios de vida](docs/screens/tripo-coloso-mapa.png)
 
 **Los modelos antes de convertirlos a texto.** El visor local es una herramienta
 opcional para inspeccionar los GLB originales; el juego funciona sin él.
@@ -123,7 +144,7 @@ npm install
 npm start -- --solo
 ```
 
-Esperá en el menú para ver el paisaje y elegí **Nueva partida** para ver
+Esperá en el menú para ver al Coloso y elegí **Nueva partida** para ver
 al héroe. Para inspeccionar el yelmo en detalle, seleccioná la pieza en la
 armería o, después de comprarla, en la mochila. No hace falta generar nada
 para probar las animaciones incluidas.
@@ -160,7 +181,7 @@ Abrí `http://127.0.0.1:4173/`. El visor detecta modelos nuevos automáticamente
 En esta máquina usamos `node --use-system-ca scripts/tripo-generate.js ...`
 con Node 24 para que HTTPS reconozca los certificados del sistema.
 
-Los prompts utilizados para los tres modelos, el flujo de regeneración y las
+Los prompts utilizados, el flujo de regeneración y las
 limitaciones están documentados en [ascii-turntable.md](docs/ascii-turntable.md)
 y [tripo-integration.md](docs/tripo-integration.md).
 
@@ -403,12 +424,14 @@ npx bare scripts/readme-screens.js .readme-screens
 
 Esto evita documentar una ciudad, un héroe o un combate que ya no coincidan con el código.
 
-Las capturas nuevas `tripo-*.png` usan estados reproducibles de `120×44`
-celdas. Se captura el elemento `.terminal` de los HTML generados, con un
-viewport suficientemente grande para mostrarlo entero. `tripo-modelos.png`
-es una captura del visor local con los tres GLB reales cargados. Los estados
-de tienda e inventario se preparan con equipo para mostrar las vistas previas;
-no representan el inventario de una partida nueva.
+Las cinco capturas de la demo Tripo se obtienen de los cuadros de
+[demo-walkthrough.js](scripts/demo-walkthrough.js): menú, personaje,
+tienda e inventario en `120×44`, y pelea en `80×24`. Se captura el elemento
+`.terminal` con un viewport suficiente para mostrarlo entero. Los mismos
+cuadros se reproducen en el video. `tripo-modelos.png` muestra los cuatro
+GLB originales en el visor local. El nivel, el oro y la espada del combate
+son datos preparados para demostrar la integración; la compra y los
+golpes se ejecutan con las entradas reales del juego.
 
 ## Arquitectura
 
