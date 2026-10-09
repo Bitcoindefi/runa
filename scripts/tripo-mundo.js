@@ -189,45 +189,6 @@ function hash(x, y) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295
 }
 
-// Pinta una geometria de un color, para juntar muchas en una sola malla.
-function paint(geometry, hex) {
-  const flat = geometry.index ? geometry.toNonIndexed() : geometry
-  flat.deleteAttribute('uv')
-  const c = new THREE.Color(hex)
-  const colors = new Float32Array(flat.attributes.position.count * 3)
-  for (let i = 0; i < colors.length; i += 3) colors.set([c.r, c.g, c.b], i)
-  flat.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-  return flat
-}
-
-// Techo a dos aguas sobre un rectangulo de w por d, con la cumbrera a lo largo.
-function gable(w, d, rise) {
-  const along = w >= d
-  const [a, b] = along ? [w / 2, d / 2] : [d / 2, w / 2]
-  const p = (u, y, v) => (along ? [u, y, v] : [v, y, u])
-  const A = p(-a, 0, -b)
-  const B = p(a, 0, -b)
-  const C = p(a, 0, b)
-  const D = p(-a, 0, b)
-  const E = p(-a, rise, 0)
-  const F = p(a, rise, 0)
-  const tris = [A, E, F, A, F, B, D, C, F, D, F, E, A, D, E, B, F, C]
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(), 3))
-  geometry.computeVertexNormals()
-  return geometry
-}
-
-// Las palabras dentro de un edificio: la mas larga es su nombre.
-function nameOf(rows, box) {
-  let best = ''
-  for (let y = box.y0; y <= box.y1; y++) {
-    const words = (rows[y] || '').slice(box.x0, box.x1 + 1).match(/[a-z]+( [a-z]+)*/g) || []
-    for (const word of words) if (word.length > best.length) best = word
-  }
-  return best.length >= 3 ? best : ''
-}
-
 // Terreno: el suelo con textura fina y lo que crece encima.
 
 // Lo que lleva cada suelo de GROUND ademas de su color: su grano suelto, el
@@ -1302,6 +1263,45 @@ function natureMeshes(data, kinds, clock) {
   ].filter(Boolean)
 }
 
+// Pinta una geometria de un color, para juntar muchas en una sola malla.
+function paint(geometry, hex) {
+  const flat = geometry.index ? geometry.toNonIndexed() : geometry
+  flat.deleteAttribute('uv')
+  const c = new THREE.Color(hex)
+  const colors = new Float32Array(flat.attributes.position.count * 3)
+  for (let i = 0; i < colors.length; i += 3) colors.set([c.r, c.g, c.b], i)
+  flat.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  return flat
+}
+
+// Techo a dos aguas sobre un rectangulo de w por d, con la cumbrera a lo largo.
+function gable(w, d, rise) {
+  const along = w >= d
+  const [a, b] = along ? [w / 2, d / 2] : [d / 2, w / 2]
+  const p = (u, y, v) => (along ? [u, y, v] : [v, y, u])
+  const A = p(-a, 0, -b)
+  const B = p(a, 0, -b)
+  const C = p(a, 0, b)
+  const D = p(-a, 0, b)
+  const E = p(-a, rise, 0)
+  const F = p(a, rise, 0)
+  const tris = [A, E, F, A, F, B, D, C, F, D, F, E, A, D, E, B, F, C]
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(), 3))
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+// Las palabras dentro de un edificio: la mas larga es su nombre.
+function nameOf(rows, box) {
+  let best = ''
+  for (let y = box.y0; y <= box.y1; y++) {
+    const words = (rows[y] || '').slice(box.x0, box.x1 + 1).match(/[a-z]+( [a-z]+)*/g) || []
+    for (const word of words) if (word.length > best.length) best = word
+  }
+  return best.length >= 3 ? best : ''
+}
+
 /**
  * Arma el mapa. `data` es /world/<id>.json. `extras` trae lo que vive en la
  * pagina: figure(color) para los NPC y glb(file) para los modelos de Tripo.
@@ -1328,8 +1328,7 @@ export function buildWorld(data, extras = {}) {
   }
   // El suelo se lee como terreno y no como una grilla de cuadritos: varios
   // texeles por celda, manchas, bordes que se funden y sombra al pie de lo alto.
-  // El shader le suma el grano fino y el dibujo de adoquines y grava. `clock`
-  // mueve el pasto, el agua y la lava (update, abajo).
+  // El shader le suma el grano fino y el dibujo de adoquines y grava.
   const clock = { value: 0 }
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(width * CX, height * CZ),
@@ -1338,6 +1337,11 @@ export function buildWorld(data, extras = {}) {
   ground.rotation.x = -Math.PI / 2
   ground.position.set((width * CX) / 2, 0, (height * CZ) / 2)
   ground.receiveShadow = true
+  // El viento en el pasto y las olas del agua y la lava siguen al reloj en cada
+  // cuadro en que se dibuja el suelo: no hace falta que la pagina lo llame.
+  ground.onBeforeRender = () => {
+    clock.value = globalThis.performance.now() / 1000
+  }
   group.add(ground, soilSkirt(data))
 
   // Segunda pasada: edificios. Un grupo cerrado y lleno de celdas de estructura
@@ -1593,11 +1597,6 @@ export function buildWorld(data, extras = {}) {
     toWorld,
     buildings: buildings.length,
     loading: Promise.all(loads),
-    // El viento en el pasto y las olas del agua y la lava: la pagina lo llama en
-    // cada cuadro con el tiempo en segundos.
-    update(time) {
-      clock.value = time
-    },
     dispose() {
       const free = (node) => {
         if (node.userData.shared) return
