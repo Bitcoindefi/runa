@@ -862,9 +862,10 @@ const GRASS = {
 }
 
 // La mascara del pasto, una celda por texel y un margen afuera del mapa: R cuanto
-// pasto, G que tan alto y B la altura del paisaje (de 0 a 12,75 m). Afuera el
-// pasto sigue unos metros por la loma, si no es camino ni roca. `outside` trae
-// el paisaje: su altura (height), sus caminos (roads) y su pasto (meadow).
+// pasto, G que tan alto y B la altura del paisaje (de 0 a 12,75 m). Al borde de
+// un camino el pasto esta pisoteado, mas bajo y mas ralo. Afuera el pasto sigue
+// unos metros por la loma, si no es camino ni roca. `outside` trae el paisaje:
+// su altura (height), sus caminos (roads) y su pasto (meadow).
 const MARGIN = [36, 18]
 function grassMask(world, spec, outside) {
   const { data, kinds, inBuilding, CX, CZ } = world
@@ -875,6 +876,20 @@ function grassMask(world, spec, outside) {
   const pixels = new Uint8Array(tw * th * 4)
   const W = width * CX
   const D = height * CZ
+  // Lo que se pisa y no es pasto: tierra, adoquines, grava o arena.
+  const paved = (x, y) =>
+    x >= 0 &&
+    y >= 0 &&
+    x < width &&
+    y < height &&
+    !kinds[y * width + x] &&
+    '.;%='.includes((rows[y] || '')[x] || ' ')
+  const trodden = (x, y) => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) if (paved(x + dx, y + dy)) return true
+    }
+    return false
+  }
   // Afuera, primero la altura del paisaje en cada texel (adentro es 0); la
   // pendiente sale despues de sus vecinos.
   const lift = new Float32Array(tw * th)
@@ -896,8 +911,9 @@ function grassMask(world, spec, outside) {
         let amount = 0
         let tall = 0
         if (!kind && !inBuilding[i] && spec.soils[ch]) {
-          amount = spec.soils[ch]
-          tall = spec.tall[ch]
+          const worn = trodden(x, y) ? 0.5 : 1
+          amount = spec.soils[ch] * (0.6 + 0.4 * worn)
+          tall = spec.tall[ch] * worn
         } else if (kind === 'tree') {
           amount = 0.35
           tall = 0.45
@@ -913,14 +929,20 @@ function grassMask(world, spec, outside) {
       const dz = wz < 0 ? -wz : wz > D ? wz - D : 0
       const r = Math.hypot(dx, dz)
       const h = at(u, v)
-      const road = outside.roads.some((road) => roadDistance(road, wx, wz)[1] < road.half + 0.6)
+      // Cuanto falta para el borde del camino mas cercano.
+      let edge = Infinity
+      for (const road of outside.roads) {
+        edge = Math.min(edge, roadDistance(road, wx, wz)[1] - road.half)
+      }
       const steep = Math.hypot(
         (at(u + 1, v) - at(u - 1, v)) / (2 * CX),
         (at(u, v + 1) - at(u, v - 1)) / (2 * CZ)
       )
-      const amount = road ? 0 : (1 - smooth(9, 16, r)) * (1 - smooth(0.35, 0.6, steep)) * 0.8
+      const worn = edge < 1.8 ? 0.5 : 1
+      const field = (1 - smooth(9, 16, r)) * (1 - smooth(0.35, 0.6, steep)) * 0.8
+      const amount = edge < 0.6 ? 0 : field * (0.6 + 0.4 * worn)
       pixels[o] = amount * 255
-      pixels[o + 1] = 0.6 * 255
+      pixels[o + 1] = 0.6 * worn * 255
       pixels[o + 2] = clamp(h / 12.75, 0, 1) * 255
     }
   }
