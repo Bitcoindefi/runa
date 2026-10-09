@@ -28,13 +28,17 @@ const PAGES = {
 }
 const WORLD_JS = path.join(__dirname, 'tripo-mundo.js')
 // Los modulos de la pagina 2.5D, con el nombre con que los pide el navegador:
-// el mundo y sus partes (murallas, terreno), el titulo y el postproceso.
+// el mundo y sus partes (murallas, terreno), el titulo, el postproceso, la
+// pradera con su combate, el inventario y la vitrina.
 const MODULES = {
   'mundo.js': WORLD_JS,
   'murallas.js': path.join(__dirname, 'tripo-murallas.js'),
   'terreno.js': path.join(__dirname, 'tripo-terreno.js'),
   'titulo.js': path.join(__dirname, 'tripo-titulo.js'),
-  'efectos.js': path.join(__dirname, 'tripo-efectos.js')
+  'efectos.js': path.join(__dirname, 'tripo-efectos.js'),
+  'pradera.js': path.join(__dirname, 'tripo-pradera.js'),
+  'inventario.js': path.join(__dirname, 'tripo-inventario.js'),
+  'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
 // cosa, no se guarda. three.module.min.js importa ./three.core.js, por eso el

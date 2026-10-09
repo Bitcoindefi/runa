@@ -751,9 +751,12 @@
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
       import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
-      import { buildWorld, CX, CZ } from './mundo.js'
+      import { buildWorld, label, CX, CZ } from './mundo.js'
       import { buildTitle } from './titulo.js'
       import { createEffects } from './efectos.js'
+      import { createMeadow } from './pradera.js'
+      import { createInventory } from './inventario.js'
+      import { createShowcase } from './vitrina.js'
 
       // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
       //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
@@ -1693,6 +1696,8 @@
 
       function leaveWorld() {
         if (!world) return
+        // La pradera saca lo suyo (monstruos, golpes) antes que el mapa.
+        if (meadow) meadow.leave(world.map)
         scene.remove(world.built.group)
         world.built.dispose()
         world = null
@@ -1702,6 +1707,9 @@
       // Los mapas no cambian mientras la pagina corre: cada uno se pide una vez.
       const maps = new Map()
       function mapData(id) {
+        // Un mapa que arma la pagina (la pradera, de pradera.js) no se pide al visor.
+        const local = meadow && meadow.provide(id)
+        if (local) return Promise.resolve(local)
         if (!maps.has(id)) {
           const request = retry(() =>
             fetch('world/' + id + '.json', { cache: 'no-store' }).then((response) => {
@@ -1995,6 +2003,35 @@
       // de titulo (titulo.js, se arma la primera vez que se muestra el menu).
       const effects = createEffects({ renderer, scene, camera, settings })
       let title = null
+      // La pradera y su combate en 3D (pradera.js), el inventario como panel
+      // (inventario.js) y la vitrina del recorrido (vitrina.js). Cada uno puede
+      // devolver null: entonces la pagina sigue como antes.
+      const meadow = createMeadow({
+        scene,
+        camera,
+        hero,
+        CX,
+        CZ,
+        session: () => session,
+        bundle: () => juego,
+        figure,
+        label,
+        text: (name) => tr(name)
+      })
+      const inventory = createInventory({ tr: (name) => tr(name), L, settings })
+      const vitrina = createShowcase({
+        scene,
+        camera,
+        controls,
+        renderer,
+        hero,
+        models: () => models,
+        loadGlb,
+        loadRig,
+        label,
+        L,
+        say
+      })
 
       renderer.setAnimationLoop(() => {
         timer.update()
@@ -2027,7 +2064,7 @@
           }
           ashGeo.attributes.position.needsUpdate = true
         }
-        if (screen === 'tour') stepDemo(dt)
+        if (screen === 'tour') tourFrame(dt, t)
         if (screen === 'play') playFrame(dt, t)
         if (world) walk(dt)
         else if (mixer && screen === 'menu') setGait('Idle', 1)
@@ -2095,6 +2132,8 @@
       function leaveScreen() {
         if (screen === 'play') stopPlay()
         if (title) title.show(false)
+        if (vitrina) vitrina.show(false)
+        if (inventory) inventory.sync(null, null)
         viewShift = 0
         shiftView()
         camera.updateProjectionMatrix()
@@ -2691,14 +2730,21 @@
         if (!session) return
         live = session.state()
         const st = live
-        if (st.world) enterWorld(st.world)
+        // Los mapas fijos vienen del juego; la pradera, si pradera.js la dibuja.
+        const at = st.world || (meadow && meadow.worldAt(st))
+        if (at) enterWorld(at)
         else if (!st.title) {
           if (world) exitWorld()
           setScene(st.scene)
         }
         dressFrom(st)
         bossMarks(st.boss, time)
-        const text = st.title || st.naming || !st.world || !!st.overlay || st.combat
+        if (meadow && world && at && world.map === at.map) meadow.update(time, dt, st, world)
+        // La pantalla de texto del juego, salvo lo que la pagina ya muestra: el
+        // inventario (inventario.js) y el combate en 3D (pradera.js).
+        const panel = inventory ? inventory.sync(st, session) : false
+        const combat = st.combat && !(meadow && meadow.handlesCombat(st))
+        const text = st.title || st.naming || !at || (!!st.overlay && !panel) || combat
         setTerm(text || peek)
         playBox.hidden = termShown
         refreshPlayHud()
@@ -3248,6 +3294,20 @@
           ],
           at: [84, 22]
         },
+        // La pradera, si pradera.js la arma: arranca donde diga su mapa (start).
+        ...(meadow
+          ? [
+              {
+                map: 'field',
+                short: ['Meadow', 'Pradera'],
+                name: [
+                  'The meadow: monsters, camps and the road to the Colossus',
+                  'La pradera: monstruos, campamentos y el camino al Coloso'
+                ],
+                at: null
+              }
+            ]
+          : []),
         {
           map: null,
           short: ['Showcase', 'Vitrina'],
@@ -3375,10 +3435,13 @@
         if (!map) {
           demo.data = null
           exitWorld()
-          setScene('reino')
+          // La vitrina de vitrina.js, o la de siempre: el stickman y el reino.
+          if (vitrina) vitrina.show(true)
+          else setScene('reino')
           mode.textContent = pick(place.name)
           return
         }
+        if (vitrina) vitrina.show(false)
         let data
         try {
           data = await mapData(map)
@@ -3388,10 +3451,18 @@
           return
         }
         if (demo.map !== map || screen !== 'tour') return
-        const [x, y] = nearestWalkable(data, ...(at || place.at), true)
+        const [x, y] = nearestWalkable(data, ...(at || place.at || data.start || [0, 0]), true)
         Object.assign(demo, { data, x, y })
         await enterWorld({ map, x, y })
         hint()
+      }
+
+      // Cada cuadro del recorrido: los pasos, lo que se mueve en la pradera
+      // (pradera.js) y la vitrina (vitrina.js) mientras se ve.
+      function tourFrame(dt, t) {
+        stepDemo(dt)
+        if (meadow && world) meadow.update(t, dt, null, world)
+        if (vitrina && demo.map === null) vitrina.update(t, dt)
       }
 
       // Un paso por vez al paso elegido, en 8 direcciones como en una partida
@@ -3617,8 +3688,8 @@
               'Cruceta: correr. Toca un lugar. E: hablar. I: mochila.'
             )
           : L(
-              'WASD: run (Shift sprints). E: talk. I: bag. H: Tripo helmet. 1-6: place. Esc: menu.',
-              'WASD: correr (Shift esprinta). E: hablar. I: mochila. H: yelmo de Tripo. 1-6: lugar. Esc: menu.'
+              `WASD: run (Shift sprints). E: talk. I: bag. H: Tripo helmet. 1-${PLACES.length}: place. Esc: menu.`,
+              `WASD: correr (Shift esprinta). E: hablar. I: mochila. H: yelmo de Tripo. 1-${PLACES.length}: lugar. Esc: menu.`
             )
         placeButtons.forEach((b, i) => {
           b.textContent = i + 1 + ' ' + pick(PLACES[i].short)
