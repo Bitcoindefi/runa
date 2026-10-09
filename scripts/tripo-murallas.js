@@ -23,8 +23,9 @@
 //   skip         Set de clases de celda que ya no suben como cajas
 //   cells        Uint8Array (y * width + x): 1 en las celdas que dibuja este
 //                modulo, sean de la clase que sean; tampoco suben como cajas
-//   gates        Set de 'x,y' de las puertas que este modulo dibujo como porton:
-//                no llevan columna de luz ni losa con letra, solo su nombre
+//   gates        Set de 'x,y' de las puertas que este modulo dibujo como porton
+//                (o vistio, como el del castillo): no llevan columna de luz ni
+//                losa con letra, solo su nombre
 //   labelHeight  (door) => a que altura va el nombre de esa puerta (opcional)
 //   update       (time) => cada cuadro, para antorchas o banderas (opcional)
 //   dispose      () => lo que no cuelgue de `group` (opcional)
@@ -32,10 +33,15 @@
 // Como se arma: primero se lee la grilla (que es muralla, que la rellena, por
 // donde se anda y donde hay portones); despues la muralla sube como una masa
 // con talud, cordon, parapeto y almenas, que sigue la grilla en las dos
-// direcciones; encima van las torres, los portones con su arco, puertas,
-// rastrillo, antorchas y estandartes, y por ultimo los cercos bajos. Todo se
-// junta en pocas mallas por trozo del mapa, con texturas de canvas (sillares,
-// tablas, tejas) que se arman una vez y quedan en memoria.
+// direcciones; encima van las torres, los portones con su arco (los de las
+// fronteras y la salida del castillo cruzan la muralla del borde), puertas,
+// rastrillo, antorchas y estandartes, y por ultimo los cercos bajos. Ademas:
+// el porton del castillo de la ciudad (un edificio de tripo-mundo.js) recibe
+// antorchas, rastrillo y estandartes; los puestos del mercado, mostrador,
+// mercaderia y toldo a rayas; el monumento de la plaza, su piso de marmol con
+// una rosa de los vientos; el coliseo, su anfiteatro. La piedra va en mallas
+// por trozo del mapa y lo demas en una malla por material, con texturas de
+// canvas (sillares, tablas, tejas) que se arman una vez y quedan en memoria.
 import * as THREE from 'three'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
@@ -785,6 +791,31 @@ const WALLISH = new Set(['rampart', 'wall', 'masonry'])
 // Lo que puede rellenar una muralla: el arte del dibujo entre sus lineas.
 const FILLER = new Set(['body', 'frame', 'sign', 'window', 'ornament', 'roof', 'building'])
 
+// Las vecinas de la celda i en una grilla de W de ancho y N celdas: llama a
+// fn con cada una que existe, sin armar arreglos (se usa en cada celda de
+// mapas de 64.000). Devuelve cuantas habia.
+function around(i, W, N, fn) {
+  const x = i % W
+  let count = 0
+  if (i >= W) {
+    fn(i - W)
+    count++
+  }
+  if (i + W < N) {
+    fn(i + W)
+    count++
+  }
+  if (x > 0) {
+    fn(i - 1)
+    count++
+  }
+  if (x < W - 1) {
+    fn(i + 1)
+    count++
+  }
+  return count
+}
+
 // Lee el mapa: por donde se anda, que es muralla (contorno 1, relleno 2 y
 // relleno de torre 3), que es cerco bajo y la altura de cada celda.
 function survey(world, style) {
@@ -810,19 +841,17 @@ function survey(world, style) {
   for (let s = 0; s < N; s++) {
     if (!walk[s] || zone[s] >= 0) continue
     const id = sizes.length
-    let size = 0
     const stack = [s]
     zone[s] = id
+    const visit = (n) => {
+      if (!walk[n] || zone[n] >= 0) return
+      zone[n] = id
+      stack.push(n)
+    }
+    let size = 0
     while (stack.length) {
-      const i = stack.pop()
+      around(stack.pop(), W, N, visit)
       size++
-      const x = i % W
-      for (const n of [i - W, i + W, x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1]) {
-        if (n >= 0 && n < N && walk[n] && zone[n] < 0) {
-          zone[n] = id
-          stack.push(n)
-        }
-      }
     }
     sizes.push(size)
   }
@@ -847,17 +876,16 @@ function survey(world, style) {
     let ramparts = 0
     const stack = [s]
     comp[s] = id
+    const visit = (n) => {
+      if (comp[n] >= 0 || !joins(n)) return
+      comp[n] = id
+      stack.push(n)
+    }
     while (stack.length) {
       const i = stack.pop()
       cells.push(i)
       if (kinds[i] === 'rampart') ramparts++
-      const x = i % W
-      for (const n of [i - W, i + W, x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1]) {
-        if (n >= 0 && n < N && comp[n] < 0 && joins(n)) {
-          comp[n] = id
-          stack.push(n)
-        }
-      }
+      around(i, W, N, visit)
     }
     const fort = boss || ramparts >= 8
     for (const i of cells) (fort ? mass : low)[i] = 1
@@ -883,30 +911,22 @@ function survey(world, style) {
     seen[s] = 1
     let closed = 0
     let open = 0
+    const visit = (n) => {
+      if (eligible(n)) {
+        if (!seen[n]) {
+          seen[n] = 1
+          stack.push(n)
+        }
+      } else if (mass[n]) closed++
+      else open++
+    }
     while (stack.length) {
       const i = stack.pop()
       cells.push(i)
-      const x = i % W
-      const y = (i - x) / W
-      for (const [nx, ny] of [
-        [x + 1, y],
-        [x - 1, y],
-        [x, y + 1],
-        [x, y - 1]
-      ]) {
-        if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
-          closed++
-          continue
-        }
-        const n = ny * W + nx
-        if (eligible(n)) {
-          if (!seen[n]) {
-            seen[n] = 1
-            stack.push(n)
-          }
-        } else if (mass[n]) closed++
-        else open++
-      }
+      // Lo que queda afuera del mapa cuenta como cerrado (visit ya sumo lo
+      // de adentro: se cuenta aparte, no en la misma suma).
+      const inside = around(i, W, N, visit)
+      closed += 4 - inside
     }
     const ratio = closed / Math.max(1, closed + open)
     if (cells.length >= 2 && ratio >= 0.6) {
@@ -917,16 +937,17 @@ function survey(world, style) {
   }
   // Los marcos (=) pegados a la muralla son una terraza baja; los tejados de
   // las diagonales del dibujo (/ y \ junto a dos celdas de muralla), muralla.
+  let touching = 0
+  const touch = (n) => {
+    if (mass[n]) touching++
+  }
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 0; i < N; i++) {
       if (mass[i] || low[i] || inBuilding[i] || reach[i]) continue
       const kind = kinds[i]
       if (kind !== 'frame' && kind !== 'roof') continue
-      const x = i % W
-      let touching = 0
-      for (const n of [i - W, i + W, x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1]) {
-        if (n >= 0 && n < N && mass[n]) touching++
-      }
+      touching = 0
+      around(i, W, N, touch)
       if (kind === 'frame' && touching >= 1) mass[i] = 2
       else if (touching >= 2) mass[i] = 1
     }
