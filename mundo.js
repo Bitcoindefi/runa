@@ -52,7 +52,9 @@ const LOOSE = {
   door: { h: 0.12, color: 0xe0c060, glow: 1, glyph: true },
   water: { h: 0.08, color: 0x2f6f9f, glow: 0.25, sink: 0.05 },
   lava: { h: 0.12, color: 0xff5a1a, glow: 1.6, sink: 0.04 },
-  portal: { h: 1.2, color: 0x9a6bff, glow: 1.4 }
+  // El portal y el escombro de las ruinas se pisan: van al ras del piso.
+  portal: { h: 0.15, color: 0x9a6bff, glow: 1.4 },
+  rubble: { h: 0.16, color: 0x5a4a42 }
 }
 
 // Lo que puede formar parte de un edificio.
@@ -82,7 +84,10 @@ function classify(ch, tile, kind) {
     if (ch === '~') return 'lava'
     if (ch === '=' || ch === '.' || ch === ',') return null
     if (ch === 'O') return 'portal'
-    if (ch === 'x') return 'ornament'
+    // En las ruinas solo frenan # | - + (BossZone.isWalkable): el resto se pisa,
+    // asi que se dibuja como escombro bajo y no como un bloque que el heroe
+    // atravesaria.
+    if (!'#|-+'.includes(ch)) return 'rubble'
   }
   if (ch === ' ') return 'body'
   if (!tile) return 'frame'
