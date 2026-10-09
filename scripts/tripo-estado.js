@@ -5,7 +5,7 @@
 // (scripts/tripo-viewer.js lo lee) que del juego que corre dentro de la pagina
 // (scripts/tripo-juego.js), para que las dos formas de jugar se vean igual.
 
-const { items } = require('../lib/content.js')
+const { items, foes } = require('../lib/content.js')
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
 // Los mapas fijos del juego que la pagina arma en 3D.
@@ -106,6 +106,41 @@ function nearOf(runa) {
   return null
 }
 
+// Los monstruos vivos de un campo (la pradera, la cripta, un campamento) y sus
+// guias, para dibujarlos en 3D: donde esta cada uno y que es.
+function foesOf(field) {
+  if (!field || !Array.isArray(field.foes)) return null
+  const list = []
+  for (const foe of field.foes) {
+    if (foe.dead) continue
+    const def = foes[foe.kind] || {}
+    list.push({ id: foe.id, kind: foe.kind, name: def.name || foe.kind, x: foe.x, y: foe.y })
+  }
+  return list
+}
+
+// La pelea en curso, para animarla: contra quien, la vida de los dos, el arma en
+// la mano (la elige el guion entre golpe y golpe) y las ultimas lineas de la
+// pelea con su tick. Cada ataque resuelve varios ticks de una vez.
+function fightOf(field) {
+  const combat = field && field.combat
+  const world = combat && combat.world
+  if (!world) return null
+  const held = world.held.left
+  return {
+    id: combat.foe.id,
+    kind: combat.foe.kind,
+    tick: world.tick,
+    over: world.over || null,
+    hp: Math.max(0, Math.ceil(Number(world.hero.hp) || 0)),
+    maxhp: world.hero.base.hp,
+    foeHp: Math.max(0, Math.ceil(Number(world.foe.hp) || 0)),
+    foeMaxhp: world.foe.base.hp,
+    weapon: held && held.kind === 'weapon' ? held.id : null,
+    log: world.log.slice(-8).map(({ tick, text }) => ({ tick, text }))
+  }
+}
+
 // Un juego en marcha (lib/game.js Runa) tal como lo describe la pagina.
 function live(runa) {
   const sheet = runa.player.snapshot()
@@ -149,7 +184,9 @@ function live(runa) {
         }
       : null,
     equipped: wearing(sheet.equipped),
-    bag: sheet.items.map(item).filter(Boolean)
+    bag: sheet.items.map(item).filter(Boolean),
+    foes: foesOf(field),
+    fight: fightOf(field)
   }
 }
 
@@ -163,5 +200,7 @@ module.exports = {
   locationOf,
   overlayOf,
   nearOf,
+  foesOf,
+  fightOf,
   live
 }
