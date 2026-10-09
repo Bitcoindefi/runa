@@ -90,6 +90,11 @@ for (const name of Object.keys(viewer.LIBS)) {
 for (const model of models) {
   write(`assets/tripo/${model.name}`, fs.readFileSync(path.join(viewer.MODELS, model.name)))
 }
+// Los NPC pintados de la vista 2.5D, un PNG por tipo.
+const npcArt = path.join(__dirname, '..', 'assets', 'npcs')
+for (const name of fs.readdirSync(npcArt).filter((file) => /^[a-z]+\.png$/.test(file))) {
+  write(`assets/npcs/${name}`, fs.readFileSync(path.join(npcArt, name)))
+}
 // Sin Jekyll, GitHub Pages sirve cada archivo tal cual.
 write('.nojekyll', '')
 console.log(`${out}: ${models.length} modelos de Tripo y ${ids.length} mapas`)
