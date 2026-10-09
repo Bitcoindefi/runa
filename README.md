@@ -17,7 +17,7 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 
 ## Actualización para el hackathon de Tripo
 
-[Ver la demo grabada (MP4, 68 segundos)](docs/demo/runa-tripo-demo.mp4).
+[Ver la demo grabada (MP4, 68 segundos)](docs/demo/runa-tripo-demo-color.mp4).
 Es un recorrido reproducible por el render real del juego, grabado en un
 navegador a partir de entradas y cuadros de Runa. Usa una partida de muestra
 en memoria, sin tocar guardados. [Cómo se grabó](docs/demo-walkthrough.md).
@@ -38,7 +38,9 @@ conexión a Tripo para mostrarlos. Los cuadros ya están incluidos en el repo.
 | Yelmo de hierro           | Gira al seleccionarlo en la armería o en la mochila, cuando hay espacio en la terminal.                                  |
 
 Cada modelo tiene **24 vistas separadas por 15 grados**. Una vuelta tarda
-aproximadamente tres segundos. Los cuadros del menú existen en `64×22`, `40×10` y `28×5` caracteres y se
+10,8 segundos en el menú; el héroe y el yelmo conservan sus vueltas de tres
+segundos. El reino va en cian, el héroe en amarillo y el Coloso en rojo para
+separar sus siluetas. Los cuadros del menú existen en `88×22`, `60×10` y `32×5` caracteres y se
 elige el mayor que cabe sin ocultar los controles. Maximizar la terminal
 permite ver más detalle.
 
@@ -99,7 +101,8 @@ Prompt de texto
    el ASCII conserva la forma y la luz, con el color aplicado por el juego.
 3. [assets/ascii](assets/ascii) contiene las 24 vistas de cada modelo en tres
    tamaños. [render.js](lib/render.js) las muestra y el reloj de
-   [game.js](lib/game.js) avanza la animación cada 125 ms aproximadamente.
+   [game.js](lib/game.js) avanza las vistas: cada 450 ms en el menú y cada
+   125 ms aproximadamente en las vistas de personaje y yelmo.
    **Durante el juego solo se carga texto; el procesamiento 3D ocurre antes.**
 
 Los modelos Tripo se usan en el menú, la creación, las vistas del yelmo y el mapa del Coloso.
@@ -378,7 +381,7 @@ npx bare test/map.smoke.js
 Estado revisado de esta versión:
 
 - `142/142` pruebas correctas.
-- `1337/1337` aserciones correctas.
+- `1340/1340` aserciones correctas.
 - Formato y lint limpios.
 - RUNA, NOX, fronteras, puertas, portón, pradera y dungeon validados por el smoke test.
 - Capturas inspeccionadas y recortadas al borde exacto de la terminal.

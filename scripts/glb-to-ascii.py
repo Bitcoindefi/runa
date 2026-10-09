@@ -74,18 +74,24 @@ def load_mesh(file):
     return mesh - (low + high) / 2
 
 
-def bake(mesh, width, height, count):
+def bake(mesh, width, height, count, tags=None, elevation=0, azimuth=0):
     radius = np.linalg.norm(mesh[:, :, [0, 2]], axis=2).max()
     extent_y = np.abs(mesh[:, :, 1]).max()
+    pitch = math.radians(elevation)
+    extent_y = extent_y * abs(math.cos(pitch)) + radius * abs(math.sin(pitch))
     scale = min((width - 4) / (2 * radius), (height - 2) / extent_y)
     ramp = np.array(list('.:-=+*#%@'))
     light = np.array([-0.4, 0.7, 0.6])
     light /= np.linalg.norm(light)
     frames = []
+    color_frames = []
     for frame in range(count):
-        angle = frame * 2 * math.pi / count
+        angle = frame * 2 * math.pi / count + math.radians(azimuth)
         c, s = math.cos(angle), math.sin(angle)
         rotated = mesh @ np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])
+        pitch = math.radians(elevation)
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        rotated = rotated @ np.array([[1, 0, 0], [0, cp, sp], [0, -sp, cp]])
         normals = np.cross(rotated[:, 1] - rotated[:, 0], rotated[:, 2] - rotated[:, 0])
         normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
         brightness = 0.22 + 0.78 * np.abs(normals @ light)
@@ -94,7 +100,8 @@ def bake(mesh, width, height, count):
         screen[:, :, 1] = -rotated[:, :, 1] * scale / 2 + (height - 1) / 2
         depth = np.full((height, width), -np.inf)
         pixels = np.full((height, width), ' ')
-        for triangle, shade in zip(screen, brightness):
+        colors = np.full((height, width), ' ')
+        for index, (triangle, shade) in enumerate(zip(screen, brightness)):
             x0, y0, z0 = triangle[0]
             x1, y1, z1 = triangle[1]
             x2, y2, z2 = triangle[2]
@@ -113,8 +120,15 @@ def bake(mesh, width, height, count):
             mask = (a >= -1e-6) & (b >= -1e-6) & (a+b <= 1+1e-6) & (z > region)
             region[mask] = z[mask]
             pixels[top:bottom+1, left:right+1][mask] = ramp[min(len(ramp)-1, int(shade*(len(ramp)-1)))]
+            if tags is not None:
+                colors[top:bottom+1, left:right+1][mask] = str(tags[index])
         frames.append([''.join(row) for row in pixels])
-    return {'width': width, 'height': height, 'frames': frames}
+        if tags is not None:
+            color_frames.append([''.join(row) for row in colors])
+    result = {'width': width, 'height': height, 'frames': frames}
+    if tags is not None:
+        result['colorFrames'] = color_frames
+    return result
 
 
 if __name__ == '__main__':
@@ -126,9 +140,14 @@ if __name__ == '__main__':
                         help='Comma-separated character canvases, e.g. 43x13')
     parser.add_argument('--hero', help='Compose a hero GLB in front of this landscape')
     parser.add_argument('--colossus', help='Compose a colossus GLB opposite the hero')
+    parser.add_argument('--frame-ms', type=int, default=125)
+    parser.add_argument('--elevation', type=float, default=0)
+    parser.add_argument('--azimuth', type=float, default=0)
     args = parser.parse_args()
     if not 2 <= args.frames <= 120:
         parser.error('--frames must be between 2 and 120')
+    if not 50 <= args.frame_ms <= 2000:
+        parser.error('--frame-ms must be between 50 and 2000')
     try:
         sizes = [tuple(map(int, size.split('x'))) for size in args.sizes.split(',')]
         if any(len(size) != 2 or not 8 <= size[0] <= 160 or not 4 <= size[1] <= 60 for size in sizes):
@@ -136,17 +155,19 @@ if __name__ == '__main__':
     except ValueError:
         parser.error('--sizes expects widths 8..160 and heights 4..60, e.g. 43x13')
     mesh = load_mesh(args.input)
+    tags = None
     if bool(args.hero) != bool(args.colossus):
         parser.error('--hero and --colossus must be supplied together')
     if args.hero:
         # Reuse the actual generated meshes, positioning them on the landscape
         # base. This is an offline tableau, not a skeletal combat animation.
         mesh *= 10 / np.ptp(mesh[:, :, 0])
-        mesh[:, :, 2] -= 3
+        mesh[:, :, 2] -= 1.5
         floor = mesh[:, :, 1].min() + 0.35
         parts = [mesh]
-        for file, height, x, angle in [(args.hero, 1.8, -2, math.pi/4),
-                                       (args.colossus, 4.0, 2, -math.pi/4)]:
+        tag_parts = [np.where(mesh[:, :, 1].mean(axis=1) < floor + 0.3, 3, 0)]
+        for tag, (file, height, x, angle) in enumerate([(args.hero, 2.5, -2.5, math.pi/4),
+                                       (args.colossus, 4.5, 2.5, -math.pi/4)], start=1):
             part = load_mesh(file)
             part *= height / np.ptp(part[:, :, 1])
             c, s = math.cos(angle), math.sin(angle)
@@ -155,12 +176,15 @@ if __name__ == '__main__':
             part[:, :, 1] += floor - part[:, :, 1].min()
             part[:, :, 2] += 3
             parts.append(part)
+            tag_parts.append(np.full(len(part), tag))
         mesh = np.concatenate(parts)
+        tags = np.concatenate(tag_parts)
         mesh -= (mesh.min(axis=(0, 1)) + mesh.max(axis=(0, 1))) / 2
-    result = {'source': Path(args.input).name, 'frameMs': 125,
-              'variants': [bake(mesh, width, height, args.frames) for width, height in sizes]}
+    result = {'source': Path(args.input).name, 'frameMs': args.frame_ms,
+              'variants': [bake(mesh, width, height, args.frames, tags, args.elevation, args.azimuth) for width, height in sizes]}
     if args.hero:
         result['composedFrom'] = [Path(args.input).name, Path(args.hero).name, Path(args.colossus).name]
+        result['palette'] = ['cyan', 'yellow', 'red', 'gray']
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=True, indent=2) + '\n')

@@ -4,6 +4,10 @@ El video muestra 68 segundos de recorrido por el render real de RUNA:
 menu con paisaje, creacion de personaje, ciudad, NOX, pradera, compra del
 yelmo, inventario y arena del Coloso.
 
+La version actual es `docs/demo/runa-tripo-demo-color.mp4`. El menu separa
+el reino en cian, el heroe en amarillo y el Coloso en rojo, con una vuelta
+cada 10,8 segundos para facilitar la lectura de la escena.
+
 Es una grabacion reproducible del render ANSI presentado en un navegador,
 no una grabacion de una ventana nativa de terminal. El script ejecuta Runa,
 sus entradas de teclado y su reloj a 15 cuadros por segundo. El navegador

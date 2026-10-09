@@ -2,7 +2,9 @@
 
 El juego reproduce 24 vistas de texto precalculadas. No abre GLB, no usa un
 motor 3D y no llama a Tripo durante la partida. El reloj existente cambia el
-cuadro cada 125 ms: una vuelta tarda tres segundos.
+cuadro del menu cada 450 ms: una vuelta tarda 10,8 segundos. El reino es cian,
+el heroe amarillo y el Coloso rojo; son colores asignados a cada geometria,
+sin muestrear las texturas originales. Heroe y yelmo giran cada 125 ms.
 
 Para convertir un modelo una vez, desde Ubuntu con Python 3 y numpy:
 
@@ -11,7 +13,7 @@ python3 scripts/glb-to-ascii.py assets/tripo/heroe.glb --output assets/ascii/her
 python3 scripts/glb-to-ascii.py assets/tripo/coloso.glb --output assets/ascii/coloso.json
 python3 scripts/glb-to-ascii.py assets/tripo/yelmo.glb --output assets/ascii/yelmo.json
 python3 scripts/glb-to-ascii.py assets/tripo/coloso.glb --output assets/ascii/coloso-field.json --sizes 43x13
-python3 scripts/glb-to-ascii.py assets/tripo/paisaje.glb --hero assets/tripo/heroe.glb --colossus assets/tripo/coloso.glb --output assets/ascii/paisaje.json
+python3 scripts/glb-to-ascii.py assets/tripo/paisaje.glb --hero assets/tripo/heroe.glb --colossus assets/tripo/coloso.glb --sizes 88x22,60x10,32x5 --frame-ms 450 --elevation 12 --azimuth=-15 --output assets/ascii/paisaje.json
 ```
 
 El script lee la escena GLB, aplica las transformaciones de sus nodos y

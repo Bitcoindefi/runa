@@ -195,8 +195,7 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
     game.update({ type: 'resize', width, height })
     game.animationTick = 0
     const first = style.stripAnsi(game.view())
-    game.update({ type: 'tick' })
-    game.update({ type: 'tick' })
+    for (let tick = 0; tick < 8; tick++) game.update({ type: 'tick' })
     const next = style.stripAnsi(game.view())
     t.is(next.split('\n').length, height)
     t.ok(next.split('\n').every((line) => line.length === width))
@@ -209,10 +208,18 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
   const menu = { page: 'main', slots: [], frame: 0 }
   t.is(
     render.titleScreen(80, 44, '', menu),
-    render.titleScreen(80, 44, '', { ...menu, frame: 24 }),
+    render.titleScreen(80, 44, '', { ...menu, frame: 87 }),
     'the landscape wraps after one rotation'
   )
   t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('HEROE'))
+  const slow = new Runa({ presence: false })
+  slow.update({ type: 'resize', width: 120, height: 44 })
+  const initial = slow.view()
+  slow.update({ type: 'tick' })
+  slow.update({ type: 'tick' })
+  t.is(initial, slow.view(), 'the menu holds each angle long enough to read it')
+  t.ok(initial.includes('\x1b[36m'), 'the kingdom is colored cyan')
+  t.ok(initial.includes('\x1b[31m'), 'the colossus is colored red')
 })
 
 test('the controls button opens a complete overlay and returns to the previous state', (t) => {
