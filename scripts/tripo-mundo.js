@@ -291,12 +291,24 @@ const SOIL = {
 // pasto (patch). En los claros o con dibujo (tierra, grava, adoquines, ceniza)
 // las manchas solo oscurecen: asi el borde entre dos de ellos no se aclara. El
 // pasto tiene manchas secas; NOX es de noche y frio, con manchas lilas; en las
-// ruinas el suelo junto a la lava se aclara.
+// ruinas el suelo junto a la lava se aclara. `ground` cambia el color de algun
+// suelo en ese mapa: la ciudad es una pradera verde y la grava del Coliseo es
+// la arena de la arena, rastrillada en circulos.
 const MOOD = {
-  city: { tint: [1, 1, 1], patch: [1.9, 1.45, 1.15] },
+  city: {
+    tint: [1, 1, 1],
+    patch: [1.5, 1.32, 1.04],
+    ground: { '`': 0x3d5a29, ',': 0x45672c, '"': 0x40682a }
+  },
   nox: { tint: [0.72, 0.8, 1.02], patch: [1.35, 1.2, 1.7] },
+  coliseum: {
+    tint: [1.02, 1, 0.95],
+    patch: [1.32, 1.22, 1.04],
+    ground: { '%': 0xa58a66, ',': 0x4c6a2c }
+  },
   boss: { tint: [1, 1, 1], patch: [1.7, 1.55, 1.5] }
 }
+MOOD.castle = MOOD.city
 
 // Cuanto oscurece el suelo al pie de lo que ocupa toda su celda. Los arboles y
 // las piedras no la llenan: su sombra es redonda, desde el centro.
@@ -612,7 +624,9 @@ function soilRow(job, v) {
 function soilTexture(data, kinds) {
   const { width, height, rows } = data
   const boss = data.kind === 'boss'
-  const { tint } = MOOD[data.id] || MOOD.city
+  const mood = MOOD[data.id] || MOOD.city
+  const { tint } = mood
+  const colors = { ...GROUND, ...mood.ground }
   const keys = Object.keys(SOIL)
   // El ultimo suelo es lo que queda tapado del todo, dentro de un edificio.
   const count = keys.length + 1
@@ -622,7 +636,7 @@ function soilTexture(data, kinds) {
   const pattern = new Float32Array(count)
   const family = new Uint8Array(count)
   keys.forEach((key, k) => {
-    base.set(soilColor(GROUND[key], tint), k * 3)
+    base.set(soilColor(colors[key], tint), k * 3)
     grain[k] = SOIL[key].grain * 255
     pattern[k] = SOIL[key].pattern || 0
     family[k] = SOIL[key].family
@@ -762,75 +776,146 @@ function soilTexture(data, kinds) {
   return texture
 }
 
-// El campo alrededor del mapa, para que no flote en el vacio: un plano grande y
-// apenas mas bajo, del pasto que mas hay en el borde (ceniza en las ruinas), que
-// se oscurece lejos del mapa hasta perderse en la niebla.
-function soilSkirt(data) {
-  const { width, height, rows } = data
-  const w = width * CX
-  const d = height * CZ
-  const far = 70
-  const seen = {}
+// La luz propia del suelo, una celda por texel, o null si el mapa no tiene: el
+// resplandor que sube junto a la lava de las ruinas y el halo de cada colonia de
+// hongos de NOX. Se lee con las mismas uv que la textura del suelo.
+function soilGlow(data, kinds, fungi) {
+  const { width, height } = data
+  const lava = data.kind === 'boss'
+  if (!lava && !fungi.length) return null
+  const light = new Float32Array(width * height * 3)
+  // Suma un halo de radio `reach` celdas (las filas miden el doble) alrededor.
+  const halo = (x, y, reach, color, power) => {
+    for (let dy = -Math.ceil(reach / 2); dy <= Math.ceil(reach / 2); dy++) {
+      for (let dx = -Math.ceil(reach); dx <= Math.ceil(reach); dx++) {
+        const [nx, ny] = [x + dx, y + dy]
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+        const d = Math.hypot(dx, dy * 2) / reach
+        if (d >= 1) continue
+        const k = (1 - d) * (1 - d) * power
+        const o = (ny * width + nx) * 3
+        light[o] += color.r * k
+        light[o + 1] += color.g * k
+        light[o + 2] += color.b * k
+      }
+    }
+  }
+  if (lava) {
+    const heat = new THREE.Color(0xff5a14)
+    for (let i = 0; i < kinds.length; i++) {
+      if (kinds[i] !== 'lava') continue
+      const x = i % width
+      const y = (i - x) / width
+      const edge = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1]
+      ].some(([dx, dy]) => kinds[(y + dy) * width + x + dx] !== 'lava')
+      if (edge) halo(x, y, 5, heat, 0.16)
+    }
+  }
+  const tone = new THREE.Color()
+  for (const [x, y, hex] of fungi) halo(x, y, 3.2, tone.setHex(hex), 0.3)
+  const pixels = new Uint8Array(width * height * 4)
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (x > 2 && y > 2 && x < width - 3 && y < height - 3) continue
-      const ch = (rows[y] || '')[x]
-      if (SOIL[ch] && SOIL[ch].family === 1) seen[ch] = (seen[ch] || 0) + 1
+      const i = (y * width + x) * 3
+      const o = ((height - 1 - y) * width + x) * 4
+      pixels[o] = Math.min(1, light[i]) * 255
+      pixels[o + 1] = Math.min(1, light[i + 1]) * 255
+      pixels[o + 2] = Math.min(1, light[i + 2]) * 255
+      pixels[o + 3] = 255
     }
   }
-  const meadow = Object.keys(seen).sort((a, b) => seen[b] - seen[a])[0] || '`'
-  const mood = MOOD[data.id] || MOOD.city
-  const color = soilColor(GROUND[data.kind === 'boss' ? 'ash' : meadow], mood.tint)
-  const n = 32
-  const pixels = new Uint8ClampedArray(n * n * 4)
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const wx = ((x + 0.5) / n) * (w + far * 2) - far
-      const wz = (1 - (y + 0.5) / n) * (d + far * 2) - far
-      const fade = 1 - 0.55 * Math.min(1, Math.max(0, -wx, wx - w, -wz, wz - d) / far)
-      pixels.set([color[0] * fade, color[1] * fade, color[2] * fade, 128], (y * n + x) * 4)
-    }
-  }
-  const texture = new THREE.DataTexture(new Uint8Array(pixels.buffer), n, n)
+  const texture = new THREE.DataTexture(pixels, width, height)
   texture.magFilter = THREE.LinearFilter
   texture.minFilter = THREE.LinearFilter
-  texture.colorSpace = THREE.SRGBColorSpace
   texture.needsUpdate = true
-  const skirt = new THREE.Mesh(
-    new THREE.PlaneGeometry(w + far * 2, d + far * 2),
-    soilMaterial(texture, data, w + far * 2, d + far * 2, -far)
-  )
-  skirt.rotation.x = -Math.PI / 2
-  skirt.position.set(w / 2, -0.02, d / 2)
-  skirt.receiveShadow = true
-  return skirt
+  return texture
+}
+
+// Los hongos que brillan en el musgo de NOX, en colonias que siguen un ruido
+// grande: [x, y, color] por mata, siempre los mismos.
+function fungusSpots(data, kinds, palette) {
+  if (data.id !== 'nox') return []
+  const { width, height, rows } = data
+  const colonies = noiseField(width, height, [
+    [22, 1, 9],
+    [7, 0.45, 3]
+  ])
+  const colors = [palette.glow, palette.vein || palette.glow, palette.vein || palette.glow]
+  const spots = []
+  for (let y = 0; y < height; y++) {
+    const row = rows[y] || ''
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x
+      if (kinds[i] || row[x] !== '`') continue
+      const patch = smooth01(Math.min(1, Math.max(0, (colonies[i] / 1.45 - 0.56) / 0.16)))
+      if (hash(x * 13 + 5, y * 7 - 3) < 0.075 * patch) {
+        spots.push([x, y, colors[Math.floor(hash(x, y * 3) * colors.length)]])
+      }
+    }
+  }
+  return spots
 }
 
 // El material del suelo: la textura del mapa con, encima, manchas grandes del
-// tono del mapa, relieve y grano fino, y segun el alfa adoquines o grava. Todo va
-// a escala del mundo: el plano mide w por d unidades y empieza en `from`, asi el
-// campo de afuera sigue las mismas manchas que el mapa.
-function soilMaterial(texture, data, w, d, from = 0) {
+// tono del mapa, grano fino y segun el alfa adoquines o grava. Esos dibujos
+// tambien tuercen la normal: con la luz rasante cada piedra y cada junta tiene
+// relieve. Todo va a escala del mundo (el plano mide w por d unidades), asi el
+// paisaje de afuera sigue las mismas manchas. En el Coliseo la grava es arena
+// rastrillada en circulos; en las ruinas la ceniza se agrieta y junto a la lava
+// las grietas tienen brasas. `glow` es la luz propia del suelo (soilGlow).
+function soilMaterial(texture, data, w, d, { clock = { value: 0 }, glow = null } = {}) {
   const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 1 })
   const { patch } = MOOD[data.id] || MOOD.city
+  material.defines = {}
+  if (data.id === 'coliseum') material.defines.SOIL_SAND = ''
+  if (data.kind === 'boss') material.defines.SOIL_ASH = ''
+  if (glow) {
+    material.defines.SOIL_GLOW = ''
+    // La textura va como uniforme: se libera con el material.
+    material.addEventListener('dispose', () => glow.dispose())
+  }
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.soilDetail = { value: soilDetail() }
-    shader.uniforms.soilSize = { value: new THREE.Vector3(w, d, from) }
-    shader.uniforms.soilPatch = { value: new THREE.Vector3(...patch) }
+    Object.assign(shader.uniforms, {
+      clock,
+      soilDetail: { value: soilDetail() },
+      soilSize: { value: new THREE.Vector2(w, d) },
+      soilPatch: { value: new THREE.Vector3(...patch) },
+      soilGlow: { value: glow }
+    })
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <map_pars_fragment>',
         `#include <map_pars_fragment>
         uniform sampler2D soilDetail;
-        uniform vec3 soilSize;
-        uniform vec3 soilPatch;`
+        uniform vec2 soilSize;
+        uniform vec3 soilPatch;
+        uniform float clock;
+        #ifdef SOIL_GLOW
+          uniform sampler2D soilGlow;
+        #endif
+        // La altura del relieve fino en un punto del grano: adoquines, grava (o
+        // arena) y un poco de grano en todo.
+        float soilRelief( vec4 grain, float cobble, float gravel ) {
+          #ifdef SOIL_SAND
+            return grain.g * cobble * 2.0 + grain.r * ( 0.25 + gravel * 0.35 );
+          #else
+            return grain.g * cobble * 2.0 + grain.b * gravel * 0.9 + grain.r * 0.25;
+          #endif
+        }`
       )
       .replace(
         '#include <map_fragment>',
-        `#ifdef USE_MAP
+        `vec2 soilSlope = vec2( 0.0 );
+        float soilEmber = 1.0;
+        #ifdef USE_MAP
           vec4 sampledDiffuseColor = texture2D( map, vMapUv );
-          vec2 soilAt = vec2( vMapUv.x, 1.0 - vMapUv.y ) * soilSize.xy + soilSize.z;
-          vec4 fine = texture2D( soilDetail, soilAt * 0.5 );
+          vec2 soilAt = vec2( vMapUv.x, 1.0 - vMapUv.y ) * soilSize;
+          vec2 grainAt = soilAt * 0.5;
+          vec4 fine = texture2D( soilDetail, grainAt );
           float broad = texture2D( soilDetail, soilAt * 0.11 + vec2( 0.37, 0.61 ) ).a;
           float spots = texture2D( soilDetail, soilAt * 0.031 + vec2( 0.13, 0.71 ) ).a;
           float cobble = clamp( ( sampledDiffuseColor.a - 0.53 ) * 2.2, 0.0, 1.0 );
@@ -842,8 +927,53 @@ function soilMaterial(texture, data, w, d, from = 0) {
           vec3 soil = sampledDiffuseColor.rgb * mix( vec3( 1.0 ), tone, smoothstep( 0.34, 0.66, spots ) );
           soil *= 0.82 + 0.36 * ( fine.r * 0.4 + broad * 0.6 );
           soil *= mix( 1.0, 0.4 + 0.9 * fine.g, cobble );
-          soil *= mix( 1.0, 0.62 + 0.62 * fine.b, gravel );
+          #ifdef SOIL_SAND
+            // Arena rastrillada: surcos en circulos alrededor del centro de la arena.
+            vec2 fromMiddle = soilAt - 0.5 * soilSize;
+            float ring = length( fromMiddle ) * 21.0 + broad * 7.0;
+            soil *= mix( 1.0, ( 0.9 + 0.2 * fine.r ) * ( 0.97 + 0.04 * sin( ring ) ), gravel );
+            soilSlope += normalize( fromMiddle + 0.001 ) * cos( ring ) * 0.07 * gravel;
+          #else
+            soil *= mix( 1.0, 0.62 + 0.62 * fine.b, gravel );
+          #endif
+          #ifdef SOIL_ASH
+            // Ceniza agrietada en placas de metro y medio; junto a la lava las grietas
+            // tienen brasas (soilEmber pesa la luz propia del suelo).
+            float plates = texture2D( soilDetail, soilAt * 0.085 + vec2( 0.41, 0.17 ) ).g;
+            float crack = ( 1.0 - smoothstep( 0.16, 0.36, plates ) ) * smoothstep( 0.2, 0.4, gravel );
+            soil *= 1.0 - 0.62 * crack;
+            soil *= mix( 1.0, 0.85 + 0.3 * plates, smoothstep( 0.2, 0.4, gravel ) );
+            soilEmber = mix( 0.45, 3.0, crack );
+          #endif
+          // Relieve: la pendiente del grano medida un paso al costado, solo donde
+          // hay piedras o grava (el pasto lo tapa). El paso crece con la distancia
+          // (fwidth): de lejos se ve el relieve de cada piedra y no un ruido.
+          // Dentro del if el mip se elige con las derivadas de afuera (textureGrad):
+          // en el borde de una rama las implicitas no estan definidas.
+          vec2 grainDx = dFdx( grainAt );
+          vec2 grainDy = dFdy( grainAt );
+          float bumpStep = clamp( fwidth( grainAt.x ) + fwidth( grainAt.y ), 1.0 / 256.0, 6.0 / 256.0 );
+          if ( cobble + gravel > 0.02 ) {
+            float h0 = soilRelief( fine, cobble, gravel );
+            vec4 grainX = textureGrad( soilDetail, grainAt + vec2( bumpStep, 0.0 ), grainDx, grainDy );
+            vec4 grainZ = textureGrad( soilDetail, grainAt + vec2( 0.0, bumpStep ), grainDx, grainDy );
+            vec2 rise = vec2( soilRelief( grainX, cobble, gravel ), soilRelief( grainZ, cobble, gravel ) ) - h0;
+            soilSlope += rise * 2.4 / sqrt( bumpStep * 256.0 );
+          }
           diffuseColor.rgb *= soil;
+        #endif`
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        normal = normalize( mat3( viewMatrix ) * normalize( vec3( - soilSlope.x, 1.0, - soilSlope.y ) ) );`
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        #ifdef SOIL_GLOW
+          float soilPulse = 0.85 + 0.15 * sin( clock * 1.3 + vMapUv.x * 40.0 + vMapUv.y * 25.0 );
+          totalEmissiveRadiance += texture2D( soilGlow, vMapUv ).rgb * soilEmber * soilPulse;
         #endif`
       )
   }
@@ -996,16 +1126,63 @@ function tuftGeometry() {
   return geometry
 }
 
-// Una flor: tallo fino y una corola chata que mira al cielo, para que se lea
-// desde la camara alta. El tallo queda verde; la corola toma el color de la copia.
+// Triangulos sueltos como geometria: [x, y, z] por vertice, tres por cara.
+function triangles(points) {
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(points.flat(), 3))
+  return geometry
+}
+
+// Una flor: tallo fino con dos hojas y una corola de cinco petalos que mira al
+// cielo, para que se lea desde la camara alta, con el centro amarillo. Los
+// petalos toman el color de la copia; el tallo, las hojas y el centro, no.
 function flowerGeometry() {
   const stem = (turn) => {
-    const strip = new THREE.PlaneGeometry(0.035, 0.34).translate(0, 0.17, 0).rotateY(turn)
+    const strip = new THREE.PlaneGeometry(0.03, 0.34).translate(0, 0.17, 0).rotateY(turn)
     return plantPart(strip, 0, 0x3f6a2a, 0)
   }
-  const corolla = new THREE.CircleGeometry(0.13, 6).rotateX(-Math.PI / 2).translate(0, 0.34, 0)
-  corolla.attributes.position.setY(0, 0.38)
-  return mergeGeometries([stem(0), stem(Math.PI / 2), plantPart(corolla)])
+  const leaf = (turn) =>
+    plantPart(
+      triangles([
+        [0, 0.05, 0],
+        [0.13, 0.15, 0.02],
+        [0.015, 0.19, 0]
+      ]).rotateY(turn),
+      0.3,
+      0x4c7c30,
+      0
+    )
+  // La corola: una estrella de cinco puntas apenas ahuecada, en triangulos que
+  // salen del centro (en ese orden la cara mira hacia arriba).
+  const petals = []
+  const at = (k) => {
+    const a = (k / 10) * Math.PI * 2
+    const [r, y] = k % 2 ? [0.05, 0.36] : [0.15, 0.385]
+    return [Math.cos(a) * r, y, Math.sin(a) * r]
+  }
+  for (let k = 0; k < 10; k++) petals.push([0, 0.35, 0], at(k + 1), at(k))
+  const heart = new THREE.CircleGeometry(0.04, 6).rotateX(-Math.PI / 2).translate(0, 0.37, 0)
+  return mergeGeometries([
+    stem(0),
+    stem(Math.PI / 2),
+    leaf(0.4),
+    leaf(3.6),
+    plantPart(triangles(petals)),
+    plantPart(heart, 0, 0xf2c43a, 0)
+  ])
+}
+
+// Un hongo de NOX: pie palido, sombrero chato y laminas debajo. El sombrero
+// brilla con el color de la copia; el pie apenas.
+function mushroomGeometry() {
+  const stem = new THREE.CylinderGeometry(0.017, 0.026, 0.1, 5, 1, true).translate(0, 0.05, 0)
+  const cap = new THREE.ConeGeometry(0.068, 0.05, 7, 1, true).translate(0, 0.115, 0)
+  const gills = new THREE.CircleGeometry(0.068, 7).rotateX(Math.PI / 2).translate(0, 0.09, 0)
+  return mergeGeometries([
+    plantPart(stem, 0, 0xd8d2e6, 0.22),
+    plantPart(cap, 0.25),
+    plantPart(gills, 0, 0x6a5a88, 0.6)
+  ])
 }
 
 // Material de las plantas: el color de cada copia pesa segun `tint`, la punta se
@@ -1154,25 +1331,35 @@ function liquidMesh(data, kinds, kind, y, material) {
 
 // Un liquido que se mueve: dos capas del grano grueso que corren en direcciones
 // distintas. `paint` es GLSL que usa wave (0..2) y shore (0..1) para cambiar
-// diffuseColor y dejar la luz propia en `liquidGlow`.
-function liquidMaterial(clock, options, paint) {
+// diffuseColor, dejar la luz propia en `liquidGlow`, la espuma en `foam` y la
+// pendiente de la superficie en `liquidSlope`, que tuerce la normal de arriba
+// (los costados no). `shine` corre despues de las luces, con la normal final:
+// reflejos y destellos. `sky` es el color del cielo que refleja.
+function liquidMaterial(clock, options, { paint, shine = '', sky = 0x9fb6cc }) {
   const material = new THREE.MeshStandardMaterial(options)
   material.onBeforeCompile = (shader) => {
     shader.uniforms.clock = clock
     shader.uniforms.soilDetail = { value: soilDetail() }
+    shader.uniforms.liquidSky = { value: new THREE.Color(sky) }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nattribute float shore;\nvarying float vShore;\nvarying vec2 vLiquid;'
+        '#include <common>\nattribute float shore;\nvarying float vShore;\nvarying vec2 vLiquid;\nvarying float vTop;'
       )
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvShore = shore;\nvLiquid = position.xz;'
+        '#include <begin_vertex>\nvShore = shore;\nvLiquid = position.xz;\nvTop = normal.y;'
       )
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nuniform float clock;\nuniform sampler2D soilDetail;\nvarying float vShore;\nvarying vec2 vLiquid;'
+        `#include <common>
+        uniform float clock;
+        uniform sampler2D soilDetail;
+        uniform vec3 liquidSky;
+        varying float vShore;
+        varying vec2 vLiquid;
+        varying float vTop;`
       )
       .replace(
         '#include <color_fragment>',
@@ -1182,48 +1369,100 @@ function liquidMaterial(clock, options, paint) {
         float wave = waveA + waveB;
         float shore = vShore;
         vec3 liquidGlow = vec3( 0.0 );
+        vec2 liquidSlope = vec2( 0.0 );
+        float foam = 0.0;
         ${paint}`
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        if ( vTop > 0.5 ) {
+          normal = normalize( mat3( viewMatrix ) * normalize( vec3( - liquidSlope.x, 1.0, - liquidSlope.y ) ) );
+        }`
       )
       .replace(
         '#include <emissivemap_fragment>',
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += liquidGlow;'
       )
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${shine}`)
   }
   return material
 }
 
-// Agua: honda en el medio y mas clara en la orilla, con ondas suaves y algunos
-// brillos chicos que corren con el viento.
-const WATER = `
-  diffuseColor.rgb *= 0.92 + 0.2 * ( wave - 1.0 );
-  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.36, 0.38 ), smoothstep( 0.55, 1.0, shore ) * 0.6 );
-  float glint = texture2D( soilDetail, vLiquid * 0.37 + vec2( 0.05, -0.03 ) * clock ).b;
-  glint *= texture2D( soilDetail, vLiquid * 0.29 - vec2( 0.04, 0.035 ) * clock ).b;
-  liquidGlow = vec3( 0.75, 0.9, 1.0 ) * smoothstep( 0.62, 0.8, glint ) * ( 1.0 - shore ) * 0.9;
-`
-// Lava: placas de costra oscura (las piedras del canal G, grandes y torcidas por
-// el oleaje) que derivan despacio; entre ellas y en los charcos la roca brilla.
-// En la orilla la costra se enfria y apenas reluce.
-const LAVA = `
-  vec2 drift = vLiquid * 0.2 + vec2( 0.019, 0.011 ) * clock + ( vec2( waveA, waveB ) - 0.5 ) * 0.3;
-  float plate = texture2D( soilDetail, drift ).g;
-  float molten = max( 1.0 - smoothstep( 0.24, 0.44, plate ), smoothstep( 1.2, 1.4, wave ) );
-  molten *= 1.0 - 0.75 * smoothstep( 0.4, 1.0, shore );
-  diffuseColor.rgb *= ( 0.4 + 0.5 * plate ) * ( 1.0 - molten );
-  float flicker = 0.9 + 0.1 * sin( clock * 1.7 + vLiquid.x * 0.35 + vLiquid.y * 0.2 );
-  liquidGlow = mix( vec3( 0.22, 0.05, 0.01 ), vec3( 1.6, 0.62, 0.14 ), molten ) * flicker;
-`
+// Agua: honda y azul en el medio, turquesa en la orilla, con espuma que lame el
+// borde. Dos capas de olas cruzadas tuercen la normal: el sol deja destellos
+// chicos que corren y, de costado, el agua refleja el cielo (Fresnel).
+const WATER = {
+  paint: `
+    vec2 flowA = vLiquid * 0.46 + vec2( 0.05, 0.03 ) * clock;
+    vec2 flowB = vLiquid * 0.61 - vec2( 0.04, -0.045 ) * clock;
+    float rippleStep = 4.0 / 256.0;
+    float a0 = texture2D( soilDetail, flowA ).a;
+    float b0 = texture2D( soilDetail, flowB ).a;
+    liquidSlope = vec2( texture2D( soilDetail, flowA + vec2( rippleStep, 0.0 ) ).a - a0,
+      texture2D( soilDetail, flowA + vec2( 0.0, rippleStep ) ).a - a0 );
+    liquidSlope += vec2( texture2D( soilDetail, flowB + vec2( rippleStep, 0.0 ) ).a - b0,
+      texture2D( soilDetail, flowB + vec2( 0.0, rippleStep ) ).a - b0 );
+    liquidSlope *= 1.1 * ( 1.0 - 0.5 * shore );
+    float deep = 1.0 - smoothstep( 0.0, 0.85, shore );
+    diffuseColor.rgb = mix( vec3( 0.08, 0.28, 0.31 ), vec3( 0.02, 0.1, 0.17 ), deep ) * ( 0.9 + 0.22 * ( a0 + b0 - 1.0 ) );
+    float lace = texture2D( soilDetail, vLiquid * 1.1 + vec2( 0.03, -0.05 ) * clock ).b;
+    float lap = 0.08 * sin( clock * 1.8 + vLiquid.x * 3.0 + vLiquid.y * 2.0 );
+    foam = smoothstep( 0.8, 1.0, shore - 0.1 + ( lace - 0.5 ) * 0.8 + lap ) * 0.6 * step( 0.5, vTop );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.74, 0.83, 0.85 ), foam );
+    // Los costados del agua son la orilla mojada, oscura.
+    if ( vTop < 0.5 ) diffuseColor.rgb = vec3( 0.05, 0.08, 0.08 );
+  `,
+  shine: `
+    vec3 liquidView = normalize( vViewPosition );
+    float facing = clamp( dot( normal, liquidView ), 0.0, 1.0 );
+    float fresnel = 0.03 + 0.97 * pow( 1.0 - facing, 5.0 );
+    float open = ( 1.0 - foam ) * step( 0.5, vTop );
+    totalEmissiveRadiance += liquidSky * fresnel * 0.6 * open;
+    #if NUM_DIR_LIGHTS > 0
+      vec3 sunHalf = normalize( directionalLights[ 0 ].direction + liquidView );
+      float sparkle = pow( clamp( dot( normal, sunHalf ), 0.0, 1.0 ), 380.0 );
+      totalEmissiveRadiance += directionalLights[ 0 ].color * sparkle * 1.4 * open;
+    #endif
+  `
+}
 
-// Arboles, matas, piedras, flores, pasto y piedritas. Lo que se ve solido
-// (arbol, mata, piedra) va solo en celdas que no se pisan; en las que se pisan,
-// solo pasto, flores y piedritas. Las que se repiten mucho van por zonas.
-function natureMeshes(data, kinds, clock) {
+// Lava: placas de costra oscura (las piedras del canal G, grandes y torcidas por
+// el oleaje) que la corriente arrastra a lo largo del canal; entre ellas y en
+// los charcos asoma la roca fundida, amarilla en el centro y naranja al borde, y
+// el filo de cada placa todavia esta al rojo. La orilla se enfria. Las placas
+// sobresalen: su relieve tuerce la normal. La luz propia pasa de 1 para el bloom.
+const LAVA = {
+  paint: `
+    vec2 drift = vLiquid * vec2( 0.15, 0.2 ) + vec2( 0.03, 0.004 ) * clock + ( vec2( waveA, waveB ) - 0.5 ) * 0.22;
+    vec4 crust = texture2D( soilDetail, drift );
+    float plate = crust.g;
+    float seam = 1.0 - smoothstep( 0.2, 0.42, plate );
+    float pool = smoothstep( 1.18, 1.42, wave );
+    float molten = max( seam, pool ) * ( 1.0 - 0.7 * smoothstep( 0.45, 1.0, shore ) );
+    float plateX = texture2D( soilDetail, drift + vec2( 2.0 / 256.0, 0.0 ) ).g;
+    float plateZ = texture2D( soilDetail, drift + vec2( 0.0, 2.0 / 256.0 ) ).g;
+    liquidSlope = vec2( plateX - plate, plateZ - plate ) * 3.0 * ( 1.0 - molten );
+    diffuseColor.rgb = vec3( 0.085, 0.05, 0.04 ) * ( 0.55 + 0.9 * crust.r ) * ( 1.0 - molten );
+    float heat = 0.86 + 0.14 * sin( clock * 1.6 + vLiquid.x * 0.4 + vLiquid.y * 0.25 );
+    vec3 core = mix( vec3( 1.7, 0.42, 0.06 ), vec3( 2.4, 1.35, 0.35 ), smoothstep( 0.55, 1.0, molten ) * ( 0.55 + 0.45 * waveA ) );
+    vec3 ember = vec3( 0.42, 0.07, 0.01 ) * ( 1.0 - smoothstep( 0.3, 0.62, plate ) );
+    liquidGlow = ( core * molten + ember * ( 1.0 - molten ) ) * heat;
+  `
+}
+
+// Arboles, matas, piedras, flores, juncos, piedritas y los hongos de NOX (en
+// `fungi`, de fungusSpots). Lo que se ve solido (arbol, mata, piedra) va solo en
+// celdas que no se pisan; en las que se pisan, flores, hongos y piedritas. El
+// pasto lo pone terreno.js. Las que se repiten mucho van por zonas.
+function natureMeshes(data, kinds, clock, fungi = []) {
   const { width, height, rows } = data
   const boss = data.kind === 'boss'
   const night = data.id === 'nox'
+  // En la arena del Coliseo casi no hay piedritas: es arena rastrillada.
+  const gravelStones = data.id === 'coliseum' ? 0.025 : 0.2
   const leaves = LEAVES[data.id] || LEAVES.city
   const blooms = BLOOM[data.id] || BLOOM.city
-  const grassTone = night ? 0x8ab8b4 : 0xffffff
   const stones = boss ? [0x2a2420, 0x3b332e, 0x4a2a1e] : [0xa39c8f, 0x857e73, 0xb8b0a0, 0x6f695f]
   const trees = [[], [], []]
   const bushes = []
@@ -1304,17 +1543,20 @@ function natureMeshes(data, kinds, clock) {
           const hex = pick(blooms, x, y, 40 + k)
           drop(flowers, x, y, 10 + k * 3, 0.85 + r(x, y, 30 + k) * 0.45, hex, 0.12)
         }
-      } else if (ch === '"') {
-        for (let k = 0; k < 3; k++) {
-          drop(tufts, x, y, 10 + k * 3, 1.1 + r(x, y, 30 + k) * 0.45, grassTone, 0.1)
-        }
-      } else if (ch === ',' || ch === '`') {
-        // Pasto: matas sueltas; en el suelo quieto, alguna de vez en cuando.
-        const [often, size] = ch === ',' ? [0.75, 0.6] : [0.03, 0.5]
-        if (r(x, y, 1) < often) drop(tufts, x, y, 2, size + r(x, y, 5) * 0.3, grassTone, 0.1)
-      } else if ((ch === '.' || ch === '%') && r(x, y, 1) < (ch === '.' ? 0.14 : 0.2)) {
+      } else if ((ch === '.' || ch === '%') && r(x, y, 1) < (ch === '.' ? 0.14 : gravelStones)) {
         drop(pebbles, x, y, 2, 0.7 + r(x, y, 5) * 0.9, pick(stones, x, y, 6), 0.3)
       }
+    }
+  }
+  // Cada colonia de hongos: de tres a cinco, de distinto tamano, en su celda.
+  const mushrooms = []
+  for (const [x, y, hex] of fungi) {
+    const many = 3 + Math.floor(r(x, y, 60) * 3)
+    for (let k = 0; k < many; k++) {
+      const size = 0.9 + r(x, y, 61 + k) * 1.2
+      const tilt = 0.15 + r(x, y, 70 + k) * 0.2
+      drop(mushrooms, x, y, 80 + k * 3, size, hex, tilt)
+      mushrooms[mushrooms.length - 1][4] = 0.8 + r(x, y, 90 + k) * 0.5
     }
   }
   const leafy = plantMaterial(clock, { sway: 0.004 })
@@ -1323,7 +1565,8 @@ function natureMeshes(data, kinds, clock) {
   const petals = plantMaterial(clock, { sway: 0.5, glow: night ? 0.9 : 0.12, side: both })
   const blades = plantMaterial(clock, { sway: 0.25, side: both })
   const [pine, oak, poplar] = treeGeometries()
-  const water = { color: 0x22607f, roughness: 0.25, metalness: 0.1, emissive: 0x082230 }
+  const water = { color: 0xffffff, roughness: 0.3, metalness: 0, envMapIntensity: 0.2 }
+  const sky = night ? 0x3a3566 : 0x9fb6cc
   return [
     ...plantMeshes(pine, leafy, trees[0], { shadow: true }),
     ...plantMeshes(oak, leafy, trees[1], { shadow: true }),
@@ -1333,8 +1576,11 @@ function natureMeshes(data, kinds, clock) {
     ...plantMeshes(pebbleGeometry(), stone, pebbles, { zone: 48 }),
     ...plantMeshes(flowerGeometry(), petals, flowers, { zone: 48 }),
     ...plantMeshes(tuftGeometry(), blades, tufts, { zone: 48 }),
-    liquidMesh(data, kinds, 'water', 0.045, liquidMaterial(clock, water, WATER)),
-    liquidMesh(data, kinds, 'lava', 0.095, liquidMaterial(clock, { color: 0x3a1408 }, LAVA))
+    ...plantMeshes(mushroomGeometry(), plantMaterial(clock, { glow: 1.25 }), mushrooms, {
+      zone: 48
+    }),
+    liquidMesh(data, kinds, 'water', 0.045, liquidMaterial(clock, water, { ...WATER, sky })),
+    liquidMesh(data, kinds, 'lava', 0.095, liquidMaterial(clock, { roughness: 0.8 }, LAVA))
   ].filter(Boolean)
 }
 
@@ -2498,11 +2744,16 @@ export function buildWorld(data, extras = {}) {
   }
   // El suelo se lee como terreno y no como una grilla de cuadritos: varios
   // texeles por celda, manchas, bordes que se funden y sombra al pie de lo alto.
-  // El shader le suma el grano fino y el dibujo de adoquines y grava.
+  // El shader le suma el grano fino, el dibujo y el relieve de adoquines y grava
+  // y la luz propia del suelo: el resplandor de la lava y el de los hongos de NOX.
   const clock = { value: 0 }
+  const fungi = fungusSpots(data, kinds, palette)
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(width * CX, height * CZ),
-    soilMaterial(soilTexture(data, kinds), data, width * CX, height * CZ)
+    soilMaterial(soilTexture(data, kinds), data, width * CX, height * CZ, {
+      clock,
+      glow: soilGlow(data, kinds, fungi)
+    })
   )
   ground.rotation.x = -Math.PI / 2
   ground.position.set((width * CX) / 2, 0, (height * CZ) / 2)
@@ -2512,7 +2763,8 @@ export function buildWorld(data, extras = {}) {
   ground.onBeforeRender = () => {
     clock.value = globalThis.performance.now() / 1000
   }
-  group.add(ground, soilSkirt(data))
+  // Lo de afuera del mapa (lomas, bosques, montanas) lo arma terreno.js.
+  group.add(ground)
 
   // Segunda pasada: edificios. Un grupo cerrado y lleno de celdas de estructura
   // que no toca el borde del mapa es un edificio.
@@ -2735,11 +2987,13 @@ export function buildWorld(data, extras = {}) {
   }
 
   // Arboles, piedras y flores, de pocos poligonos: tres especies de arbol, matas,
-  // piedras, flores con tallo, pasto y piedritas en los caminos, cada copia con
-  // su tamano, giro y color. El agua y la lava llevan una superficie que se mueve.
-  for (const mesh of natureMeshes(data, kinds, clock)) group.add(mesh)
+  // piedras, flores con tallo, juncos, los hongos de NOX y piedritas en los
+  // caminos, cada copia con su tamano, giro y color. El agua y la lava llevan una
+  // superficie que se mueve. El pasto lo pone terreno.js.
+  for (const mesh of natureMeshes(data, kinds, clock, fungi)) group.add(mesh)
 
-  // Lo que terreno.js suma: relieve alrededor del mapa, pasto, agua.
+  // Lo que terreno.js suma: el paisaje alrededor del mapa y el pasto con viento.
+  // Comparte el grano del suelo y su tono, asi el borde del mapa no se nota.
   const terrain = buildTerrain({
     data,
     kinds,
@@ -2750,7 +3004,9 @@ export function buildWorld(data, extras = {}) {
     palette,
     ground,
     clock,
-    group
+    group,
+    detail: soilDetail(),
+    mood: MOOD[data.id] || MOOD.city
   })
 
   // Puertas: una columna de luz y el nombre. Un porton que dibujo murallas.js
