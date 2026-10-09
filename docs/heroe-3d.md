@@ -17,13 +17,36 @@ pagina; sin ella el juego queda igual que antes.
 
 ## Jugar desde el navegador
 
+Hay dos formas, y la pagina elige sola segun si la terminal esta abierta.
+
+**Sin la terminal (modo navegador).** Alcanza con el visor:
+
+```powershell
+npm.cmd run tripo:viewer
+```
+
+Si el juego no esta corriendo, `/heroe` se juega sola desde la ultima partida
+guardada: el heroe arranca donde quedo, con su equipo, y camina con WASD o
+flechas con los mismos choques que el juego (paredes, agua, NPC, la lava y el
+cuerpo del Coloso). Los portones llevan al otro mapa 3D y se llega al lado del
+porton de regreso, como en la terminal: el K de la ciudad al castillo y el B de
+vuelta, el N a NOX y el R de vuelta. Los caminos a la pradera y a la cripta, y
+las puertas de las casas y tiendas, avisan que eso se juega en la terminal. E
+habla con el NPC de al lado (cada uno dice su frase del juego) e I abre la
+mochila de la partida para equipar en la vista. Nada de esto escribe la partida
+guardada.
+
+**Con la terminal.** El juego manda y la pagina lo sigue:
+
 ```powershell
 npm.cmd start -- --teclas
 npm.cmd run tripo:viewer
 ```
 
-Con `--teclas`, el juego crea `<carpeta de partidas>/../keys` y la revisa cada
-40 ms. La pagina manda WASD o flechas, E, I, Enter, Esc y cualquier letra; cada
+Con `--teclas`, el juego crea `<carpeta de partidas>/../keys`, escribe ahi
+`alive` cada segundo (el latido que el visor reporta como `listening` en
+`/state.json`; si tiene mas de 3 s, la pagina vuelve al modo navegador) y revisa
+la carpeta cada 40 ms. La pagina manda WASD o flechas, E, I, Enter, Esc y cualquier letra; cada
 tecla llega como un archivo y entra al juego por el mismo camino que la
 terminal (`program.input`), asi que las reglas no cambian: el navegador solo
 aprieta teclas. Las teclas de una sesion anterior se descartan al arrancar.
@@ -169,7 +192,9 @@ Para quien no instala nada: https://bitcoindefi.github.io/runa/ sirve la misma
 pagina en modo demo, en ingles. El heroe de Tripo camina con WASD o flechas
 (en pantallas tactiles, con una cruceta por la que se puede deslizar el dedo),
 1 a 6 cambian de lugar (ciudad, NOX, castillo, Coliseo, el Coloso y la vitrina
-con el reino de Tripo) y H pone o saca el yelmo de Tripo. El link de abajo lleva
+con el reino de Tripo), los portones llevan al otro mapa como en el modo
+navegador, E habla con los NPC, I abre una mochila de ejemplo (yelmo de Tripo,
+espada, escudo, placas y botas) y H pone o saca el yelmo. El link de abajo lleva
 a la galeria de los modelos, donde el heroe animado camina.
 
 Los choques son los del juego: en los mapas, la tabla `TILES` (`isSolid` de
