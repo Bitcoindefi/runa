@@ -777,9 +777,16 @@
         cripta: 0x0d0d13
       }
 
-      // Opciones de quien juega, en este navegador.
+      // Opciones de quien juega, en este navegador. Los efectos (brillo, bruma,
+      // vineta) van en alto, salvo en pantallas tactiles: ahi cuestan mas.
       const SETTINGS = 'runa:web:settings'
-      const settings = { lang: 'en', run: true, camera: 'far', shadows: true }
+      const settings = {
+        lang: 'en',
+        run: true,
+        camera: 'far',
+        shadows: true,
+        effects: matchMedia('(pointer: coarse)').matches ? 'low' : 'high'
+      }
       try {
         Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS) || '{}'))
       } catch {
@@ -889,6 +896,19 @@
       const ember = new THREE.PointLight(0xe0c060, 5, 9)
       ember.position.set(-2, 2.2, -1.5)
       scene.add(ember)
+
+      // Como llega cada cuadro a la pantalla (bloom, vineta), y el cielo, la
+      // niebla y las luces de cada mapa: efectos.js.
+      const effects = createEffects({
+        renderer,
+        scene,
+        camera,
+        settings,
+        lights: { sun, sky, ember }
+      })
+      // Para medir desde la consola: runaEffects.setQuality('low'), y los pases
+      // de runaEffects.post().composer.passes se prenden y apagan con enabled.
+      window.runaEffects = effects
 
       const groundMat = new THREE.MeshStandardMaterial({ color: GROUND.reino, roughness: 1 })
       const ground = new THREE.Mesh(new THREE.CircleGeometry(9, 64), groundMat)
@@ -1386,21 +1406,6 @@
         return fitted
       }
 
-      // Cielo de atardecer para el mundo; la vitrina y el titulo siguen en negro.
-      const skyCanvas = document.createElement('canvas')
-      skyCanvas.width = 2
-      skyCanvas.height = 256
-      const skyPaint = skyCanvas.getContext('2d')
-      const skyGradient = skyPaint.createLinearGradient(0, 0, 0, 256)
-      skyGradient.addColorStop(0, '#0e1626')
-      skyGradient.addColorStop(0.6, '#2b3b52')
-      skyGradient.addColorStop(1, '#55606c')
-      skyPaint.fillStyle = skyGradient
-      skyPaint.fillRect(0, 0, 2, 256)
-      const skyTexture = new THREE.CanvasTexture(skyCanvas)
-      skyTexture.colorSpace = THREE.SRGBColorSpace
-      const night = new THREE.Color(0x0b0b0c)
-
       let chestLayer = null
       function dressChest(id) {
         if (chestLayer) hero.hips.remove(chestLayer)
@@ -1660,8 +1665,9 @@
       function showcase(on) {
         ground.visible = on
         ring.visible = on
-        scene.background = on ? night : skyTexture
-        scene.fog.color.setHex(on ? 0x0b0b0c : 0x3a4656)
+        // El cielo, la niebla y las luces: los de la vitrina (fondo negro) o los
+        // del mapa, que efectos.js elige por mapa.
+        effects.atmosphere(on ? null : world && world.data)
         useAvatar(!on)
         if (backdrop) backdrop.visible = on
         controls.autoRotate = on
@@ -1671,8 +1677,6 @@
         camera.fov = lens()
         controls.minDistance = on ? 2.4 : 14
         controls.maxDistance = on ? 11 : 110
-        scene.fog.near = on ? 11 : 60
-        scene.fog.far = on ? 30 : 150
         const reach = on ? 6 : 24
         Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach })
         sun.shadow.camera.far = on ? 30 : 80
@@ -1940,9 +1944,8 @@
         if (ash.visible) ash.position.set(pos.x, 0, pos.z)
       }
 
-      // Como llega cada cuadro a la pantalla (efectos.js) y el escenario del menu
-      // de titulo (titulo.js, se arma la primera vez que se muestra el menu).
-      const effects = createEffects({ renderer, scene, camera, settings })
+      // El escenario del menu de titulo (titulo.js): se arma la primera vez que
+      // se muestra el menu.
       let title = null
 
       renderer.setAnimationLoop(() => {
@@ -2169,7 +2172,8 @@
             models: () => models,
             loadGlb,
             mapData,
-            buildWorld
+            buildWorld,
+            backdrop: () => backdrop
           })
         }
         if (title) title.show(true)
@@ -2457,6 +2461,20 @@
             again()
           }
         )
+        line(box, L('Effects (glow, haze, vignette)', 'Efectos (brillo, bruma, vineta)'))
+        choice(
+          box,
+          [
+            ['high', L('High', 'Altos')],
+            ['low', L('Low (faster)', 'Bajos (mas rapido)')]
+          ],
+          settings.effects,
+          (value) => {
+            settings.effects = value
+            applySettings('effects')
+            again()
+          }
+        )
         done()
       }
 
@@ -2486,6 +2504,7 @@
           })
         }
         if (what === 'run') refreshPlayHud(true)
+        if (what === 'effects') effects.setQuality(settings.effects)
       }
 
       function controlsPage(box, back) {
