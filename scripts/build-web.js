@@ -21,12 +21,42 @@ function write(name, data) {
   fs.writeFileSync(file, data)
 }
 
-// En el sitio las dos paginas van en ingles y en modo demo.
+// En el sitio las dos paginas van en ingles y en modo demo. Los textos fijos se
+// traducen aca, asi el primer cuadro (y la vista previa de un link) ya sale en
+// ingles antes de que cargue three.js.
+const ABOUT =
+  "Walk Runa's world in 2.5D in your browser. The hero, the helmet, the Colossus and " +
+  'the kingdom are 3D models generated with Tripo.'
+const META = [
+  `<meta name="description" content="${ABOUT}" />`,
+  '<meta property="og:type" content="website" />',
+  '<meta property="og:title" content="Runa x Tripo" />',
+  `<meta property="og:description" content="${ABOUT}" />`
+].join('\n    ')
+const ENGLISH = {
+  'tripo-heroe.html': [
+    ['<html lang="es">', '<html lang="en" data-demo="1">'],
+    ['<title>Runa / Heroe</title>', `<title>Runa x Tripo / 2.5D</title>\n    ${META}`],
+    ['<h1>[ RUNA / HEROE ]</h1>', '<h1>[ RUNA x TRIPO ]</h1>'],
+    ['buscando la partida...', 'loading the 2.5D world...'],
+    [
+      'WASD o flechas: caminar. E: hablar. I: inventario.',
+      'WASD or arrows: walk. 1-6: change place. H: Tripo helmet.'
+    ]
+  ],
+  'tripo-viewer.html': [
+    ['<html lang="es">', '<html lang="en" data-demo="1">'],
+    ['<title>Runa / Tripo</title>', `<title>Runa x Tripo / models</title>\n    ${META}`],
+    ['Runa sigue en la terminal. Aca solo los GLB.</span>', "Runa's 3D models.</span>"]
+  ]
+}
 function page(file) {
-  const html = fs.readFileSync(file, 'utf8')
-  const demo = html.replace('<html lang="es">', '<html lang="en" data-demo="1">')
-  if (demo === html) throw new Error(`${path.basename(file)} ya no empieza con <html lang="es">`)
-  return demo
+  let html = fs.readFileSync(file, 'utf8')
+  for (const [from, to] of ENGLISH[path.basename(file)]) {
+    if (!html.includes(from)) throw new Error(`${path.basename(file)} ya no tiene: ${from}`)
+    html = html.replace(from, to)
+  }
+  return html
 }
 
 const missing = Object.keys(viewer.LIBS).filter(

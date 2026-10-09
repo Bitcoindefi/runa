@@ -3,8 +3,9 @@
 La pagina `/heroe` del visor muestra al stickman de RUNA en 3D, vestido con el
 equipo de la ultima partida guardada. Equipas algo en el inventario de la
 terminal y aparece en el heroe 3D, con un aviso. En los mapas camina el heroe de
-Tripo, que tambien lleva el yelmo de Tripo cuando lo equipas. Al entrar a las
-ruinas volcanicas aparece el Coloso de Tripo y cae ceniza.
+Tripo, con esqueleto y animaciones de Higgsfield (ver "El heroe animado"), y
+lleva el yelmo de Tripo cuando lo equipas. Al entrar a las ruinas volcanicas
+aparece el Coloso de Tripo y cae ceniza.
 
 La misma pagina se publica como sitio estatico en GitHub Pages, en modo demo:
 ahi el heroe camina en el navegador, sin el juego. Ver "Sitio web" abajo.
@@ -90,13 +91,42 @@ llegan mirando hacia +x y el heroe mira hacia +z: el yelmo se gira 90 grados.
 Para otro ajuste, la tabla `SKINS` de `scripts/tripo-heroe.html` recibe tamano,
 giro y altura por item.
 
-El heroe de Tripo no tiene esqueleto, asi que lo que va en la cabeza se apoya en
-su malla: la pagina mide la tapa de la cabeza (lo que queda en el 8% mas alto
-del cuerpo; la espada va hacia abajo) y la pieza la envuelve. `SKINS.<id>.hero`
-dice cuanto la envuelve (`grow`), cuanto sube su techo (`lift`) y cuanto se
-corre hacia la nuca (`back`). El yelmo usa 1,55, 0,22 y 0,12, calibrados en
+Lo que va en la cabeza tambien lo lleva el heroe de Tripo que camina. La pagina
+mide la tapa de su cabeza en la malla (lo que queda en el 8% mas alto del
+cuerpo; con esqueleto, sobre los vertices ya deformados) y la pieza la envuelve;
+en el heroe animado la pieza cuelga del hueso `Head`, asi sigue la animacion.
+`AVATARS[].fits` dice, por heroe, cuanto la envuelve (`grow`), cuanto sube su
+techo (`lift`) y cuanto se corre hacia la nuca (`back`). El yelmo usa 1,5, 0,24
+y 0,1 en el heroe animado y 1,55, 0,22 y 0,12 en el original, calibrados en
 Chrome desde la consola con `runaView.tune('iron_helmet', { grow, lift, back })`:
-asi la cara se ve por la abertura y no asoma la vincha del heroe.
+asi la cara se ve por la abertura y no asoma la vincha.
+
+## El heroe animado
+
+`heroe-anim.glb` es el heroe de Tripo con esqueleto humanoide (24 huesos, de
+`Hips` a los dedos de los pies) y dos clips, `Idle` y `Walk`. Quieto respira con
+`Idle`; al caminar pasa a `Walk` con un fundido de 0,2 s, y vuelve a `Idle` un
+cuarto de segundo despues del ultimo paso, asi no parpadea entre celda y celda.
+Si el archivo no esta, camina `heroe.glb` como antes, con el balanceo.
+
+Como se hizo, el 9 de octubre, con la CLI de Higgsfield:
+
+1. El auto-rig de Higgsfield (`3d_rigging`) rechazo cuatro veces el heroe
+   original (`heroe.glb`), incluso girado hacia +z, con su altura real y sin
+   animacion: tiene el escudo sobre el torso y la espada pegada al cuerpo, y el
+   rig pide los brazos separados. Los intentos fallidos se reintegran.
+2. Con una vista del heroe original como referencia, Nano Banana Pro dibujo el
+   mismo personaje en pose A, con las manos vacias (2 creditos).
+3. Tripo H3.1, desde Higgsfield, la paso a 3D con hasta 10.000 caras y sin PBR
+   (9 creditos). La malla sigue siendo de Tripo.
+4. `node scripts/glb-orient.js` la dejo mirando hacia +z y parada en y = 0, y
+   `3d_rigging` le puso el esqueleto y `Casual_Walk` (8 creditos); un segundo
+   `3d_rigging` sobre ese resultado agrego `Idle` (8 creditos).
+5. `glb_merge_anims.py` de las skills de Higgsfield junto los dos clips en un
+   solo GLB de 1,5 MB, mas liviano que el original de 2,2 MB.
+
+Total: 27 creditos de Higgsfield. El heroe original sigue en la estatua de la
+plaza, en el ASCII de la terminal y como respaldo.
 
 ## El mundo en 3D
 
@@ -137,14 +167,25 @@ de la pradera sale de la semilla del dia, que el guardado no trae.
 
 Para quien no instala nada: https://bitcoindefi.github.io/runa/ sirve la misma
 pagina en modo demo, en ingles. El heroe de Tripo camina con WASD o flechas
-(en pantallas tactiles, con una cruceta), 1 a 6 cambian de lugar (ciudad, NOX,
-castillo, Coliseo, el Coloso y la vitrina con el reino de Tripo) y H pone o
-saca el yelmo de Tripo. El link de abajo lleva a la galeria de los 4 modelos.
+(en pantallas tactiles, con una cruceta por la que se puede deslizar el dedo),
+1 a 6 cambian de lugar (ciudad, NOX, castillo, Coliseo, el Coloso y la vitrina
+con el reino de Tripo) y H pone o saca el yelmo de Tripo. El link de abajo lleva
+a la galeria de los modelos, donde el heroe animado camina.
 
 Los choques son los del juego: en los mapas, la tabla `TILES` (`isSolid` de
-`lib/map.js`); en las ruinas, `isWalkable` de `lib/boss-zone.js` y el cuerpo del
-Coloso (`distanceToBody` de `lib/world-boss-event.js`). Cada tecla es un paso de
-celda, a unos 6 m/s, y una diagonal que choca se desliza por el eje libre.
+`lib/map.js`) y los NPC (`npcAt` de `lib/game.js`); en las ruinas, `isWalkable`
+de `lib/boss-zone.js` y el cuerpo del Coloso (`distanceToBody` de
+`lib/world-boss-event.js`). Cada tecla es un paso de celda, a unos 5 m/s. Como
+la terminal mueve un eje por vez, una diagonal solo pasa si una de las dos
+celdas de al lado esta libre, y si choca se desliza por el eje libre. En las
+ruinas, lo que el juego deja pisar se dibuja al ras, como escombro, y el heroe
+llega a 10 m del Coloso.
+
+En un celular el texto de arriba lleva fondo y los lugares van en una fila que se
+desliza, con botones de 44 px; los links quedan a la izquierda de la cruceta y
+los avisos por encima. En una pantalla vertical la lente vertical se abre hasta
+que el ancho visible vuelve a ser el de la base, para que el Coloso entre en
+cuadro.
 
 ```powershell
 node scripts/tripo-viewer.js --fetch-lib
@@ -152,15 +193,18 @@ npm.cmd run web:build
 ```
 
 `scripts/build-web.js` arma `out/web/` con las piezas que sirve el visor: las
-dos paginas con `data-demo="1"`, `mundo.js`, los mapas en `world/`, three.js y
+dos paginas con `data-demo="1"` y sus textos fijos ya en ingles (tambien la
+descripcion para la vista previa de un link), `mundo.js`, los mapas en `world/`, three.js y
 model-viewer de `vendor/`, los GLB de `assets/tripo/` y `.nojekyll`. Todo va con
 rutas relativas, asi anda bajo `/runa/`. Los GLB y three.js se publican solo en
 la rama `gh-pages`: `main` los sigue ignorando. Para probar el modo demo sin
 publicar, abri `/heroe?demo` en el visor local.
 
 En un Chrome recien abierto el primer pedido puede fallar con "Failed to fetch";
-la lista de modelos, los mapas y los GLB se reintentan antes de rendirse, porque
-sin la lista no aparece ningun modelo de Tripo.
+la lista de modelos, los mapas y los GLB se reintentan antes de rendirse (salvo
+una respuesta 4xx, que no va a cambiar), porque sin la lista no aparece ningun
+modelo de Tripo. En el modo en vivo, si la lista llega tarde, el heroe de Tripo
+se carga en ese momento y no recien al cambiar de mapa.
 
 ## Prueba
 
@@ -176,3 +220,13 @@ Tripo aparece en la ciudad, H le pone el yelmo, camina diez celdas al este y
 cuatro o cinco al sur, carga cada mapa, en las ruinas se frena contra el cuerpo del
 Coloso (celda 92) y la galeria carga los cuatro GLB. En dos de tres corridas el
 primer pedido de `models.json` fallo y el reintento lo recupero.
+
+Despues, tres verificadores independientes probaron el sitio publicado en un
+celular emulado, el modo en vivo con el juego y el codigo. Lo que encontraron
+quedo corregido: el heroe ya no atraviesa NPC ni bloques de las ruinas, la
+diagonal no se cuela entre paredes, un fondo de la vitrina ya no queda duplicado
+al cambiar rapido de lugar, el aviso de equipar no se pierde si el heroe termina
+de cargar en ese momento, y en el celular los links y los avisos ya no quedan
+bajo la cruceta. Con el heroe animado, en un celular emulado (390 x 844, tactil)
+la cruceta lo mueve diez celdas, deslizar el dedo a la flecha de abajo cambia la
+direccion, los dos links se pueden tocar y el Coloso se ve al llegar a las ruinas.

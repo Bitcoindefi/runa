@@ -74,6 +74,14 @@
       a {
         color: var(--accent);
       }
+      @media (max-width: 600px) {
+        header {
+          flex-wrap: wrap;
+        }
+        h1 {
+          white-space: nowrap;
+        }
+      }
     </style>
   </head>
   <body>
@@ -95,17 +103,22 @@
       const DEMO = document.documentElement.dataset.demo === '1'
       const NAMES = {
         heroe: "Runa's hero",
+        'heroe-anim': "Runa's hero in A-pose: Tripo H3.1, rigged and animated by Higgsfield",
         yelmo: 'Iron rune helmet',
         coloso: 'Runic Colossus, the world boss',
         paisaje: 'Kingdom diorama'
       }
-      const INTRO = 'Four 3D models generated with Tripo (text-to-3D, model P1). Drag to turn them.'
+      const INTRO =
+        "Runa's 3D models, generated with Tripo. Drag to turn them; the animated hero walks."
       if (DEMO) document.getElementById('back').hidden = false
 
+      // En el sitio no se muestran los avisos para quien desarrolla.
       function say(text) {
-        status.textContent = libMissing
-          ? 'Falta model-viewer: node scripts/tripo-viewer.js --fetch-lib'
-          : text
+        if (libMissing) {
+          status.textContent = DEMO
+            ? 'Loading the 3D viewer...'
+            : 'Falta model-viewer: node scripts/tripo-viewer.js --fetch-lib'
+        } else status.textContent = text
       }
 
       function show(model, isNew) {
@@ -116,6 +129,8 @@
           viewer.setAttribute('alt', model.name)
           viewer.setAttribute('camera-controls', '')
           viewer.setAttribute('auto-rotate', '')
+          // Un GLB con animaciones (el heroe riggeado) se reproduce solo.
+          viewer.setAttribute('autoplay', '')
           viewer.setAttribute('shadow-intensity', '1')
           const caption = document.createElement('figcaption')
           const id = model.name.replace(/\.glb$/, '')
@@ -166,7 +181,11 @@
             )
           }
         } catch {
-          say('El server del visor no responde.')
+          say(
+            DEMO
+              ? 'Could not load the model list. Reload the page.'
+              : 'El server del visor no responde.'
+          )
         }
       }
 
