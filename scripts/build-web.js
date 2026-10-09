@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict'
 
-// Arma el sitio estatico de la vista 2.5D, para GitHub Pages: la pagina del
-// heroe en modo demo (camina en el navegador, sin el juego), la galeria, los
-// mapas del juego en JSON, three.js y los GLB de Tripo. Todo sale de las mismas
-// piezas que sirve el visor, asi el sitio no se separa de lo que se prueba local.
+// Arma el sitio estatico de Runa en 2.5D, para GitHub Pages: la pagina con el
+// juego entero (scripts/build-juego.js lo empaqueta) y el recorrido 3D, la
+// galeria, los mapas del juego en JSON, three.js y los GLB de Tripo. Todo sale
+// de las mismas piezas que sirve el visor, asi el sitio no se separa de lo que
+// se prueba local.
 //
 //   node scripts/tripo-viewer.js --fetch-lib   una vez, con wifi
 //   node scripts/build-web.js [carpeta]        por defecto out/web
@@ -12,6 +13,7 @@
 const fs = require('fs')
 const path = require('path')
 const viewer = require('./tripo-viewer.js')
+const { buildGame } = require('./build-juego.js')
 
 const out = path.resolve(process.argv[2] || path.join(__dirname, '..', 'out', 'web'))
 
@@ -21,12 +23,13 @@ function write(name, data) {
   fs.writeFileSync(file, data)
 }
 
-// En el sitio las dos paginas van en ingles y en modo demo. Los textos fijos se
-// traducen aca, asi el primer cuadro (y la vista previa de un link) ya sale en
+// En el sitio las dos paginas van en ingles y marcadas como publicadas (sin
+// visor: no hay terminal que seguir). La del juego ya esta en ingles; la galeria
+// se traduce aca, asi el primer cuadro y la vista previa de un link salen en
 // ingles antes de que cargue three.js.
 const ABOUT =
-  "Walk Runa's world in 2.5D in your browser. The hero, the helmet, the Colossus and " +
-  'the kingdom are 3D models generated with Tripo.'
+  'Play Runa in your browser: the ASCII RPG with a 3D world. The hero, the helmet, ' +
+  'the Colossus and the kingdom are 3D models generated with Tripo.'
 const META = [
   `<meta name="description" content="${ABOUT}" />`,
   '<meta property="og:type" content="website" />',
@@ -35,14 +38,8 @@ const META = [
 ].join('\n    ')
 const ENGLISH = {
   'tripo-heroe.html': [
-    ['<html lang="es">', '<html lang="en" data-demo="1">'],
-    ['<title>Runa / Heroe</title>', `<title>Runa x Tripo / 2.5D</title>\n    ${META}`],
-    ['<h1>[ RUNA / HEROE ]</h1>', '<h1>[ RUNA x TRIPO ]</h1>'],
-    ['buscando la partida...', 'loading the 2.5D world...'],
-    [
-      'WASD o flechas: caminar. E: hablar. I: inventario.',
-      'WASD or arrows: walk. 1-6: change place. H: Tripo helmet.'
-    ]
+    ['<html lang="en">', '<html lang="en" data-demo="1">'],
+    ['<title>Runa</title>', `<title>Runa x Tripo</title>\n    ${META}`]
   ],
   'tripo-viewer.html': [
     ['<html lang="es">', '<html lang="en" data-demo="1">'],
@@ -72,29 +69,41 @@ if (!models.length) {
   process.exit(1)
 }
 
-write('index.html', page(viewer.PAGES['/heroe']))
-write('models.html', page(viewer.PAGES['/']))
-write('mundo.js', fs.readFileSync(viewer.WORLD_JS))
-write('models.json', JSON.stringify(models))
-const ids = [...viewer.WORLD_MAPS, 'boss']
-for (const id of ids) {
-  const data = viewer.worldMap(id)
-  if (!data) throw new Error(`no pude armar el mapa ${id}`)
-  write(`world/${id}.json`, JSON.stringify(data))
+async function main() {
+  write('index.html', page(viewer.PAGES['/heroe']))
+  write('models.html', page(viewer.PAGES['/']))
+  write('mundo.js', fs.readFileSync(viewer.WORLD_JS))
+  // El juego: lib/ empaquetado para el navegador, igual que lo sirve el visor.
+  const game = await buildGame(path.join(out, 'juego.js'))
+  write('models.json', JSON.stringify(models))
+  const ids = [...viewer.WORLD_MAPS, 'boss']
+  for (const id of ids) {
+    const data = viewer.worldMap(id)
+    if (!data) throw new Error(`no pude armar el mapa ${id}`)
+    write(`world/${id}.json`, JSON.stringify(data))
+  }
+  // La galeria pide model-viewer en la raiz; three.js va bajo vendor/.
+  for (const name of Object.keys(viewer.LIBS)) {
+    const dest = name === 'model-viewer.min.js' ? name : `vendor/${name}`
+    write(dest, fs.readFileSync(path.join(viewer.VENDOR, name)))
+  }
+  for (const model of models) {
+    write(`assets/tripo/${model.name}`, fs.readFileSync(path.join(viewer.MODELS, model.name)))
+  }
+  // Los NPC pintados de la vista 2.5D, un PNG por tipo.
+  const npcArt = path.join(__dirname, '..', 'assets', 'npcs')
+  for (const name of fs.readdirSync(npcArt).filter((file) => /^[a-z]+\.png$/.test(file))) {
+    write(`assets/npcs/${name}`, fs.readFileSync(path.join(npcArt, name)))
+  }
+  // Sin Jekyll, GitHub Pages sirve cada archivo tal cual.
+  write('.nojekyll', '')
+  const kb = Math.round(game.bytes / 1024)
+  console.log(
+    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo y ${ids.length} mapas`
+  )
 }
-// La galeria pide model-viewer en la raiz; three.js va bajo vendor/.
-for (const name of Object.keys(viewer.LIBS)) {
-  const dest = name === 'model-viewer.min.js' ? name : `vendor/${name}`
-  write(dest, fs.readFileSync(path.join(viewer.VENDOR, name)))
-}
-for (const model of models) {
-  write(`assets/tripo/${model.name}`, fs.readFileSync(path.join(viewer.MODELS, model.name)))
-}
-// Los NPC pintados de la vista 2.5D, un PNG por tipo.
-const npcArt = path.join(__dirname, '..', 'assets', 'npcs')
-for (const name of fs.readdirSync(npcArt).filter((file) => /^[a-z]+\.png$/.test(file))) {
-  write(`assets/npcs/${name}`, fs.readFileSync(path.join(npcArt, name)))
-}
-// Sin Jekyll, GitHub Pages sirve cada archivo tal cual.
-write('.nojekyll', '')
-console.log(`${out}: ${models.length} modelos de Tripo y ${ids.length} mapas`)
+
+main().catch((error) => {
+  console.error(error.message)
+  process.exitCode = 1
+})

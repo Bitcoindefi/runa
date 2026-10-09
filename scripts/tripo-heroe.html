@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Runa / Heroe</title>
+    <title>Runa</title>
     <link rel="icon" href="data:," />
     <script type="importmap">
       {
@@ -20,6 +20,10 @@
         --fg: #d8d8d0;
         --dim: #7a7a72;
         --accent: #e0c060;
+        --line: #3a3a36;
+        --panel: rgba(11, 11, 12, 0.84);
+        --hp: #c8483a;
+        --xp: #5f9fd0;
       }
       html,
       body {
@@ -39,6 +43,16 @@
         width: 100vw;
         height: 100vh;
       }
+      [hidden] {
+        display: none !important;
+      }
+      button,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      /* El recorrido libre y el modo que sigue a la terminal. */
       #hud {
         position: fixed;
         inset: 16px 16px auto 16px;
@@ -89,13 +103,11 @@
         letter-spacing: 0.05em;
         opacity: 0;
         transition: opacity 0.4s;
+        pointer-events: none;
+        z-index: 5;
       }
       #toast.show {
         opacity: 1;
-      }
-      /* Modo demo, el del sitio publicado: lugares, links y cruceta tactil. */
-      [hidden] {
-        display: none !important;
       }
       #hud > div:first-child {
         max-width: min(640px, 70vw);
@@ -108,11 +120,11 @@
         pointer-events: auto;
       }
       #places button,
-      #pad button {
-        font: inherit;
+      #pad button,
+      #actions button {
         color: var(--fg);
         background: rgba(11, 11, 12, 0.72);
-        border: 1px solid #3a3a36;
+        border: 1px solid var(--line);
         padding: 4px 8px;
         cursor: pointer;
       }
@@ -127,7 +139,8 @@
         display: flex;
         gap: 16px;
       }
-      #links a {
+      #links a,
+      .credits a {
         color: var(--accent);
       }
       #pad {
@@ -139,12 +152,12 @@
         grid-template-rows: repeat(3, 52px);
         gap: 4px;
         touch-action: none;
+        z-index: 3;
       }
       #pad button {
         font-size: 20px;
         padding: 0;
       }
-      /* Lo que dice un NPC al hablarle (E) y la mochila (I). */
       #talk {
         position: fixed;
         left: 50%;
@@ -176,30 +189,409 @@
         gap: 6px;
         width: min(320px, calc(100vw - 32px));
         background: rgba(11, 11, 12, 0.88);
-        border: 1px solid #3a3a36;
+        border: 1px solid var(--line);
         padding: 10px;
       }
       #bag strong {
         color: var(--accent);
       }
       #bag button {
-        font: inherit;
         text-align: left;
-        color: var(--fg);
         background: transparent;
-        border: 1px solid #3a3a36;
+        border: 1px solid var(--line);
         padding: 6px 8px;
         cursor: pointer;
       }
       #pad,
-      #pad button {
+      #pad button,
+      #actions button {
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
+
+      /* Menu de titulo: a la izquierda, con el Coloso girando detras. */
+      #menu {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 440px);
+        align-content: center;
+        padding: 24px clamp(16px, 6vw, 80px);
+        background: linear-gradient(
+          90deg,
+          rgba(8, 8, 9, 0.9) 0%,
+          rgba(8, 8, 9, 0.6) 40%,
+          rgba(8, 8, 9, 0) 72%
+        );
+        overflow-y: auto;
+      }
+      .logo {
+        margin: 0;
+        font-size: clamp(46px, 9vw, 78px);
+        line-height: 1.05;
+        letter-spacing: 0.3em;
+        color: var(--accent);
+        text-shadow: 0 0 28px rgba(224, 192, 96, 0.35);
+      }
+      .tag {
+        margin: 6px 0 26px;
+        color: var(--dim);
+      }
+      .choices,
+      .sheet {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .choices button,
+      .sheet button,
+      .sheet a.button {
+        text-align: left;
+        background: rgba(11, 11, 12, 0.74);
+        border: 1px solid var(--line);
+        padding: 9px 14px;
+        min-height: 44px;
+        cursor: pointer;
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      .choices button:hover,
+      .choices button:focus-visible,
+      .sheet button:hover,
+      .sheet button:focus-visible,
+      .sheet a.button:hover,
+      .sheet a.button:focus-visible {
+        border-color: var(--accent);
+        color: var(--accent);
+        outline: none;
+      }
+      .choices button small,
+      .sheet button small {
+        display: block;
+        color: var(--dim);
+        font-size: 12px;
+      }
+      .choices button[disabled],
+      .sheet button[disabled] {
+        opacity: 0.45;
+        cursor: default;
+        border-color: var(--line);
+        color: var(--fg);
+      }
+      .sheet h2 {
+        margin: 0 0 4px;
+        font-size: 15px;
+        letter-spacing: 0.08em;
+        color: var(--accent);
+      }
+      .sheet p {
+        margin: 0;
+        color: var(--dim);
+      }
+      .sheet label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .sheet input[type='text'],
+      .sheet textarea {
+        background: #111;
+        border: 1px solid var(--line);
+        padding: 8px 10px;
+      }
+      .sheet input[type='text']:focus,
+      .sheet textarea:focus {
+        border-color: var(--accent);
+        outline: none;
+      }
+      .sheet textarea {
+        min-height: 200px;
+        resize: vertical;
+        white-space: pre;
+        font-size: 13px;
+      }
+      .pick {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .pick button {
+        flex: 1 1 140px;
+      }
+      .pick button[aria-pressed='true'] {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .sheet .error {
+        color: #e07a6a;
+      }
+      .sheet dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 14px;
+        margin: 0;
+      }
+      .sheet dt {
+        color: var(--accent);
+      }
+      .sheet dd {
+        margin: 0;
+      }
+      .credits {
+        margin: 26px 0 0;
+        color: var(--dim);
+        font-size: 12px;
+      }
+
+      /* Jugando: la ficha, el registro del juego y lo que hace la tecla E. */
+      #play {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      #stats {
+        position: absolute;
+        left: 16px;
+        top: 16px;
+        width: min(290px, calc(100vw - 32px));
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        box-sizing: border-box;
+      }
+      #stats .who {
+        color: var(--accent);
+      }
+      #stats .where {
+        color: var(--dim);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      .bar {
+        position: relative;
+        height: 14px;
+        margin-top: 4px;
+        background: #1a1a1c;
+        border: 1px solid var(--line);
+      }
+      .bar i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        background: var(--hp);
+        transition: width 0.25s;
+      }
+      .bar.xp i {
+        background: var(--xp);
+      }
+      .bar span {
+        position: relative;
+        display: block;
+        padding-left: 6px;
+        font-size: 11px;
+        line-height: 14px;
+      }
+      #stats .purse,
+      #stats .worn {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      #stats .worn b {
+        font-weight: normal;
+        color: var(--fg);
+      }
+      #bossbar {
+        position: absolute;
+        left: 50%;
+        top: 16px;
+        transform: translateX(-50%);
+        width: min(520px, calc(100vw - 340px));
+        text-align: center;
+        color: #ffb070;
+        text-shadow: 0 1px 3px #000;
+      }
+      #bossbar .bar i {
+        background: #ff6a20;
+      }
+      #gait {
+        position: absolute;
+        right: 16px;
+        top: 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 4px 10px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      #gait b {
+        color: var(--accent);
+        font-weight: normal;
+      }
+      #log {
+        position: absolute;
+        left: 16px;
+        bottom: 16px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        width: min(640px, calc(100vw - 32px));
+      }
+      #log li {
+        width: fit-content;
+        max-width: 100%;
+        margin-top: 4px;
+        padding: 3px 8px;
+        background: var(--panel);
+        animation: arrive 0.25s ease-out;
+      }
+      #log li.old {
+        opacity: 0.55;
+      }
+      @keyframes arrive {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+      }
+      #hint {
+        position: absolute;
+        left: 50%;
+        bottom: 150px;
+        transform: translateX(-50%);
+        padding: 4px 12px;
+        color: var(--accent);
+        background: var(--panel);
+        border: 1px solid var(--accent);
+        white-space: nowrap;
+      }
+      #hint:empty {
+        display: none;
+      }
+      #actions {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        display: grid;
+        grid-template-columns: repeat(3, 56px);
+        gap: 6px;
+        pointer-events: auto;
+        z-index: 3;
+      }
+      #actions button {
+        height: 48px;
+        padding: 0;
+        font-size: 13px;
+      }
+      #actions button[aria-pressed='true'] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      /* La pantalla de texto del juego, cuando el mapa 3D no alcanza. */
+      #term {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(1240px, calc(100vw - 24px));
+        height: min(820px, calc(100vh - 24px));
+        box-sizing: border-box;
+        margin: 0;
+        padding: 10px 12px;
+        overflow: hidden;
+        white-space: pre;
+        font-size: 14px;
+        line-height: 1.2;
+        background: rgba(8, 8, 9, 0.97);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+        z-index: 2;
+      }
+      #term .b {
+        font-weight: 700;
+      }
+      #term .d {
+        opacity: 0.6;
+      }
+      #term .u {
+        text-decoration: underline;
+      }
+      #term .v {
+        background: var(--fg);
+        color: var(--bg);
+      }
+      #term .fk {
+        color: #4a4a46;
+      }
+      #term .fr {
+        color: #e07a6a;
+      }
+      #term .fg {
+        color: #7fd36f;
+      }
+      #term .fy {
+        color: #e8c860;
+      }
+      #term .fb {
+        color: #7a9be0;
+      }
+      #term .fm {
+        color: #d97fd9;
+      }
+      #term .fc {
+        color: #6fd3e0;
+      }
+      #term .fw {
+        color: #f0f0e8;
+      }
+      #term .fhk {
+        color: #8a8a82;
+      }
+      #term .fhr {
+        color: #ff9a8a;
+      }
+      #term .fhg {
+        color: #a8f098;
+      }
+      #term .fhy {
+        color: #fff08a;
+      }
+      #term .fhb {
+        color: #a8c0ff;
+      }
+      #term .fhm {
+        color: #ffa8ff;
+      }
+      #term .fhc {
+        color: #a0f0ff;
+      }
+      #term .fhw {
+        color: #ffffff;
+      }
+
+      /* El menu dentro de la partida. */
+      #pause {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(5, 5, 6, 0.6);
+        z-index: 4;
+      }
+      #pause .sheet {
+        width: min(460px, calc(100vw - 32px));
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        box-sizing: border-box;
+        padding: 18px;
+        background: rgba(11, 11, 12, 0.95);
+        border: 1px solid var(--line);
+      }
+
       /* En pantallas tactiles: el texto con fondo y corto, los lugares en una
-         fila que se desliza, los links a la izquierda de la cruceta y el aviso
-         por encima de ella. */
+         fila que se desliza, y la cruceta y los botones a mano. */
       @media (pointer: coarse) {
         #hud > div:first-child,
         #gear {
@@ -228,9 +620,7 @@
         #links a {
           padding: 6px 0;
         }
-        #toast {
-          bottom: 200px;
-        }
+        #toast,
         #talk {
           bottom: 200px;
         }
@@ -238,23 +628,69 @@
           top: auto;
           bottom: 200px;
         }
+        #log {
+          bottom: 190px;
+        }
+        /* La ayuda de la tecla E arriba, debajo de la ficha: abajo esta el
+           registro. El paso se ve en el boton Run. */
+        #hint {
+          top: 196px;
+          bottom: auto;
+        }
+        #gait {
+          display: none;
+        }
+        #term {
+          height: calc(100vh - 196px);
+          top: 8px;
+          transform: translateX(-50%);
+        }
+      }
+      @media (pointer: fine) {
+        #actions {
+          display: none;
+        }
+      }
+      @media (max-width: 640px) {
+        /* En pantallas angostas la barra del Coloso va debajo de la ficha. */
+        #bossbar {
+          top: 150px;
+          width: calc(100vw - 32px);
+        }
+        #gait {
+          top: auto;
+          bottom: 248px;
+        }
+        #hint {
+          top: 196px;
+          bottom: auto;
+        }
+        #stats {
+          width: min(240px, calc(100vw - 32px));
+          padding: 6px 8px;
+        }
+        #stats .worn {
+          display: none;
+        }
       }
       /* Celular acostado: sin los textos largos, para no tapar al heroe. */
       @media (max-height: 500px) {
         #who,
-        #keys {
+        #keys,
+        #stats .worn,
+        #stats .purse {
           display: none;
         }
       }
     </style>
   </head>
   <body>
-    <header id="hud">
+    <header id="hud" hidden>
       <div>
-        <h1>[ RUNA / HEROE ]</h1>
-        <div id="who">buscando la partida...</div>
+        <h1>[ RUNA ]</h1>
+        <div id="who">loading the 3D world...</div>
         <div id="mode"></div>
-        <div id="keys">WASD o flechas: caminar. E: hablar. I: inventario.</div>
+        <div id="keys"></div>
         <nav id="places" hidden></nav>
       </div>
       <dl id="gear"></dl>
@@ -266,6 +702,28 @@
       <a href="models.html">The Tripo models</a>
       <a href="https://github.com/Bitcoindefi/runa">Source and the terminal game</a>
     </footer>
+
+    <section id="menu" hidden>
+      <div>
+        <h1 class="logo">RUNA</h1>
+        <p class="tag" id="tagline">An ASCII RPG with a 3D world made with Tripo.</p>
+      </div>
+      <nav id="menu-main" class="choices"></nav>
+      <div id="menu-page" class="sheet" hidden></div>
+      <p class="credits" id="credits"></p>
+    </section>
+
+    <div id="play" hidden>
+      <div id="stats"></div>
+      <div id="bossbar" hidden></div>
+      <div id="gait"></div>
+      <ol id="log"></ol>
+      <div id="hint"></div>
+    </div>
+    <div id="actions" hidden></div>
+    <pre id="term" hidden></pre>
+    <div id="pause" hidden><div class="sheet"></div></div>
+
     <div id="pad" hidden>
       <span></span>
       <button data-dir="up" aria-label="up">&#9650;</button>
@@ -285,65 +743,82 @@
       import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
       import { buildWorld, CX, CZ } from './mundo.js'
 
-      // El stickman del juego en 3D, hecho con formas simples: no gasta creditos y
-      // su mano sirve de enganche para cualquier arma. Lee /state.json, que el
-      // visor arma con la ultima partida guardada, y viste al heroe con ese equipo.
+      // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
+      //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
+      //    lib/ empaquetado con scripts/build-juego.js). La pagina le manda teclas,
+      //    dibuja en 3D lo que el juego dice y muestra su pantalla de texto cuando
+      //    el mapa 3D no alcanza: inventario, tiendas, la pradera, el combate.
+      //  - Recorrer: el mundo 3D sin reglas, para mirar los modelos de Tripo.
+      //  - Seguir la terminal: con el juego abierto con --teclas (solo en el visor
+      //    local), la pagina lo sigue y le manda teclas.
 
       const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
-      // Las etiquetas del inventario del juego.
-      const LABELS = {
-        left_hand: 'izq',
-        right_hand: 'der',
-        chest: 'pecho',
-        head: 'casco',
-        boots: 'botas'
-      }
       // Items con modelo de Tripo. Un GLB llamado como el id del item
       // (assets/tripo/spear.glb) se usa solo; aca van los alias y sus ajustes.
       const SKINS = {
         // Tripo entrega los modelos mirando hacia +x; el heroe mira hacia +z.
-        // `hero` ajusta la pieza a la cabeza del heroe de Tripo: cuanto la envuelve,
-        // cuanto sube su techo sobre la coronilla y cuanto se corre hacia la nuca.
-        // Sobre el heroe de Tripo cada pieza se ajusta con AVATARS[].fits.
         iron_helmet: { file: 'yelmo.glb', size: 0.46, yaw: -Math.PI / 2, lift: 0.03 }
       }
       const HERO_FIT = { grow: 1.15, lift: 0.03, back: 0 }
-      // Fondos por zona, con modelos de Tripo que ya existen.
+      // Fondos por zona, con modelos de Tripo que ya existen. El del titulo es el
+      // Coloso grande detras del heroe, como el menu de la terminal.
       const SCENERY = {
-        // Al costado y mirando al heroe, para que el heroe no lo tape.
+        titulo: { file: 'coloso.glb', size: 6.4, at: [0.4, 0, -5.2], yaw: 0.2 },
         ruinas: { file: 'coloso.glb', size: 3.4, at: [-3, 0, -9], yaw: 0.32 },
         reino: { file: 'paisaje.glb', size: 2.6, at: [0, 0, -6], yaw: 0 }
       }
       const GROUND = {
+        titulo: 0x1c0e08,
         reino: 0x16140f,
         pradera: 0x101a10,
         ruinas: 0x1c0e08,
         cripta: 0x0d0d13
       }
 
+      // Opciones de quien juega, en este navegador.
+      const SETTINGS = 'runa:web:settings'
+      const settings = { lang: 'en', run: true, camera: 'far', shadows: true }
+      try {
+        Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS) || '{}'))
+      } catch {
+        // Sin almacenamiento: quedan las de siempre.
+      }
+      function keepSettings() {
+        try {
+          localStorage.setItem(SETTINGS, JSON.stringify(settings))
+        } catch {
+          // Igual se aplican mientras dure la pestana.
+        }
+      }
+      const L = (en, es) => (settings.lang === 'es' ? es : en)
+      const pick = (pair) => pair[settings.lang === 'es' ? 1 : 0]
+
       const who = document.getElementById('who')
       const mode = document.getElementById('mode')
       const gear = document.getElementById('gear')
       const toast = document.getElementById('toast')
-      // El sitio publicado (scripts/build-web.js) no tiene juego ni partida: ahi
-      // el heroe camina en el navegador. Localmente se prueba con /heroe?demo.
+      // El sitio publicado (scripts/build-web.js) no tiene visor: no hay
+      // terminal que seguir ni partidas de la terminal para copiar.
       const DEMO =
         document.documentElement.dataset.demo === '1' ||
         new URLSearchParams(location.search).has('demo')
+      const touchPad = matchMedia('(pointer: coarse)').matches
 
       // Escena. Sin WebGL no hay nada que dibujar: se avisa en vez de quedar mudo.
       let renderer
       try {
         renderer = new THREE.WebGLRenderer({ antialias: true })
       } catch (error) {
-        who.textContent = DEMO
-          ? 'This 3D demo needs WebGL, and this browser has it turned off.'
-          : 'Este navegador no tiene WebGL: la pagina 3D no puede dibujar.'
+        document.getElementById('hud').hidden = false
+        who.textContent = L(
+          'This 3D page needs WebGL, and this browser has it turned off.',
+          'Este navegador no tiene WebGL: la pagina 3D no puede dibujar.'
+        )
         throw error
       }
       // Con 1,5 alcanza para que se vea nitido y no se trabe en pantallas densas.
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
-      renderer.shadowMap.enabled = true
+      renderer.shadowMap.enabled = settings.shadows
       document.body.prepend(renderer.domElement)
       // Para medir desde la consola cuanto cuesta cada cuadro.
       window.runaInfo = () => ({
@@ -381,7 +856,7 @@
       window.runaView = {
         camera,
         controls,
-        // Ajuste en vivo de la pieza de cabeza del heroe, para calibrar `hero`.
+        // Ajuste en vivo de la pieza de cabeza del heroe, para calibrar `fits`.
         tune(id, values) {
           AVATAR.fits[id] = { ...HERO_FIT, ...AVATAR.fits[id], ...values }
           if (worn.head === id) return refitHead(id)
@@ -500,7 +975,7 @@
         return { root, hips, torso, headSocket, arms, feet, legs }
       }
 
-      // Los NPC del mapa: un stickman del color que usa la terminal.
+      // Los NPC del mapa sin dibujo propio: una figura del color que usa la terminal.
       const TERMINAL = {
         cyan: 0x6fd3e0,
         green: 0x7fd36f,
@@ -686,9 +1161,9 @@
 
       // En el mundo camina el heroe de Tripo; el stickman con el equipo cambiable
       // queda para la vitrina. heroe-anim.glb es el heroe rehecho en pose A con
-      // Tripo H3.1 desde Higgsfield, con el esqueleto y los clips Walk e Idle que
-      // le puso Higgsfield, y ya mira hacia +z. Si no esta, camina heroe.glb, el
-      // original: sin esqueleto, mirando hacia +x y con un balanceo al caminar.
+      // Tripo H3.1 desde Higgsfield, con el esqueleto y los clips Idle, Walk y Run
+      // que le puso Higgsfield, y ya mira hacia +z. Si no esta, camina heroe.glb,
+      // el original: sin esqueleto, mirando hacia +x y con un balanceo al caminar.
       // `fits` ajusta cada pieza de cabeza a ese heroe: cuanto la envuelve, cuanto
       // sube su techo sobre la coronilla y cuanto se corre hacia la nuca.
       const AVATARS = [
@@ -711,8 +1186,23 @@
         }
       ]
       let AVATAR = AVATARS[AVATARS.length - 1]
-      // El paso del clip Walk acompana la velocidad del heroe en el mapa.
-      const WALK_RATE = 2
+      // Los pasos, en m/s. `pace` es la velocidad de suelo a la que el clip no
+      // patina con el heroe de 2,1 m, medida en sus huesos: el pie apoyado de Walk
+      // retrocede a 0,6 m/s y el de Run (Run_02) a 3,4 m/s. `most` limita cuanto
+      // se acelera el clip: mas rapido parece una pelicula adelantada, asi que de
+      // ahi en adelante el pie desliza un poco. Correr es lo de siempre; Shift
+      // esprinta, o corre si se eligio caminar.
+      const GAITS = {
+        walk: { speed: 1.6, clip: 'Walk', pace: 0.6, most: 2.2 },
+        run: { speed: 7, clip: 'Run', pace: 3.4, most: 1.9 },
+        sprint: { speed: 9, clip: 'Run', pace: 3.4, most: 2.25 }
+      }
+      let shiftHeld = false
+      function gaitName() {
+        if (shiftHeld) return settings.run ? 'sprint' : 'run'
+        return settings.run ? 'run' : 'walk'
+      }
+      const pace = () => GAITS[gaitName()]
       const avatar = new THREE.Group()
       avatar.visible = false
       hero.root.add(avatar)
@@ -726,19 +1216,20 @@
       let mixer = null
       const gaits = {}
       let gait = null
+      let gaitClip = ''
       function loadAvatar() {
         if (avatarBody || avatarLoading) return avatarLoading || Promise.resolve()
-        const pick = AVATARS.find(
+        const chosen = AVATARS.find(
           (entry) => models.has(entry.file) && !avatarFailed.has(entry.file)
         )
-        if (!pick) return Promise.resolve()
-        avatarLoading = loadRig(pick.file)
+        if (!chosen) return Promise.resolve()
+        avatarLoading = loadRig(chosen.file)
           .then(({ object, clips }) => {
-            AVATAR = pick
-            object.rotation.y = pick.yaw
+            AVATAR = chosen
+            object.rotation.y = chosen.yaw
             object.updateMatrixWorld(true)
             const box = new THREE.Box3().setFromObject(object)
-            object.scale.multiplyScalar(pick.height / box.getSize(new THREE.Vector3()).y)
+            object.scale.multiplyScalar(chosen.height / box.getSize(new THREE.Vector3()).y)
             object.updateMatrixWorld(true)
             const placed = new THREE.Box3().setFromObject(object)
             const mid = placed.getCenter(new THREE.Vector3())
@@ -758,24 +1249,22 @@
             // La cabeza se mide en la pose de reposo, antes de animar, y el yelmo se
             // engancha al hueso Head para seguir la animacion.
             findHead(object)
-            if (pick.rigged) {
-              const bone = object.getObjectByName('Head')
-              if (bone) bone.attach(avatarHead)
+            if (chosen.rigged) {
+              const head = object.getObjectByName('Head')
+              if (head) head.attach(avatarHead)
               mixer = new THREE.AnimationMixer(object)
-              for (const name of ['Idle', 'Walk']) {
+              for (const name of ['Idle', 'Walk', 'Run']) {
                 const clip = THREE.AnimationClip.findByName(clips, name)
                 if (clip) gaits[name] = mixer.clipAction(clip)
               }
-              if (gaits.Walk) gaits.Walk.timeScale = WALK_RATE
-              gait = gaits.Idle || null
-              if (gait) gait.play()
+              setGait('Idle', 1)
             }
             // Lo que ya llevaba en la cabeza se vuelve a medir con su cabeza.
             if (worn.head) refitHead(worn.head)
           })
           .catch((error) => {
-            console.warn('sin el heroe de Tripo', pick.file, error)
-            avatarFailed.add(pick.file)
+            console.warn('sin el heroe de Tripo', chosen.file, error)
+            avatarFailed.add(chosen.file)
             avatarLoading = null
           })
         return avatarLoading
@@ -785,12 +1274,26 @@
         avatar.visible = ready
         hero.hips.visible = !ready
       }
-      function setGait(name) {
-        const next = gaits[name]
-        if (!next || next === gait) return
-        next.reset().fadeIn(0.2).play()
-        if (gait) gait.fadeOut(0.2)
+      // Cambia de clip con un fundido corto y acompana la velocidad sin saltos.
+      // Sin Run (un heroe-anim.glb viejo) corre con Walk acelerado.
+      function setGait(name, scale) {
+        let clip = name
+        if (!gaits[clip] && clip === 'Run') {
+          clip = 'Walk'
+          scale = Math.min(3, scale * 2.4)
+        }
+        const next = gaits[clip]
+        if (!next) return
+        if (next === gait) {
+          next.timeScale += (scale - next.timeScale) * 0.2
+          return
+        }
+        next.reset()
+        next.timeScale = scale
+        next.fadeIn(gait ? 0.18 : 0).play()
+        if (gait) gait.fadeOut(0.18)
         gait = next
+        gaitClip = clip
       }
 
       // La cabeza del heroe de Tripo se mide en la malla: la tapa es lo que queda
@@ -828,8 +1331,7 @@
         window.runaHead = () => ({ ...avatarHead.position, ...headSize })
       }
 
-      // La pieza para la cabeza del heroe de Tripo envuelve su cabeza: un 15% mas
-      // ancha y mas profunda, con el techo apenas sobre la coronilla. Va dentro
+      // La pieza para la cabeza del heroe de Tripo envuelve su cabeza. Va dentro
       // de un grupo para que el pop de equipar no le pise la escala.
       async function avatarPiece(id) {
         let object = null
@@ -869,7 +1371,7 @@
         return fitted
       }
 
-      // Cielo de atardecer para el mundo; la vitrina sigue en negro.
+      // Cielo de atardecer para el mundo; la vitrina y el titulo siguen en negro.
       const skyCanvas = document.createElement('canvas')
       skyCanvas.width = 2
       skyCanvas.height = 256
@@ -1048,7 +1550,7 @@
         }
         if (announce && id) {
           pop(shown)
-          say((DEMO ? 'equipped ' : 'equipaste ') + entry.name)
+          say(L('equipped ', 'equipaste ') + itemName(entry))
           hop = performance.now()
         }
       }
@@ -1071,8 +1573,9 @@
         sceneName = name
         const ticket = ++sceneTicket
         groundMat.color.setHex(GROUND[name] || GROUND.reino)
-        ash.visible = name === 'ruinas'
-        ember.color.setHex(name === 'ruinas' ? 0xff6a20 : 0xe0c060)
+        const fiery = name === 'ruinas' || name === 'titulo'
+        ash.visible = fiery
+        ember.color.setHex(fiery ? 0xff6a20 : 0xe0c060)
         if (backdrop) scene.remove(backdrop)
         backdrop = null
         const spec = SCENERY[name]
@@ -1105,7 +1608,7 @@
         }
       }
 
-      // Ceniza de las ruinas
+      // Ceniza de las ruinas y del titulo.
       const ASH = 600
       const ashGeo = new THREE.BufferGeometry()
       const ashPos = new Float32Array(ASH * 3)
@@ -1123,7 +1626,7 @@
       scene.add(ash)
 
       // Mundo: en un mapa fijo el heroe camina por la version 3D del mapa ASCII,
-      // hacia la celda que el juego guardo. En el resto queda la vitrina.
+      // hacia la celda del juego. En el resto queda la vitrina.
       const heroTarget = new THREE.Vector3()
       let world = null
       let worldToken = 0
@@ -1147,6 +1650,7 @@
         useAvatar(!on)
         if (backdrop) backdrop.visible = on
         controls.autoRotate = on
+        controls.autoRotateSpeed = 0.9
         // En el mapa, vista 2.5D: lente cerrada y desde lejos, casi isometrica.
         lensBase = on ? 38 : 24
         camera.fov = lens()
@@ -1167,9 +1671,10 @@
         scene.remove(world.built.group)
         world.built.dispose()
         world = null
+        if (marks) marks.visible = false
       }
 
-      // Los mapas no cambian mientras el visor corre: cada uno se pide una vez.
+      // Los mapas no cambian mientras la pagina corre: cada uno se pide una vez.
       const maps = new Map()
       function mapData(id) {
         if (!maps.has(id)) {
@@ -1185,8 +1690,26 @@
         return maps.get(id)
       }
 
-      // La consulta llega cada 200 ms y armar la ciudad puede tardar mas: mientras
-      // un mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
+      // Los carteles, las puertas y los NPC en el idioma elegido, con la tabla
+      // del juego (lib/locale.js). Los letreros pintados en el mapa conservan su
+      // largo, como en la terminal.
+      function localized(data) {
+        if (settings.lang !== 'en' || !juego) return { data, text: (name) => name }
+        return {
+          data: { ...data, signs: data.rows.map((row) => juego.signs('en', row)) },
+          text: (name) => juego.translate('en', name)
+        }
+      }
+
+      // Donde se para la camara al llegar a un mapa: al sur del heroe y arriba.
+      const VIEWS = { far: [44, 32], near: [24, 18] }
+      function cameraOffset() {
+        const [up, back] = VIEWS[settings.camera] || VIEWS.far
+        return new THREE.Vector3(0, up, back)
+      }
+
+      // La consulta llega seguido y armar la ciudad puede tardar mas: mientras un
+      // mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
       let loadingMap = null
       let lastAt = null
       async function enterWorld(at) {
@@ -1197,14 +1720,16 @@
         }
         if (loadingMap === at.map) return
         loadingMap = at.map
-        mode.textContent = lang('building the 3D map...', 'armando el mapa 3D...')
+        if (screen !== 'play')
+          mode.textContent = L('building the 3D map...', 'armando el mapa 3D...')
         const token = ++worldToken
         let data
         try {
           data = await mapData(at.map)
         } catch (error) {
           if (token === worldToken) loadingMap = null
-          mode.textContent = 'no pude traer el mapa ' + at.map + ': ' + error.message
+          mode.textContent = L('could not load the map ', 'no pude traer el mapa ') + at.map
+          console.warn(error)
           return
         }
         if (token !== worldToken) return
@@ -1212,23 +1737,27 @@
         leaveWorld()
         let built
         try {
-          built = buildWorld(data, {
+          const shown = localized(data)
+          built = buildWorld(shown.data, {
             figure,
+            text: shown.text,
             glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null))
           })
         } catch (error) {
-          mode.textContent = 'no pude armar el mapa ' + at.map + ': ' + error.message
+          mode.textContent = L('could not build the map ', 'no pude armar el mapa ') + at.map
           console.error(error)
           return
         }
         // Mientras se armaba el heroe pudo moverse: se usa la ultima celda.
         if (lastAt && lastAt.map === at.map) at = lastAt
-        mode.textContent =
-          driver !== 'terminal'
-            ? placeName(at.map)
-            : 'mapa 3D: ' + data.name + '. Te moves desde la terminal del juego.'
+        if (screen === 'mirror') {
+          mode.textContent =
+            L('3D map: ', 'mapa 3D: ') +
+            data.name +
+            L('. You move from the terminal game.', '. Te moves desde la terminal del juego.')
+        } else if (screen === 'tour') mode.textContent = placeName(at.map)
         scene.add(built.group)
-        world = { map: at.map, built }
+        world = { map: at.map, built, data }
         showcase(false)
         ash.visible = data.kind === 'boss'
         ember.color.setHex(data.kind === 'boss' ? 0xff6a20 : 0xe0c060)
@@ -1238,17 +1767,15 @@
         hero.root.position.copy(heroTarget)
         controls.target.copy(heroTarget).setY(1)
         // La camara arranca al sur del heroe, mirando al norte como la terminal.
-        camera.position.copy(heroTarget).add(new THREE.Vector3(0, 44, 32))
-        // Jugando en el navegador, mientras baja el heroe de Tripo se avisa: en 4G
-        // tarda.
-        if (driver !== 'terminal' && !avatarBody) {
+        camera.position.copy(heroTarget).add(cameraOffset())
+        if (screen === 'tour' && !avatarBody) {
           mode.textContent =
             placeName(at.map) +
-            lang(' (loading the Tripo hero...)', ' (cargando el heroe de Tripo...)')
+            L(' (loading the Tripo hero...)', ' (cargando el heroe de Tripo...)')
         }
         loadAvatar().then(() => {
           useAvatar(!!world)
-          if (driver !== 'terminal' && world) hint()
+          if (screen === 'tour' && world) hint()
         })
       }
 
@@ -1266,56 +1793,12 @@
         ash.position.set(0, 0, 0)
       }
 
-      // Estado de la partida
-      let first = true
-      let shownGear = ''
-      async function poll() {
-        try {
-          const state = await (await fetch('state.json', { cache: 'no-store' })).json()
-          // Sin la terminal abierta, la pagina juega sola desde la partida guardada;
-          // si la terminal se abre, vuelve a mandar ella.
-          if (!state.listening) {
-            if (driver !== 'navegador') startBrowser(state.empty ? null : state)
-            return
-          }
-          if (driver === 'navegador') stopBrowser()
-          if (state.empty) {
-            who.textContent = state.busy
-              ? 'leyendo la partida...'
-              : 'no hay partidas en ' + state.dir + ': abri el juego y entra a una'
-            return
-          }
-          who.textContent =
-            state.name + ', nivel ' + state.level + ', ' + (state.place || 'en camino')
-          const gearKey = JSON.stringify(state.equipped)
-          if (gearKey !== shownGear) {
-            shownGear = gearKey
-            gear.replaceChildren()
-            for (const slot of SLOTS) {
-              const dt = document.createElement('dt')
-              dt.textContent = LABELS[slot]
-              const dd = document.createElement('dd')
-              dd.textContent = state.equipped[slot] ? state.equipped[slot].name : '-'
-              gear.append(dt, dd)
-            }
-          }
-          for (const slot of SLOTS) {
-            const id = state.equipped[slot] ? state.equipped[slot].id : null
-            if (worn[slot] === id && !first) continue
-            worn[slot] = id
-            wear(slot, state.equipped[slot], !first)
-          }
-          if (state.world) enterWorld(state.world)
-          else {
-            exitWorld()
-            setScene(state.scene)
-            mode.textContent =
-              'vitrina: ' + (state.place || 'esta zona') + ' todavia no tiene mapa 3D'
-          }
-          first = false
-        } catch {
-          who.textContent = 'el visor no responde'
-        }
+      // El idioma cambio: el mapa se vuelve a armar con sus carteles nuevos.
+      function relabel() {
+        if (!world) return
+        const at = lastAt
+        leaveWorld()
+        if (at) enterWorld(at)
       }
 
       async function refreshModels() {
@@ -1326,50 +1809,111 @@
           models = new Map(list.map((model) => [model.name, model.mtime]))
           // Si la lista llego tarde, el heroe de Tripo se carga ahora y no al
           // cambiar de mapa.
-          if (world && !avatarBody) loadAvatar().then(() => useAvatar(!!world))
+          if (!avatarBody) {
+            loadAvatar().then(() => {
+              if (world || screen === 'menu') useAvatar(true)
+            })
+          }
+          if (screen === 'menu' && sceneName === 'titulo') {
+            sceneName = null
+            setScene('titulo')
+          }
           return true
         } catch (error) {
           // Sin lista no hay modelos de Tripo: quedan las formas simples.
-          if (DEMO) console.warn('sin la lista de modelos de Tripo', error)
+          console.warn('sin la lista de modelos de Tripo', error)
           return false
         }
+      }
+
+      // El Coloso marca en el piso donde va a pegar (rojo, late) y lo que ya
+      // quema (naranja): son las celdas que da el juego, sobre el mapa 3D.
+      let marks = null
+      const markMatrix = new THREE.Matrix4()
+      const markRed = new THREE.Color(0xff3b1a)
+      const markOrange = new THREE.Color(0xff9a20)
+      function bossMarks(boss, time) {
+        const cells = boss && world && world.map === 'boss' ? boss : null
+        if (!cells) {
+          if (marks) marks.visible = false
+          return
+        }
+        if (!marks) {
+          marks = new THREE.InstancedMesh(
+            new THREE.PlaneGeometry(CX * 0.94, CZ * 0.94).rotateX(-Math.PI / 2),
+            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthWrite: false }),
+            256
+          )
+          marks.frustumCulled = false
+          marks.renderOrder = 2
+          scene.add(marks)
+        }
+        let i = 0
+        const put = (cell, color) => {
+          if (i >= 256) return
+          const p = world.built.toWorld(cell.x, cell.y)
+          marks.setMatrixAt(i, markMatrix.makeTranslation(p.x, 0.07, p.z))
+          marks.setColorAt(i++, color)
+        }
+        for (const cell of cells.telegraphs || []) put(cell, markRed)
+        for (const cell of cells.hazards || []) put(cell, markOrange)
+        marks.count = i
+        marks.instanceMatrix.needsUpdate = true
+        if (marks.instanceColor) marks.instanceColor.needsUpdate = true
+        marks.material.opacity = 0.45 + Math.sin(time * 9) * 0.2
+        marks.visible = i > 0
       }
 
       // Animacion
       let hop = 0
       let stride = 0
       let lastStep = 0
+      let velocity = 0
       const timer = new THREE.Timer()
       const step = new THREE.Vector3()
       const follow = new THREE.Vector3()
       const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle))
 
-      // En el mundo: el heroe camina hacia la celda guardada, mira hacia donde va y
-      // la camara lo sigue sin perder el angulo que eligio quien mira.
+      // En el mundo: el heroe va hacia la celda del juego al paso elegido, mira
+      // hacia donde va y la camara lo sigue sin perder el angulo que eligio quien
+      // mira. El clip sale del paso: Run al correr o esprintar, Walk al caminar e
+      // Idle quieto, con la velocidad del clip atada a la del heroe.
       function walk(dt) {
         const pos = hero.root.position
         step.subVectors(heroTarget, pos).setY(0)
         const dist = step.length()
-        const moving = dist > 0.01 && dist <= 6
+        let moved = 0
+        // Siguiendo a la terminal no se sabe a que paso va: se la alcanza rapido.
+        const speed = screen === 'mirror' ? 12 : pace().speed
         if (dist > 6) pos.set(heroTarget.x, pos.y, heroTarget.z)
-        else if (moving) {
-          pos.addScaledVector(step.normalize(), Math.min(dist, 7 * dt))
+        else if (dist > 0.004) {
+          moved = Math.min(dist, (speed * 1.12 + dist * 3) * dt)
+          pos.addScaledVector(step.normalize(), moved)
           const yaw = Math.atan2(step.x, step.z)
-          hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 12)
+          hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 14)
         }
-        stride = moving ? stride + dt * 11 : 0
-        const swing = moving ? Math.sin(stride) * 0.55 : 0
-        // Con esqueleto camina con el clip Walk. Entre paso y paso de celda queda un
-        // instante quieto: el cambio a Idle espera un cuarto de segundo.
-        if (moving) lastStep = performance.now()
-        const sway = moving && !AVATAR.rigged
-        if (mixer) setGait(performance.now() - lastStep < 250 ? 'Walk' : 'Idle')
+        const now = performance.now()
+        const rate = moved / Math.max(dt, 1e-3)
+        velocity += (rate - velocity) * Math.min(1, dt * 8)
+        if (rate > 0.2) lastStep = now
+        const going = now - lastStep < 170
+        stride = going ? stride + dt * 11 : 0
+        const swing = going ? Math.sin(stride) * 0.55 : 0
+        if (mixer) {
+          if (!going) setGait('Idle', 1)
+          else {
+            const spec = screen === 'mirror' ? (velocity > 3.5 ? GAITS.run : GAITS.walk) : pace()
+            const base = screen === 'mirror' ? Math.max(velocity, 1) : spec.speed
+            setGait(spec.clip, Math.min(spec.most, Math.max(0.8, base / spec.pace)))
+          }
+        }
         // Sin esqueleto, el heroe de Tripo se balancea.
+        const sway = going && !AVATAR.rigged
         avatar.position.y = sway ? Math.abs(Math.sin(stride)) * 0.09 : 0
         avatar.rotation.z = sway ? Math.sin(stride) * 0.05 : 0
         hero.legs[0].rotation.x = swing
         hero.legs[1].rotation.x = -swing
-        if (moving) {
+        if (going) {
           hero.arms.left_hand.shoulder.rotation.x = -swing * 0.4
           hero.arms.right_hand.shoulder.rotation.x = swing * 0.4
         }
@@ -1412,14 +1956,25 @@
           }
           ashGeo.attributes.position.needsUpdate = true
         }
-        if (driver !== 'terminal') stepDemo(dt)
+        if (screen === 'tour') stepDemo(dt)
+        if (screen === 'play') playFrame(dt, t)
         if (world) walk(dt)
+        else if (mixer && screen === 'menu') setGait('Idle', 1)
         if (mixer && avatar.visible) mixer.update(dt)
         // El mundo puede tener movimiento propio: viento, agua, NPC.
         if (world && world.built.update) world.built.update(t)
         controls.update()
         renderer.render(scene, camera)
       })
+
+      // En el menu de titulo la escena se corre a la derecha (una fraccion del
+      // ancho) para que los botones no tapen al heroe ni al Coloso.
+      let viewShift = 0
+      function shiftView() {
+        const { clientWidth: w, clientHeight: h } = renderer.domElement
+        if (viewShift && w > h) camera.setViewOffset(w, h, -w * viewShift, 0, w, h)
+        else camera.clearViewOffset()
+      }
 
       // El CSS fija el tamano del lienzo; el buffer lo sigue cuando cambia.
       function fitView() {
@@ -1428,75 +1983,1107 @@
         renderer.setSize(clientWidth, clientHeight, false)
         camera.aspect = clientWidth / clientHeight
         camera.fov = lens()
+        shiftView()
         camera.updateProjectionMatrix()
       }
       new ResizeObserver(fitView).observe(renderer.domElement)
       fitView()
 
-      // Controles: la pagina aprieta teclas en el juego, que corre en la terminal con
-      // --teclas. Las reglas siguen siendo las del juego; esto solo manda teclas.
+      // ---------------------------------------------------------------------
+      // Pantallas: menu, jugar, recorrer y seguir la terminal.
+
+      let screen = 'boot'
+      let juego = null
       const keysLine = document.getElementById('keys')
-      const KEYMAP = {
-        ArrowUp: 'up',
-        ArrowDown: 'down',
-        ArrowLeft: 'left',
-        ArrowRight: 'right',
-        Enter: 'enter',
-        Escape: 'escape',
-        Backspace: 'backspace',
-        Tab: 'tab',
-        ' ': 'space'
+      const hud = document.getElementById('hud')
+      const menu = document.getElementById('menu')
+      const menuMain = document.getElementById('menu-main')
+      const menuPage = document.getElementById('menu-page')
+      const playBox = document.getElementById('play')
+      const statsBox = document.getElementById('stats')
+      const bossBox = document.getElementById('bossbar')
+      const gaitBox = document.getElementById('gait')
+      const logBox = document.getElementById('log')
+      const hintBox = document.getElementById('hint')
+      const actions = document.getElementById('actions')
+      const term = document.getElementById('term')
+      const pause = document.getElementById('pause')
+      const pad = document.getElementById('pad')
+      const talkBox = document.getElementById('talk')
+      const bagBox = document.getElementById('bag')
+      const links = document.getElementById('links')
+
+      // Los nombres de items, lugares y NPC vienen del juego en castellano.
+      const tr = (text) => (juego && text ? juego.translate(settings.lang, text) : text || '')
+      const itemName = (entry) => (entry ? tr(entry.name) : '-')
+
+      // Cada pantalla deja todo como lo encontro: la de la que se sale se apaga
+      // entera antes de prender la otra.
+      function leaveScreen() {
+        if (screen === 'play') stopPlay()
+        viewShift = 0
+        shiftView()
+        camera.updateProjectionMatrix()
+        hud.hidden = true
+        document.getElementById('places').hidden = true
+        menu.hidden = true
+        playBox.hidden = true
+        actions.hidden = true
+        term.hidden = true
+        pause.hidden = true
+        pad.hidden = true
+        talkBox.hidden = true
+        bagBox.hidden = true
+        links.hidden = true
+        demo.held.clear()
+        demo.fingers.clear()
+        demo.map = undefined
+        mover.held.clear()
+        mover.fingers.clear()
+        shiftHeld = false
       }
-      let keyChain = Promise.resolve()
-      window.addEventListener('keydown', (event) => {
-        if (event.ctrlKey || event.metaKey || event.altKey) return
-        if (driver !== 'terminal') {
-          playKey(event, true)
-          return
+
+      // Un boton de menu, con su nota abajo.
+      function button(text, note, action, disabled = false) {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.append(text)
+        if (note) {
+          const small = document.createElement('small')
+          small.textContent = note
+          b.append(small)
         }
-        const key = KEYMAP[event.key] || (event.key.length === 1 ? event.key : null)
-        if (!key) return
-        event.preventDefault()
-        // Q cierra el juego: desde aca no se manda.
-        if (key === 'q' || key === 'Q') {
-          keysLine.textContent = 'Q cierra el juego: para salir usa la terminal.'
-          return
+        b.disabled = disabled
+        b.addEventListener('click', () => {
+          b.blur()
+          action()
+        })
+        return b
+      }
+
+      // Una hoja del menu (de titulo o de la partida), con titulo y volver.
+      function sheet(box, title, back) {
+        box.replaceChildren()
+        const h = document.createElement('h2')
+        h.textContent = title
+        box.append(h)
+        return () => box.append(button(L('Back', 'Volver'), null, back))
+      }
+
+      // Un grupo de botones que elige uno.
+      function choice(box, options, current, onPick) {
+        const row = document.createElement('div')
+        row.className = 'pick'
+        for (const [value, text] of options) {
+          const b = button(text, null, () => onPick(value))
+          b.setAttribute('aria-pressed', String(value === current))
+          row.append(b)
         }
-        // En fila, para que el juego reciba las teclas en el orden apretado.
-        keyChain = keyChain.then(async () => {
+        box.append(row)
+      }
+
+      function line(box, text, className) {
+        const p = document.createElement('p')
+        p.textContent = text
+        if (className) p.className = className
+        box.append(p)
+        return p
+      }
+
+      // --- Menu de titulo ---------------------------------------------------
+
+      let terminalOpen = false
+      let terminalSaves = []
+
+      function slotsOf() {
+        try {
+          return juego ? juego.slots() : []
+        } catch {
+          return []
+        }
+      }
+
+      function slotNote(slot) {
+        const realm = String(slot.realm || 'runa').toUpperCase()
+        return `${slot.name}, ${L('level', 'nivel')} ${slot.level}, ${realm}, ${tr(slot.place)}`
+      }
+
+      function titleScene() {
+        exitWorld()
+        showcase(true)
+        ring.visible = false
+        setScene('titulo')
+        lensBase = 34
+        camera.fov = lens()
+        viewShift = 0.2
+        shiftView()
+        camera.updateProjectionMatrix()
+        controls.autoRotateSpeed = 0.35
+        controls.minDistance = 4
+        controls.maxDistance = 16
+        controls.target.set(0, 2, -2)
+        camera.position.set(4.6, 2.5, 7.6)
+        hero.root.position.set(0, 0, 0)
+        hero.root.rotation.y = 0.3
+        loadAvatar().then(() => {
+          if (screen === 'menu') useAvatar(true)
+        })
+        useAvatar(true)
+      }
+
+      function showMenu() {
+        leaveScreen()
+        screen = 'menu'
+        menu.hidden = false
+        document.getElementById('tagline').textContent = L(
+          'An ASCII RPG with a 3D world made with Tripo.',
+          'Un RPG en ASCII con un mundo 3D hecho con Tripo.'
+        )
+        const credits = document.getElementById('credits')
+        credits.replaceChildren(
+          L(
+            'Tripo made the 3D models; Higgsfield rigged and animated the hero. ',
+            'Tripo hizo los modelos 3D; Higgsfield le puso esqueleto y animo al heroe. '
+          ),
+          Object.assign(document.createElement('a'), {
+            href: 'https://github.com/Bitcoindefi/runa',
+            textContent: L('Source and the terminal game', 'Codigo y juego de terminal')
+          })
+        )
+        titleScene()
+        mainMenu()
+      }
+
+      function mainMenu() {
+        menuPage.hidden = true
+        menuMain.hidden = false
+        menuMain.replaceChildren()
+        const slots = slotsOf()
+        const playable = slots.filter((slot) => !slot.empty && !slot.corrupt)
+        const latest = playable
+          .slice()
+          .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0]
+        if (latest) {
+          menuMain.append(
+            button(L('Continue', 'Continuar'), slotNote(latest), () => play({ load: latest.slot }))
+          )
+        }
+        menuMain.append(
+          button(
+            L('New game', 'Partida nueva'),
+            juego
+              ? L('A hero of RUNA or of NOX', 'Un heroe de RUNA o de NOX')
+              : L('loading the game...', 'cargando el juego...'),
+            newGamePage,
+            !juego
+          )
+        )
+        if (playable.length || terminalSaves.length) {
+          menuMain.append(button(L('Load game', 'Cargar partida'), null, loadPage, !juego))
+        }
+        if (terminalOpen) {
+          menuMain.append(
+            button(
+              L('Follow the terminal game', 'Seguir el juego de la terminal'),
+              L('The game is open with --teclas', 'El juego esta abierto con --teclas'),
+              startMirror
+            )
+          )
+        }
+        menuMain.append(
+          button(
+            L('Explore the 3D world', 'Recorrer el mundo 3D'),
+            L('No rules: walk the Tripo kingdom', 'Sin reglas: camina el reino de Tripo'),
+            startTour
+          )
+        )
+        menuMain.append(button(L('Settings', 'Opciones'), null, () => subPage(settingsPage)))
+        menuMain.append(button(L('Controls', 'Controles'), null, () => subPage(controlsPage)))
+        const gallery = button(L('The Tripo models', 'Los modelos de Tripo'), null, () => {
+          location.href = 'models.html'
+        })
+        menuMain.append(gallery)
+        menuMain.querySelector('button:not([disabled])').focus()
+      }
+
+      function subPage(build) {
+        menuMain.hidden = true
+        menuPage.hidden = false
+        build(menuPage, mainMenu)
+        const first = menuPage.querySelector('input, button:not([disabled])')
+        if (first) first.focus()
+      }
+
+      function newGamePage() {
+        subPage((box, back) => {
+          const done = sheet(box, L('New game', 'Partida nueva'), back)
+          const form = document.createElement('form')
+          form.className = 'sheet'
+          const name = document.createElement('input')
+          name.type = 'text'
+          name.maxLength = 16
+          name.autocomplete = 'off'
+          name.spellcheck = false
+          name.placeholder = L('your name', 'tu nombre')
+          const label = document.createElement('label')
+          label.append(L('Your name', 'Tu nombre'), name)
+          form.append(label)
+          let realm = 'runa'
+          const realms = document.createElement('div')
+          const paint = () => {
+            realms.replaceChildren()
+            line(realms, L('Your kingdom', 'Tu reino'))
+            choice(
+              realms,
+              [
+                ['runa', L('RUNA, the kingdom of dawn', 'RUNA, el reino del alba')],
+                ['nox', L('NOX, the rival kingdom', 'NOX, el reino rival')]
+              ],
+              realm,
+              (value) => {
+                realm = value
+                paint()
+              }
+            )
+          }
+          paint()
+          form.append(realms)
+          // Con las tres ranuras llenas se elige cual reemplazar.
+          const slots = slotsOf()
+          let slot = (slots.find((entry) => entry.empty) || {}).slot || null
+          const full = !slot
+          const replace = document.createElement('div')
+          if (full) {
+            slot = 1
+            const paintSlots = () => {
+              replace.replaceChildren()
+              line(
+                replace,
+                L(
+                  'All three slots are used: pick one to replace',
+                  'Las tres ranuras estan ocupadas: elegi cual reemplazar'
+                )
+              )
+              choice(
+                replace,
+                slots.map((entry) => [entry.slot, `${entry.slot}. ${entry.name || '-'}`]),
+                slot,
+                (value) => {
+                  slot = value
+                  paintSlots()
+                }
+              )
+            }
+            paintSlots()
+            form.append(replace)
+          }
+          const error = line(form, '', 'error')
+          const start = document.createElement('button')
+          start.type = 'submit'
+          start.textContent = L('Start', 'Empezar')
+          form.append(start)
+          form.addEventListener('submit', (event) => {
+            event.preventDefault()
+            // La terminal solo dibuja ASCII: el juego descarta el resto del nombre.
+            const typed = name.value.replace(/[^\x20-\x7e]/g, '').trim()
+            if (!typed) {
+              error.textContent = L('Write a name to start.', 'Escribi un nombre para empezar.')
+              name.focus()
+              return
+            }
+            play({ begin: { name: typed, realm, slot } })
+          })
+          box.append(form)
+          done()
+        })
+      }
+
+      function loadPage() {
+        subPage((box, back) => {
+          const done = sheet(box, L('Load game', 'Cargar partida'), back)
+          for (const slot of slotsOf()) {
+            const text = `${L('Slot', 'Ranura')} ${slot.slot}`
+            if (slot.empty) box.append(button(text, L('empty', 'vacia'), () => {}, true))
+            else if (slot.corrupt)
+              box.append(button(text, L('damaged save', 'guardado danado'), () => {}, true))
+            else box.append(button(text, slotNote(slot), () => play({ load: slot.slot })))
+          }
+          if (terminalSaves.length) {
+            line(
+              box,
+              L(
+                'From the terminal game (a copy: the terminal keeps its own):',
+                'Del juego de la terminal (una copia: la terminal sigue con la suya):'
+              )
+            )
+            for (const saved of terminalSaves) {
+              box.append(
+                button(
+                  `${L('Terminal slot', 'Ranura de la terminal')} ${saved.slot}`,
+                  slotNote(saved),
+                  () => importTerminal(saved)
+                )
+              )
+            }
+          }
+          done()
+        })
+      }
+
+      // Copia una partida de la terminal a la misma ranura de la pagina.
+      async function importTerminal(saved) {
+        const mine = slotsOf()[saved.slot - 1]
+        if (mine && !mine.empty) {
+          const sure = confirm(
+            L(
+              `Slot ${saved.slot} of this page has ${mine.name}. Replace it with the terminal copy?`,
+              `La ranura ${saved.slot} de esta pagina tiene a ${mine.name}. Reemplazarla con la copia de la terminal?`
+            )
+          )
+          if (!sure) return
+        }
+        try {
+          const response = await fetch('saves/slot-' + saved.slot + '.json', { cache: 'no-store' })
+          if (!response.ok) throw httpError('la partida', response)
+          juego.importSave(saved.slot, await response.text())
+          play({ load: saved.slot })
+        } catch (error) {
+          say(L('Could not copy that save: ', 'No pude copiar esa partida: ') + error.message)
+        }
+      }
+
+      function settingsPage(box, back) {
+        const done = sheet(box, L('Settings', 'Opciones'), back)
+        const again = () => {
+          settingsPage(box, back)
+        }
+        line(box, L('Language', 'Idioma'))
+        choice(
+          box,
+          [
+            ['en', 'English'],
+            ['es', 'Español']
+          ],
+          settings.lang,
+          (value) => {
+            settings.lang = value
+            applySettings('lang')
+            again()
+          }
+        )
+        line(box, L('Movement (Shift does the other one)', 'Movimiento (Shift hace el otro)'))
+        choice(
+          box,
+          [
+            [true, L('Run, Shift sprints', 'Correr, Shift esprinta')],
+            [false, L('Walk, Shift runs', 'Caminar, Shift corre')]
+          ],
+          settings.run,
+          (value) => {
+            settings.run = value
+            applySettings('run')
+            again()
+          }
+        )
+        line(box, L('Camera', 'Camara'))
+        choice(
+          box,
+          [
+            ['far', L('Far', 'Lejos')],
+            ['near', L('Near', 'Cerca')]
+          ],
+          settings.camera,
+          (value) => {
+            settings.camera = value
+            applySettings('camera')
+            again()
+          }
+        )
+        line(box, L('Shadows', 'Sombras'))
+        choice(
+          box,
+          [
+            [true, L('On', 'Si')],
+            [false, L('Off (faster)', 'No (mas rapido)')]
+          ],
+          settings.shadows,
+          (value) => {
+            settings.shadows = value
+            applySettings('shadows')
+            again()
+          }
+        )
+        done()
+      }
+
+      function applySettings(what) {
+        keepSettings()
+        if (what === 'lang') {
+          document.documentElement.lang = settings.lang
+          if (session) session.language(settings.lang)
+          relabel()
+          refreshPlayHud(true)
+          if (screen === 'menu') {
+            document.getElementById('tagline').textContent = L(
+              'An ASCII RPG with a 3D world made with Tripo.',
+              'Un RPG en ASCII con un mundo 3D hecho con Tripo.'
+            )
+          }
+          if (screen === 'tour') tourTexts()
+        }
+        if (what === 'camera' && world) {
+          camera.position.copy(controls.target).add(cameraOffset())
+        }
+        if (what === 'shadows') {
+          renderer.shadowMap.enabled = settings.shadows
+          scene.traverse((object) => {
+            const list = object.material ? [object.material].flat() : []
+            for (const material of list) material.needsUpdate = true
+          })
+        }
+        if (what === 'run') refreshPlayHud(true)
+      }
+
+      function controlsPage(box, back) {
+        const done = sheet(box, L('Controls', 'Controles'), back)
+        const list = document.createElement('dl')
+        const rows = [
+          ['WASD', L('move (arrows too)', 'moverse (tambien las flechas)')],
+          ['Shift', settings.run ? L('sprint', 'esprintar') : L('run', 'correr')],
+          ['E', L('talk, use, enter', 'hablar, usar, entrar')],
+          ['I', L('inventory and gear', 'inventario y equipo')],
+          ['F', L('attack the Colossus', 'atacar al Coloso')],
+          ['T', L('back to town', 'volver a la ciudad')],
+          ['V', L('wallet and PvP', 'wallet y PvP')],
+          ['R', L('reload your combat strategy', 'recargar tu estrategia de combate')],
+          ['?', L("the game's own help", 'la ayuda del juego')],
+          ['Tab', L('show the text screen', 'ver la pantalla de texto')],
+          ['Esc', L('menu, or back', 'menu, o volver')]
+        ]
+        for (const [key, what] of rows) {
+          const dt = document.createElement('dt')
+          dt.textContent = key
+          const dd = document.createElement('dd')
+          dd.textContent = what
+          list.append(dt, dd)
+        }
+        box.append(list)
+        line(
+          box,
+          L(
+            'On a phone: the pad moves you and the buttons on the left do the rest.',
+            'En el celular: la cruceta te mueve y los botones de la izquierda hacen el resto.'
+          )
+        )
+        done()
+      }
+
+      // --- Jugar: el juego de verdad, en la pagina ---------------------------
+
+      let session = null
+      let live = null
+      let peek = false
+      let paused = false
+      let termShown = false
+      let termDirty = false
+      let termCols = 0
+      let termRows = 0
+      let shownGear = ''
+      let firstGear = true
+      let hudKey = ''
+      const logLines = []
+
+      // El juego empaquetado (scripts/build-juego.js). Pesa: se pide al arrancar
+      // la pagina, mientras el menu ya se ve, y se reintenta como los mapas.
+      async function loadGame() {
+        // Un import() que fallo queda guardado como fallido para esa URL: cada
+        // reintento pide otra.
+        for (let i = 0; i < 4 && !juego; i++) {
           try {
-            const response = await fetch('key', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Runa': '1' },
-              body: JSON.stringify({ key })
-            })
-            keysLine.textContent =
-              response.status === 409
-                ? 'El juego no esta leyendo teclas: abrilo con npm.cmd start -- --teclas'
-                : 'WASD o flechas: caminar. E: hablar. I: inventario.'
-          } catch {
-            keysLine.textContent = 'el visor no responde'
+            juego = (await import('./juego.js' + (i ? '?retry=' + i : ''))).default
+          } catch (error) {
+            console.warn('sin el juego todavia', error)
+            await new Promise((resolve) => setTimeout(resolve, 700 * (i + 1)))
+          }
+        }
+        if (juego) window.runaJuego = juego
+        else
+          say(
+            L(
+              'Could not load the game. Reload the page to try again.',
+              'No pude cargar el juego. Recarga la pagina para probar de nuevo.'
+            )
+          )
+        if (screen === 'menu' && menuPage.hidden) mainMenu()
+        return juego
+      }
+
+      // Lo que muestra el registro: las ultimas lineas, traducidas al mostrarse.
+      function pushLog(text) {
+        logLines.push({ text, at: performance.now() })
+        if (logLines.length > 4) logLines.shift()
+        drawLog()
+      }
+      function drawLog() {
+        logBox.replaceChildren(
+          ...logLines.map((entry, i) => {
+            const li = document.createElement('li')
+            li.textContent = tr(entry.text)
+            if (i < logLines.length - 2) li.className = 'old'
+            return li
+          })
+        )
+      }
+
+      function play(how) {
+        if (!juego) return
+        leaveScreen()
+        screen = 'play'
+        playBox.hidden = false
+        actions.hidden = !touchPad
+        pad.hidden = !touchPad
+        logLines.length = 0
+        drawLog()
+        firstGear = true
+        shownGear = ''
+        hudKey = ''
+        live = null
+        peek = false
+        paused = false
+        session = juego.start({
+          language: settings.lang,
+          cols: termCols || 120,
+          rows: termRows || 36,
+          onFrame: () => {
+            termDirty = true
+          },
+          onSay: pushLog,
+          onExit: () => {
+            if (screen === 'play' && session && !session.running()) showMenu()
           }
         })
-      })
+        window.runaGame = session
+        if (how.load && !session.load(how.load)) {
+          const message = session.runa.menuMessage
+          stopPlay()
+          showMenu()
+          say(tr(message) || L('That save could not be loaded.', 'No se pudo cargar esa partida.'))
+          return
+        }
+        if (how.begin) session.begin(how.begin)
+        setupActions()
+        fitTerm()
+      }
 
-      // Jugar en el navegador: el sitio publicado (driver 'demo', en ingles) y la
-      // pagina local cuando la terminal no esta abierta (driver 'navegador', desde
-      // la partida guardada). Con la terminal abierta (driver 'terminal') la pagina
-      // solo le manda teclas. Los mapas tienen las colisiones del juego: en las
-      // ruinas manda boss-zone.js isWalkable mas el cuerpo del Coloso; en el resto,
-      // la tabla TILES (map.js isSolid) y los NPC (game.js npcAt). Cada tecla es un
-      // paso de celda, los portones llevan a otro mapa como en la terminal, E habla
-      // con el NPC de al lado e I abre la mochila.
-      let driver = DEMO ? 'demo' : 'terminal'
-      const spanish = !DEMO
-      const lang = (en, sp) => (spanish ? sp : en)
-      const pick = (pair) => pair[spanish ? 1 : 0]
+      function stopPlay() {
+        if (!session) return
+        const ending = session
+        session = null
+        live = null
+        ending.quit()
+      }
+
+      async function quitToTitle() {
+        const ending = session
+        session = null
+        if (ending) await ending.quit()
+        showMenu()
+      }
+
+      // Cada cuadro: lo que dice el juego llega a la vista 3D, a la ficha y a la
+      // pantalla de texto; y los pasos sostenidos se convierten en teclas.
+      function playFrame(dt, time) {
+        if (!session) return
+        live = session.state()
+        const st = live
+        if (st.world) enterWorld(st.world)
+        else if (!st.title) {
+          if (world) exitWorld()
+          setScene(st.scene)
+        }
+        dressFrom(st)
+        bossMarks(st.boss, time)
+        const text = st.title || st.naming || !st.world || !!st.overlay || st.combat
+        setTerm(text || peek)
+        playBox.hidden = termShown
+        refreshPlayHud()
+        stepGame(dt, st)
+        if (termShown && termDirty) drawTerm()
+      }
+
+      function dressFrom(st) {
+        const key = JSON.stringify(st.equipped)
+        if (key === shownGear) return
+        shownGear = key
+        for (const slot of SLOTS) {
+          const entry = st.equipped[slot]
+          const id = entry ? entry.id : null
+          if (worn[slot] === id && !firstGear) continue
+          worn[slot] = id
+          wear(slot, entry, !firstGear)
+        }
+        firstGear = false
+      }
+
+      function bar(kind, value, most, text) {
+        const share = most > 0 ? Math.max(0, Math.min(1, value / most)) : 0
+        return `<div class="bar ${kind}"><i style="width:${(share * 100).toFixed(1)}%"></i><span>${text}</span></div>`
+      }
+      const esc = (text) =>
+        String(text).replace(
+          /[&<>"]/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]
+        )
+
+      function placeOf(st) {
+        if (st.world && world && world.data && world.map === st.world.map)
+          return tr(world.data.name)
+        const names = {
+          field: L('The meadow', 'La pradera'),
+          dungeon: L('The crypt', 'La cripta'),
+          'barbarian-camp': L('A barbarian camp', 'Un campamento barbaro'),
+          boss: L('Volcanic ruins', 'Ruinas volcanicas')
+        }
+        if (st.field) return names[st.field] || st.field
+        const map = juego && st.location.mapId ? juego.MAPS[st.location.mapId] : null
+        return map ? tr(map.name) : ''
+      }
+
+      // La ficha se rearma solo si cambio algo de lo que muestra.
+      function refreshPlayHud(force = false) {
+        if (screen !== 'play' || !live) return
+        const st = live
+        const key = [
+          st.name,
+          st.level,
+          st.hp,
+          st.maxhp,
+          st.xp,
+          st.xpneed,
+          st.gold,
+          st.potions,
+          placeOf(st),
+          shownGear,
+          st.boss ? [st.boss.hp, st.boss.phase, st.boss.defeated].join() : '',
+          st.near ? st.near.kind + (st.near.name || '') : '',
+          st.field,
+          settings.lang,
+          gaitName()
+        ].join('|')
+        if (key === hudKey && !force) return
+        hudKey = key
+        const wornText = SLOTS.map((slot) => st.equipped[slot])
+          .filter(Boolean)
+          .map((entry) => `<b>${esc(itemName(entry))}</b>`)
+          .join(', ')
+        statsBox.innerHTML =
+          `<div class="who">${esc(st.name)} &middot; ${L('Lv', 'Nv')} ${st.level}</div>` +
+          `<div class="where">${esc(placeOf(st))}</div>` +
+          bar('hp', st.hp, st.maxhp, `${L('HP', 'Vida')} ${st.hp}/${st.maxhp}`) +
+          bar('xp', st.xp, st.xpneed, `${L('XP', 'Exp')} ${st.xp}/${st.xpneed || '-'}`) +
+          `<div class="purse">${L('Gold', 'Oro')} ${st.gold} &middot; ${L('Potions', 'Pociones')} ${st.potions}</div>` +
+          (wornText ? `<div class="worn">${wornText}</div>` : '')
+        const boss = st.boss
+        bossBox.hidden = !boss || boss.defeated
+        if (boss && !boss.defeated) {
+          bossBox.innerHTML =
+            `${L('The Runic Colossus', 'El Coloso runico')}` +
+            bar('', boss.hp, boss.maxhp, `${boss.hp}/${boss.maxhp}`)
+        }
+        const mode = gaitName()
+        const names = {
+          walk: L('Walking', 'Caminando'),
+          run: L('Running', 'Corriendo'),
+          sprint: L('Sprinting', 'Esprintando')
+        }
+        gaitBox.innerHTML = `<b>${names[mode]}</b> &middot; Shift: ${
+          settings.run ? L('sprint', 'esprintar') : L('run', 'correr')
+        }`
+        let hint = ''
+        if (st.near && st.near.kind === 'npc')
+          hint = L('E · talk to ', 'E · hablar con ') + tr(st.near.name)
+        else if (st.near && st.near.kind === 'ranking') hint = L('E · leaderboard', 'E · ranking')
+        else if (st.boss && !st.boss.defeated)
+          hint = L('F · strike the Colossus', 'F · golpear al Coloso')
+        hintBox.textContent = hint
+        drawLog()
+        const gaitButton = actions.querySelector('[data-act="gait"]')
+        if (gaitButton) {
+          gaitButton.textContent = settings.run ? L('Run', 'Corre') : L('Walk', 'Camina')
+          gaitButton.setAttribute('aria-pressed', String(settings.run))
+        }
+      }
+
+      // --- La pantalla de texto ---------------------------------------------
+
+      const FG = { 30: 'k', 31: 'r', 32: 'g', 33: 'y', 34: 'b', 35: 'm', 36: 'c', 37: 'w' }
+      // El juego pinta con SGR: colores 30-37, 90-97 y atributos. Nada mas.
+      function sgrToHtml(view) {
+        let html = ''
+        let state = { fg: null, bold: false, faint: false, reverse: false, underline: false }
+        const pattern = /\x1b\[([0-9;]*)m/g
+        let last = 0
+        const flush = (text) => {
+          if (!text) return
+          const kinds = []
+          if (state.fg) kinds.push('f' + state.fg)
+          if (state.bold) kinds.push('b')
+          if (state.faint) kinds.push('d')
+          if (state.reverse) kinds.push('v')
+          if (state.underline) kinds.push('u')
+          html += kinds.length ? `<span class="${kinds.join(' ')}">${esc(text)}</span>` : esc(text)
+        }
+        let match
+        while ((match = pattern.exec(view))) {
+          flush(view.slice(last, match.index))
+          last = pattern.lastIndex
+          const codes = match[1] === '' ? [0] : match[1].split(';').map(Number)
+          for (let i = 0; i < codes.length; i++) {
+            const c = codes[i]
+            if (c === 0)
+              state = { fg: null, bold: false, faint: false, reverse: false, underline: false }
+            else if (c === 1) state.bold = true
+            else if (c === 2) state.faint = true
+            else if (c === 22) state.bold = state.faint = false
+            else if (c === 4) state.underline = true
+            else if (c === 24) state.underline = false
+            else if (c === 7) state.reverse = true
+            else if (c === 27) state.reverse = false
+            else if (c === 39) state.fg = null
+            else if (FG[c]) state.fg = FG[c]
+            else if (c >= 90 && c <= 97) state.fg = 'h' + FG[c - 60]
+            else if (c === 38 && codes[i + 1] === 5) i += 2
+            else if (c === 38 && codes[i + 1] === 2) i += 4
+          }
+        }
+        // Lo que no es SGR (mover el cursor) no deberia llegar; si llega, afuera.
+        flush(view.slice(last).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
+        return html
+      }
+
+      function drawTerm() {
+        termDirty = false
+        if (session) term.innerHTML = sgrToHtml(session.frame())
+      }
+
+      function setTerm(on) {
+        if (on === termShown) return
+        termShown = on
+        term.hidden = !on
+        if (on) {
+          // Lo que estaba sostenido no sigue caminando detras de la pantalla.
+          mover.held.clear()
+          fitTerm()
+          termDirty = true
+        }
+      }
+
+      // La letra mas grande con la que entran 64 columnas y 18 filas (lo minimo
+      // que dibuja el juego bien), y el juego se acomoda a lo que entra.
+      let cell = null
+      function measureCell() {
+        const probe = document.createElement('span')
+        probe.style.cssText = 'position:absolute;visibility:hidden;font-size:100px;line-height:1.2'
+        probe.textContent = 'M'.repeat(20)
+        term.append(probe)
+        const box = probe.getBoundingClientRect()
+        probe.remove()
+        return box.width ? { w: box.width / 20 / 100, h: box.height / 100 } : null
+      }
+      function fitTerm() {
+        if (term.hidden || !session) return
+        if (!cell) cell = measureCell()
+        if (!cell) return
+        const width = term.clientWidth - 24
+        const height = term.clientHeight - 20
+        let px = 15
+        while (px > 8 && (width / (cell.w * px) < 64 || height / (cell.h * px) < 18)) px--
+        term.style.fontSize = px + 'px'
+        const cols = Math.max(64, Math.floor(width / (cell.w * px)))
+        const rows = Math.max(16, Math.floor(height / (cell.h * px)))
+        if (cols === termCols && rows === termRows) return
+        termCols = cols
+        termRows = rows
+        session.resize(cols, rows)
+      }
+      window.addEventListener('resize', () => fitTerm())
+
+      // --- Moverse ----------------------------------------------------------
+
+      // Cada paso es una tecla para el juego, al ritmo del paso elegido: una celda
+      // mide 0,5 m de ancho y 1 m de alto, asi que al correr van unas 14 columnas
+      // o 7 filas por segundo. En diagonal van dos columnas por fila, que en el
+      // mapa es en serio a 45 grados. Una tecla que no movio al heroe (una pared,
+      // un NPC) no se repite enseguida, para no llenar el registro.
+      const mover = {
+        held: new Set(),
+        fingers: new Map(),
+        wait: 0,
+        phase: 0,
+        last: null,
+        blocked: null,
+        until: 0
+      }
+      const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
+      const MOVES = {
+        ArrowUp: 'up',
+        w: 'up',
+        ArrowDown: 'down',
+        s: 'down',
+        ArrowLeft: 'left',
+        a: 'left',
+        ArrowRight: 'right',
+        d: 'right'
+      }
+      function heading(held, fingers) {
+        let dx = 0
+        let dy = 0
+        for (const dir of [...held, ...fingers.values()]) {
+          if (!DIRS[dir]) continue
+          dx += DIRS[dir][0]
+          dy += DIRS[dir][1]
+        }
+        return [Math.sign(dx), Math.sign(dy)]
+      }
+      const cellOf = (st) =>
+        st && st.location
+          ? st.location.x + ',' + st.location.y + ',' + (st.location.mapId || st.field)
+          : ''
+      function exploring(st) {
+        return !!st && !st.title && !st.naming && !st.overlay && !paused
+      }
+
+      function stepGame(dt, st) {
+        if (mover.last) {
+          if (cellOf(st) === mover.last.from) {
+            mover.blocked = mover.last.key
+            mover.until = performance.now() + 450
+          }
+          mover.last = null
+        }
+        if (!exploring(st) || (peek && !st.combat && st.world)) {
+          mover.wait = 0
+          return
+        }
+        const [dx, dy] = heading(mover.held, mover.fingers)
+        if (!dx && !dy) {
+          mover.wait = 0
+          mover.phase = 0
+          return
+        }
+        mover.wait -= dt
+        if (mover.wait > 0) return
+        if (mover.wait < -0.1) mover.wait = 0
+        const horizontal = dx < 0 ? 'left' : 'right'
+        const vertical = dy < 0 ? 'up' : 'down'
+        const now = performance.now()
+        const stuck = (key) => key === mover.blocked && now < mover.until
+        let key =
+          dx && dy ? (mover.phase++ % 3 === 2 ? vertical : horizontal) : dx ? horizontal : vertical
+        // En diagonal contra una pared, se desliza por el eje que queda libre.
+        if (stuck(key) && dx && dy) key = key === vertical ? horizontal : vertical
+        if (stuck(key)) {
+          mover.wait = 0.05
+          return
+        }
+        mover.last = { key, from: cellOf(st) }
+        session.press(key)
+        const meters = key === 'up' || key === 'down' ? CZ : CX
+        mover.wait += meters / pace().speed
+        // En combate cada paso contra el monstruo es un golpe: uno cada 0,3 s.
+        if (st.combat) mover.wait = Math.max(mover.wait, 0.3)
+      }
+
+      // --- Teclas ------------------------------------------------------------
+
+      function playKey(event, down) {
+        if (!session) return
+        if (event.key === 'Shift') {
+          shiftHeld = down
+          return
+        }
+        if (paused) {
+          if (down && event.key === 'Escape') closePause()
+          return
+        }
+        const st = live || session.state()
+        const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+        const dir = MOVES[key]
+        const roaming = exploring(st)
+        if (dir && roaming) {
+          event.preventDefault()
+          if (down) mover.held.add(dir)
+          else mover.held.delete(dir)
+          return
+        }
+        if (!down) return
+        if (dir) {
+          // En una pantalla del juego (tienda, inventario) las flechas mueven el
+          // cursor: una tecla por pulsacion, con la repeticion del teclado.
+          event.preventDefault()
+          if (st.naming && key.length === 1) session.press(event.key)
+          else session.press(key.length === 1 ? key : dir)
+          return
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          if (peek) peek = false
+          else if (roaming && !st.duel) openPause()
+          else session.press('escape')
+          return
+        }
+        if (event.key === 'Tab') {
+          event.preventDefault()
+          if (roaming && st.world) peek = !peek
+          else session.press('tab')
+          return
+        }
+        const named = { Enter: 'enter', ' ': 'space', Backspace: 'backspace', Delete: 'delete' }[
+          event.key
+        ]
+        if (named) {
+          event.preventDefault()
+          session.press(named)
+          return
+        }
+        if (event.key.length === 1) {
+          if (event.repeat && !st.naming && !st.overlay) return
+          event.preventDefault()
+          session.press(event.key)
+        }
+      }
+
+      // --- El menu de la partida ---------------------------------------------
+
+      const pauseSheet = pause.querySelector('.sheet')
+      function openPause() {
+        paused = true
+        mover.held.clear()
+        mover.fingers.clear()
+        pause.hidden = false
+        pauseMain()
+      }
+      function closePause() {
+        paused = false
+        pause.hidden = true
+      }
+      function pauseMain() {
+        const done = sheet(pauseSheet, L('Menu', 'Menu'), closePause)
+        pauseSheet.append(
+          button(L('Back to the game', 'Volver al juego'), L('Esc', 'Esc'), closePause)
+        )
+        pauseSheet.append(
+          button(
+            L('Combat strategy', 'Estrategia de combate'),
+            L(
+              'The script your hero follows in every fight',
+              'El guion que sigue tu heroe en cada pelea'
+            ),
+            strategyPage
+          )
+        )
+        pauseSheet.append(
+          button(L('Settings', 'Opciones'), null, () => settingsPage(pauseSheet, pauseMain))
+        )
+        pauseSheet.append(
+          button(L('Controls', 'Controles'), null, () => controlsPage(pauseSheet, pauseMain))
+        )
+        pauseSheet.append(
+          button(
+            L('Save and quit to title', 'Guardar y salir al titulo'),
+            L('The game saves on every step', 'El juego guarda en cada paso'),
+            quitToTitle
+          )
+        )
+        pauseSheet.querySelector('button').focus()
+        // Aca "volver" es seguir jugando: la hoja principal no lleva el boton.
+        void done
+      }
+
+      // La estrategia es script.txt, el mismo archivo que en la terminal: el juego
+      // la relee sola cuando cambia, aun en medio de una pelea.
+      function strategyPage() {
+        const done = sheet(pauseSheet, L('Combat strategy', 'Estrategia de combate'), pauseMain)
+        line(
+          pauseSheet,
+          L(
+            'Fights run on their own with this script. Lines with ? are conditions; the indented line under one is what to do.',
+            'Las peleas corren solas con este guion. Las lineas con ? son condiciones; la de abajo, con sangria, es lo que se hace.'
+          )
+        )
+        const area = document.createElement('textarea')
+        area.spellcheck = false
+        area.value = session.script.read()
+        pauseSheet.append(area)
+        const status = line(pauseSheet, '')
+        pauseSheet.append(
+          button(L('Save the strategy', 'Guardar la estrategia'), null, () => {
+            session.script.write(area.value)
+            status.className = ''
+            status.textContent = L(
+              'Saved. The game reloads it on the next tick.',
+              'Guardada. El juego la relee en el proximo tick.'
+            )
+            setTimeout(() => {
+              const errors = session ? session.script.errors() : []
+              if (!errors.length) return
+              status.className = 'error'
+              status.textContent = errors
+                .map((error) => `${L('line', 'linea')} ${error.line}: ${tr(error.message)}`)
+                .join(' · ')
+            }, 250)
+          })
+        )
+        done()
+        area.focus()
+      }
+
+      // --- Botones tactiles ---------------------------------------------------
+
+      let actionsReady = false
+      function setupActions() {
+        if (actionsReady) return
+        actionsReady = true
+        const list = [
+          ['e', 'E'],
+          ['i', 'I'],
+          ['f', 'F'],
+          ['escape', 'Esc'],
+          ['enter', 'OK'],
+          ['gait', ''],
+          ['t', 'T'],
+          ['peek', 'Txt'],
+          ['menu', '≡']
+        ]
+        for (const [act, text] of list) {
+          const b = document.createElement('button')
+          b.type = 'button'
+          b.dataset.act = act
+          b.textContent = text
+          b.addEventListener('click', () => {
+            b.blur()
+            if (!session) return
+            if (act === 'menu') return paused ? closePause() : openPause()
+            if (act === 'gait') {
+              settings.run = !settings.run
+              applySettings('run')
+              return
+            }
+            if (act === 'peek') {
+              peek = !peek
+              return
+            }
+            session.press(act)
+          })
+          actions.append(b)
+        }
+      }
+
+      // --- Recorrer: el mundo 3D sin reglas ----------------------------------
+
       // En las ruinas se arranca a 10 m del Coloso, para que se vea apenas se llega.
       // En la ciudad, en el pasto a la derecha de Elian (160,132): se ven los dos,
-      // los nombres no se pisan y ya aparece la ayuda para hablarle. Al norte lo
-      // tapaba el cartel del mercado. En el castillo, cerca del rey, para que su
-      // nombre no quede bajo los botones.
+      // los nombres no se pisan y ya aparece la ayuda para hablarle.
       const PLACES = [
         {
           map: 'city',
@@ -1540,18 +3127,7 @@
           ]
         }
       ]
-      const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
-      const MOVES = {
-        ArrowUp: 'up',
-        w: 'up',
-        ArrowDown: 'down',
-        s: 'down',
-        ArrowLeft: 'left',
-        a: 'left',
-        ArrowRight: 'right',
-        d: 'right'
-      }
-      // La mochila del sitio publicado; en la pagina local sale de la partida.
+      // La mochila del recorrido: lo que se puede probar puesto.
       const DEMO_BAG = [
         { id: 'iron_helmet', name: 'iron rune helmet (Tripo)', slot: 'head' },
         { id: 'sword', name: 'sword', slot: 'left_hand' },
@@ -1566,6 +3142,13 @@
         head: 'head',
         boots: 'boots'
       }
+      const GEAR_ES = {
+        left_hand: 'izq',
+        right_hand: 'der',
+        chest: 'pecho',
+        head: 'casco',
+        boots: 'botas'
+      }
       // held: flechas del teclado; fingers: la flecha bajo cada dedo en la cruceta.
       const demo = {
         map: undefined,
@@ -1576,22 +3159,24 @@
         fingers: new Map(),
         wait: 0,
         busy: false,
-        bag: []
+        bag: DEMO_BAG
       }
       const placeButtons = []
-      const pad = document.getElementById('pad')
-      const talkBox = document.getElementById('talk')
-      const bagBox = document.getElementById('bag')
-      const touchPad = matchMedia('(pointer: coarse)').matches
       window.runaDemo = () => ({
-        driver,
+        screen,
+        driver: { tour: 'demo', mirror: 'terminal', play: 'juego' }[screen] || screen,
         place: PLACES.findIndex((entry) => entry.map === demo.map),
         map: world ? world.map : null,
-        x: demo.x,
-        y: demo.y,
+        x: screen === 'play' && live && live.location ? live.location.x : demo.x,
+        y: screen === 'play' && live && live.location ? live.location.y : demo.y,
         helmet: worn.head || null,
         onAvatar: avatarHead.children.length,
-        avatar: avatar.visible
+        avatar: avatar.visible,
+        gait: gaitClip,
+        timeScale: gait ? Number(gait.timeScale.toFixed(2)) : 0,
+        velocity: Number(velocity.toFixed(2)),
+        term: termShown,
+        overlay: live ? live.overlay : null
       })
 
       function placeName(map) {
@@ -1648,11 +3233,11 @@
         const place = PLACES.find((entry) => entry.map === map) || PLACES[0]
         demo.map = map
         demo.held.clear()
-        placeButtons.forEach((button) =>
-          button.setAttribute('aria-pressed', String(button.dataset.map === String(map)))
+        placeButtons.forEach((b) =>
+          b.setAttribute('aria-pressed', String(b.dataset.map === String(map)))
         )
         // En la vitrina no se camina: la cruceta se esconde.
-        pad.hidden = driver === 'terminal' || !touchPad || !map
+        pad.hidden = !touchPad || !map
         talkBox.hidden = true
         if (!map) {
           demo.data = null
@@ -1665,38 +3250,31 @@
         try {
           data = await mapData(map)
         } catch (error) {
-          mode.textContent =
-            lang('could not load ', 'no pude cargar ') + pick(place.short) + ': ' + error.message
+          mode.textContent = L('could not load ', 'no pude cargar ') + pick(place.short)
+          console.warn(error)
           return
         }
-        if (demo.map !== map) return
+        if (demo.map !== map || screen !== 'tour') return
         const [x, y] = nearestWalkable(data, ...(at || place.at), true)
         Object.assign(demo, { data, x, y })
         await enterWorld({ map, x, y })
         hint()
       }
 
-      // Un paso de celda por vez, como en la terminal; si la diagonal choca, se
-      // desliza por el eje que queda libre. Como la terminal mueve un eje por vez,
-      // la diagonal solo pasa si una de las dos celdas de al lado esta libre: asi
-      // no se cuela entre dos paredes. Unos 5 m/s: la celda mide 0,5 x 1.
+      // Un paso de celda por vez, como en la terminal, al paso elegido; si la
+      // diagonal choca, se desliza por el eje que queda libre. Como la terminal
+      // mueve un eje por vez, la diagonal solo pasa si una de las dos celdas de al
+      // lado esta libre: asi no se cuela entre dos paredes.
       function stepDemo(dt) {
         if (demo.busy || !world || !demo.data || world.map !== demo.map) return
-        let dx = 0
-        let dy = 0
-        for (const dir of [...demo.held, ...demo.fingers.values()]) {
-          if (!DIRS[dir]) continue
-          dx += DIRS[dir][0]
-          dy += DIRS[dir][1]
-        }
-        dx = Math.sign(dx)
-        dy = Math.sign(dy)
+        const [dx, dy] = heading(demo.held, demo.fingers)
         if (!dx && !dy) {
           demo.wait = 0
           return
         }
         demo.wait -= dt
         if (demo.wait > 0) return
+        if (demo.wait < -0.1) demo.wait = 0
         const tries =
           dx && dy
             ? [
@@ -1712,7 +3290,7 @@
           demo.x += sx
           demo.y += sy
           heroTarget.copy(world.built.toWorld(demo.x, demo.y))
-          demo.wait = sy ? 1 / 5 : 1 / 10
+          demo.wait += Math.hypot(sx * CX, sy * CZ) / pace().speed
           arrive()
           return
         }
@@ -1720,17 +3298,17 @@
       }
 
       // Pisar un porton lleva al otro mapa; pisar una puerta avisa que adentro se
-      // juega en la terminal.
+      // juega con "Jugar".
       function arrive() {
         const tile = tileOf(demo.data, demo.x, demo.y)
         const enter = tile && tile.enter
         if (enter && enter.kind === 'travel') travel(enter)
         else if (enter) {
           say(
-            tile.name +
-              lang(
-                ': the inside is played in the terminal game',
-                ': adentro se juega en la terminal'
+            tr(tile.name) +
+              L(
+                ': the inside is played with Play in the menu',
+                ': adentro se juega con Jugar, en el menu'
               )
           )
         }
@@ -1742,9 +3320,9 @@
       async function travel(enter) {
         if (!PLACES.some((place) => place.map === enter.to)) {
           say(
-            lang(
-              'That road leaves the 3D maps: follow it in the terminal game.',
-              'Ese camino sale de los mapas 3D: seguilo en la terminal.'
+            L(
+              'That road leaves the 3D maps: follow it in a real game.',
+              'Ese camino sale de los mapas 3D: seguilo en una partida.'
             )
           )
           return
@@ -1765,7 +3343,7 @@
           }
           await goMap(enter.to, gate || undefined)
         } catch (error) {
-          say(lang('could not travel: ', 'no pude viajar: ') + error.message)
+          say(L('could not travel: ', 'no pude viajar: ') + error.message)
         } finally {
           demo.busy = false
         }
@@ -1787,29 +3365,29 @@
       }
 
       function hint() {
-        if (!demo.map || driver === 'terminal') return
+        if (!demo.map || screen !== 'tour') return
         const npc = nearbyNpc()
         mode.textContent =
-          placeName(demo.map) + (npc ? lang(' · E: talk to ', ' · E: hablar con ') + npc.name : '')
+          placeName(demo.map) + (npc ? L(' · E: talk to ', ' · E: hablar con ') + tr(npc.name) : '')
       }
 
       let talkTimer = 0
       function talk() {
         const npc = nearbyNpc()
         if (!npc) {
-          say(lang('Nobody close enough to talk to.', 'No hay nadie cerca para hablar.'))
+          say(L('Nobody close enough to talk to.', 'No hay nadie cerca para hablar.'))
           return
         }
         const speaker = document.createElement('strong')
-        speaker.textContent = npc.name + (npc.role ? ', ' + npc.role : '')
-        const line = document.createElement('p')
-        line.textContent = npc.line ? '"' + npc.line + '"' : '...'
-        talkBox.replaceChildren(speaker, line)
+        speaker.textContent = tr(npc.name) + (npc.role ? ', ' + tr(npc.role) : '')
+        const words = document.createElement('p')
+        words.textContent = npc.line ? '"' + tr(npc.line) + '"' : '...'
+        talkBox.replaceChildren(speaker, words)
         if (npc.action === 'shop' || npc.action === 'tavern') {
           const note = document.createElement('small')
-          note.textContent = lang(
-            'Trading happens in the terminal game.',
-            'Para comprar, entra desde la terminal.'
+          note.textContent = L(
+            'Trading happens in a real game: Play, in the menu.',
+            'Para comprar hace falta una partida: Jugar, en el menu.'
           )
           talkBox.append(note)
         }
@@ -1820,62 +3398,55 @@
         }, 8000)
       }
 
-      function showPlayGear() {
+      function showTourGear() {
         gear.replaceChildren()
         for (const slot of SLOTS) {
           const id = worn[slot]
           const item = id && demo.bag.find((entry) => entry.id === id)
           const dt = document.createElement('dt')
-          dt.textContent = spanish ? LABELS[slot] : GEAR_EN[slot]
+          dt.textContent = (settings.lang === 'es' ? GEAR_ES : GEAR_EN)[slot]
           const dd = document.createElement('dd')
           dd.textContent = id ? (item ? item.name : id) : '-'
           gear.append(dt, dd)
         }
       }
 
-      // Equipar desde la mochila cambia lo que se ve, no la partida guardada.
+      // Equipar desde la mochila del recorrido cambia lo que se ve, nada mas.
       function equip(item) {
         const off = worn[item.slot] === item.id
         worn[item.slot] = off ? null : item.id
         wear(item.slot, off ? null : item, !off)
-        if (off) say(lang('took off ', 'te sacaste ') + item.name)
-        showPlayGear()
+        if (off) say(L('took off ', 'te sacaste ') + item.name)
+        showTourGear()
       }
 
       function openBag(show = bagBox.hidden) {
         bagBox.hidden = !show
         if (!show) return
         const title = document.createElement('strong')
-        title.textContent = lang(
+        title.textContent = L(
           'Bag: click to equip or take off',
           'Mochila: clic para equipar o sacar'
         )
         bagBox.replaceChildren(title)
-        const list = demo.bag.filter((item) => item.slot)
-        if (!list.length) {
-          const empty = document.createElement('p')
-          empty.textContent = lang('Nothing to equip.', 'Nada para equipar.')
-          bagBox.append(empty)
-        }
-        for (const item of list) {
-          const button = document.createElement('button')
-          button.textContent = (worn[item.slot] === item.id ? '[x] ' : '[ ] ') + item.name
-          button.addEventListener('click', () => {
-            button.blur()
+        for (const item of demo.bag) {
+          const b = document.createElement('button')
+          b.textContent = (worn[item.slot] === item.id ? '[x] ' : '[ ] ') + item.name
+          b.addEventListener('click', () => {
+            b.blur()
             equip(item)
             openBag(true)
           })
-          bagBox.append(button)
-        }
-        if (spanish) {
-          const note = document.createElement('small')
-          note.textContent = 'Lo que equipas aca no cambia la partida guardada.'
-          bagBox.append(note)
+          bagBox.append(b)
         }
       }
 
-      function playKey(event, down) {
+      function tourKey(event, down) {
         const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+        if (key === 'Shift') {
+          shiftHeld = down
+          return
+        }
         const dir = MOVES[key]
         if (dir) {
           event.preventDefault()
@@ -1887,152 +3458,358 @@
         if (key >= '1' && key <= String(PLACES.length)) goMap(PLACES[Number(key) - 1].map)
         else if (key === 'e') talk()
         else if (key === 'i') openBag()
-        else if (key === 'h' && DEMO) equip(DEMO_BAG[0])
+        else if (key === 'h') equip(DEMO_BAG[0])
         else if (key === 'Escape') {
-          bagBox.hidden = true
-          talkBox.hidden = true
+          if (!bagBox.hidden || !talkBox.hidden) {
+            bagBox.hidden = true
+            talkBox.hidden = true
+          } else showMenu()
         }
       }
 
-      // Botones de lugar y de accion, y la cruceta tactil. Se arman una sola vez.
-      let playReady = false
-      function setupPlay() {
-        if (playReady) return
-        playReady = true
+      function tourTexts() {
+        document.querySelector('#hud h1').textContent = '[ RUNA x TRIPO ]'
+        who.textContent = L(
+          'The 3D world without rules. The hero, the helmet, the Colossus and the kingdom are Tripo models; Higgsfield rigged and animated the hero.',
+          'El mundo 3D sin reglas. El heroe, el yelmo, el Coloso y el reino son modelos de Tripo; Higgsfield le puso esqueleto y animo al heroe.'
+        )
+        keysLine.textContent = touchPad
+          ? L(
+              'Pad: run. Tap a place. E: talk. I: bag.',
+              'Cruceta: correr. Toca un lugar. E: hablar. I: mochila.'
+            )
+          : L(
+              'WASD: run (Shift sprints). E: talk. I: bag. H: Tripo helmet. 1-6: place. Esc: menu.',
+              'WASD: correr (Shift esprinta). E: hablar. I: mochila. H: yelmo de Tripo. 1-6: lugar. Esc: menu.'
+            )
+        placeButtons.forEach((b, i) => {
+          b.textContent = i + 1 + ' ' + pick(PLACES[i].short)
+        })
+        const extra = document.querySelectorAll('#places [data-extra]')
+        if (extra[0]) extra[0].textContent = L('E talk', 'E hablar')
+        if (extra[1]) extra[1].textContent = L('I bag', 'I mochila')
+        if (extra[2]) extra[2].textContent = L('Menu', 'Menu')
+        showTourGear()
+      }
+
+      // Botones de lugar y de accion. Se arman una sola vez.
+      let tourReady = false
+      function setupTour() {
+        if (tourReady) return
+        tourReady = true
         const nav = document.getElementById('places')
         // Despues de un clic el boton suelta el foco: si no, Espacio o Enter lo
         // vuelven a apretar.
-        const tap = (button, action) =>
-          button.addEventListener('click', () => {
-            button.blur()
+        const tap = (b, action) =>
+          b.addEventListener('click', () => {
+            b.blur()
             action()
           })
-        PLACES.forEach((place, i) => {
-          const button = document.createElement('button')
-          button.dataset.map = String(place.map)
-          button.textContent = i + 1 + ' ' + pick(place.short)
-          tap(button, () => goMap(place.map))
-          nav.append(button)
-          placeButtons.push(button)
+        PLACES.forEach((place) => {
+          const b = document.createElement('button')
+          b.dataset.map = String(place.map)
+          tap(b, () => goMap(place.map))
+          nav.append(b)
+          placeButtons.push(b)
         })
-        for (const [text, action] of [
-          [lang('E talk', 'E hablar'), talk],
-          [lang('I bag', 'I mochila'), () => openBag()]
-        ]) {
-          const button = document.createElement('button')
-          button.textContent = text
-          tap(button, action)
-          nav.append(button)
-        }
-        // La cruceta manda la flecha que el dedo tiene debajo, asi se puede
-        // deslizar de una a otra sin levantarlo.
-        const under = (event) => {
-          const target = document.elementFromPoint(event.clientX, event.clientY)
-          const button = target && target.closest('#pad button')
-          return button ? button.dataset.dir : null
-        }
-        pad.addEventListener('pointerdown', (event) => {
-          event.preventDefault()
-          demo.fingers.set(event.pointerId, under(event))
-        })
-        pad.addEventListener('pointermove', (event) => {
-          if (demo.fingers.has(event.pointerId)) demo.fingers.set(event.pointerId, under(event))
-        })
-        const lift = (event) => demo.fingers.delete(event.pointerId)
-        pad.addEventListener('pointerup', lift)
-        pad.addEventListener('pointercancel', lift)
-        pad.addEventListener('contextmenu', (event) => event.preventDefault())
-        window.addEventListener('keyup', (event) => {
-          if (driver !== 'terminal') playKey(event, false)
-        })
-        window.addEventListener('blur', () => {
-          demo.held.clear()
-          demo.fingers.clear()
-        })
-      }
-
-      function playUI(on) {
-        document.getElementById('places').hidden = !on
-        pad.hidden = !on || !touchPad || !demo.map
-        if (!on) {
-          bagBox.hidden = true
-          talkBox.hidden = true
+        for (const action of [talk, () => openBag(), showMenu]) {
+          const b = document.createElement('button')
+          b.dataset.extra = '1'
+          tap(b, action)
+          nav.append(b)
         }
       }
 
-      function startDemo() {
-        document.title = 'Runa x Tripo / 2.5D'
-        document.querySelector('h1').textContent = '[ RUNA x TRIPO ]'
-        who.textContent =
-          'Runa in 2.5D. The hero, the helmet, the Colossus and the kingdom are Tripo ' +
-          '3D models; Higgsfield rigged and animated the hero.'
-        keysLine.textContent = touchPad
-          ? 'Pad: walk. Tap a place. E: talk. I: bag.'
-          : 'WASD or arrows: walk. E: talk. I: bag. 1-6: change place. Gates lead to other maps.'
-        demo.bag = DEMO_BAG
-        setupPlay()
-        playUI(true)
-        document.getElementById('links').hidden = false
-        showPlayGear()
+      function startTour() {
+        leaveScreen()
+        screen = 'tour'
+        hud.hidden = false
+        setupTour()
+        document.getElementById('places').hidden = false
+        links.hidden = !DEMO
+        // El recorrido arranca con lo que llevaba la partida, o sin nada.
+        for (const slot of SLOTS) {
+          worn[slot] = null
+          wear(slot, null, false)
+        }
+        tourTexts()
         goMap('city')
       }
 
-      // Sin la terminal abierta, la pagina juega sola desde la partida guardada: el
-      // equipo, la mochila y el lugar donde quedo el heroe.
-      function startBrowser(state) {
-        driver = 'navegador'
-        setupPlay()
-        playUI(true)
-        demo.bag = state ? state.bag || [] : []
-        for (const slot of SLOTS) {
-          const entry = state && state.equipped[slot]
-          worn[slot] = entry ? entry.id : null
-          wear(slot, entry, false)
-        }
-        showPlayGear()
-        who.textContent = state
-          ? state.name +
-            ', nivel ' +
-            state.level +
-            '. Se juega en el navegador: la terminal no esta abierta.'
-          : 'Se juega en el navegador: no hay partida guardada y arrancas en la ciudad.'
-        keysLine.textContent = touchPad
-          ? 'Cruceta: caminar. Toca un lugar. E: hablar. I: mochila.'
-          : 'WASD o flechas: caminar. E: hablar. I: mochila. 1-6: otro lugar. Los portones llevan a otro mapa.'
-        const at = state && state.world
-        if (at && PLACES.some((place) => place.map === at.map)) goMap(at.map, [at.x, at.y])
-        else goMap('city')
+      // --- Seguir la terminal (solo en el visor local) ------------------------
+
+      let mirrorTimer = 0
+      let mirrorFirst = true
+      let mirrorGear = ''
+      function startMirror() {
+        leaveScreen()
+        screen = 'mirror'
+        hud.hidden = false
+        mirrorFirst = true
+        mirrorGear = ''
+        document.querySelector('#hud h1').textContent = '[ RUNA ]'
+        who.textContent = L(
+          'following the terminal game...',
+          'siguiendo al juego de la terminal...'
+        )
+        keysLine.textContent = L(
+          'WASD or arrows: walk. E: talk. I: inventory. The keys go to the terminal. Esc twice: menu.',
+          'WASD o flechas: caminar. E: hablar. I: inventario. Las teclas van a la terminal. Esc dos veces: menu.'
+        )
+        clearInterval(mirrorTimer)
+        mirrorTimer = setInterval(pollMirror, 200)
+        pollMirror()
       }
 
-      // La terminal se abrio: vuelve a mandar ella y la pagina la sigue.
-      function stopBrowser() {
-        driver = 'terminal'
-        playUI(false)
+      async function pollMirror() {
+        if (screen !== 'mirror') {
+          clearInterval(mirrorTimer)
+          return
+        }
+        let state
+        try {
+          state = await (await fetch('state.json', { cache: 'no-store' })).json()
+        } catch {
+          who.textContent = L('the viewer is not answering', 'el visor no responde')
+          return
+        }
+        if (screen !== 'mirror') return
+        if (!state.listening) {
+          terminalOpen = false
+          showMenu()
+          say(L('The terminal game closed.', 'El juego de la terminal se cerro.'))
+          return
+        }
+        if (state.empty) {
+          who.textContent = state.busy
+            ? L('reading the save...', 'leyendo la partida...')
+            : L(
+                'no saves yet: start a game in the terminal',
+                'no hay partidas: entra a una en la terminal'
+              )
+          return
+        }
+        who.textContent =
+          state.name + ', ' + L('level ', 'nivel ') + state.level + ', ' + (tr(state.place) || '')
+        const gearKey = JSON.stringify(state.equipped)
+        if (gearKey !== mirrorGear) {
+          mirrorGear = gearKey
+          gear.replaceChildren()
+          for (const slot of SLOTS) {
+            const dt = document.createElement('dt')
+            dt.textContent = (settings.lang === 'es' ? GEAR_ES : GEAR_EN)[slot]
+            const dd = document.createElement('dd')
+            dd.textContent = itemName(state.equipped[slot])
+            gear.append(dt, dd)
+          }
+        }
+        for (const slot of SLOTS) {
+          const id = state.equipped[slot] ? state.equipped[slot].id : null
+          if (worn[slot] === id && !mirrorFirst) continue
+          worn[slot] = id
+          wear(slot, state.equipped[slot], !mirrorFirst)
+        }
+        if (state.world) enterWorld(state.world)
+        else {
+          exitWorld()
+          setScene(state.scene)
+          mode.textContent =
+            L('showcase: ', 'vitrina: ') +
+            (tr(state.place) || L('this zone', 'esta zona')) +
+            L(' has no 3D map yet', ' todavia no tiene mapa 3D')
+        }
+        mirrorFirst = false
+      }
+
+      // Las teclas van a la terminal en fila, en el orden en que se apretaron.
+      const TERMINAL_KEYS = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+        Enter: 'enter',
+        Escape: 'escape',
+        Backspace: 'backspace',
+        Tab: 'tab',
+        ' ': 'space'
+      }
+      let keyChain = Promise.resolve()
+      let lastEscape = 0
+      function mirrorKey(event) {
+        const key = TERMINAL_KEYS[event.key] || (event.key.length === 1 ? event.key : null)
+        if (!key) return
+        event.preventDefault()
+        if (key === 'escape') {
+          // Dos Esc seguidos vuelven al menu; uno solo va al juego.
+          if (performance.now() - lastEscape < 400) {
+            showMenu()
+            return
+          }
+          lastEscape = performance.now()
+        }
+        if (key === 'q' || key === 'Q') {
+          keysLine.textContent = L(
+            'Q closes the game: quit from the terminal.',
+            'Q cierra el juego: para salir usa la terminal.'
+          )
+          return
+        }
+        keyChain = keyChain.then(async () => {
+          try {
+            const response = await fetch('key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Runa': '1' },
+              body: JSON.stringify({ key })
+            })
+            if (response.status === 409) {
+              keysLine.textContent = L(
+                'The game is not reading keys: start it with npm.cmd start -- --teclas',
+                'El juego no esta leyendo teclas: abrilo con npm.cmd start -- --teclas'
+              )
+            }
+          } catch {
+            keysLine.textContent = L('the viewer is not answering', 'el visor no responde')
+          }
+        })
+      }
+
+      // Si la terminal se abre o se cierra mientras se esta en el menu, el menu lo
+      // muestra; las partidas de la terminal se ofrecen para copiar.
+      async function checkTerminal() {
+        if (DEMO || screen === 'mirror') return
+        try {
+          const state = await (await fetch('state.json', { cache: 'no-store' })).json()
+          const open = !!state.listening
+          let saves = terminalSaves
+          try {
+            const response = await fetch('saves.json', { cache: 'no-store' })
+            if (response.ok) saves = await response.json()
+          } catch {
+            // Sin la lista, quedan las de antes.
+          }
+          const changed =
+            open !== terminalOpen || JSON.stringify(saves) !== JSON.stringify(terminalSaves)
+          terminalOpen = open
+          terminalSaves = saves
+          if (changed && screen === 'menu' && menuPage.hidden) mainMenu()
+        } catch {
+          // El visor no contesta: se vuelve a probar en un rato.
+        }
+      }
+
+      // --- Teclado, cruceta y arranque -----------------------------------------
+
+      function menuKey(event) {
+        const inPage = !menuPage.hidden
+        if (event.key === 'Escape' && inPage) {
+          event.preventDefault()
+          mainMenu()
+          return
+        }
+        if (event.target.closest && event.target.closest('input, textarea')) return
+        const list = [...(inPage ? menuPage : menuMain).querySelectorAll('button:not([disabled])')]
+        const at = list.indexOf(document.activeElement)
+        const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+        if (key === 'ArrowDown' || key === 's') {
+          event.preventDefault()
+          list[(at + 1) % list.length].focus()
+        } else if (key === 'ArrowUp' || key === 'w') {
+          event.preventDefault()
+          list[(at - 1 + list.length) % list.length].focus()
+        }
+      }
+
+      window.addEventListener('keydown', (event) => {
+        if (event.ctrlKey || event.metaKey || event.altKey) return
+        const typing = event.target.closest && event.target.closest('input, textarea')
+        if (screen === 'menu') return menuKey(event)
+        if (typing) {
+          if (event.key === 'Escape' && screen === 'play') closePause()
+          return
+        }
+        if (screen === 'play') playKey(event, true)
+        else if (screen === 'tour') tourKey(event, true)
+        else if (screen === 'mirror') mirrorKey(event)
+      })
+      window.addEventListener('keyup', (event) => {
+        if (screen === 'play') playKey(event, false)
+        else if (screen === 'tour') tourKey(event, false)
+      })
+      window.addEventListener('blur', () => {
         demo.held.clear()
         demo.fingers.clear()
-        demo.map = undefined
-        first = true
-        shownGear = ''
-        keysLine.textContent = 'WASD o flechas: caminar. E: hablar. I: inventario.'
-        if (world) {
-          mode.textContent =
-            'mapa 3D: ' + placeName(world.map) + '. Te moves desde la terminal del juego.'
+        mover.held.clear()
+        mover.fingers.clear()
+        shiftHeld = false
+      })
+      window.addEventListener('pagehide', () => {
+        try {
+          if (session) session.runa.saveCurrent()
+        } catch {
+          // Se guardo en el ultimo paso igual.
         }
+      })
+
+      // La cruceta manda la flecha que el dedo tiene debajo, asi se puede deslizar
+      // de una a otra sin levantarlo. En una pantalla del juego (una tienda) cada
+      // toque es una tecla, y sostenido se repite.
+      const under = (event) => {
+        const target = document.elementFromPoint(event.clientX, event.clientY)
+        const b = target && target.closest('#pad button')
+        return b ? b.dataset.dir : null
       }
+      let padRepeat = 0
+      const fingersNow = () => (screen === 'play' ? mover.fingers : demo.fingers)
+      pad.addEventListener('pointerdown', (event) => {
+        event.preventDefault()
+        const dir = under(event)
+        if (screen === 'play' && session && !exploring(live)) {
+          if (!dir) return
+          session.press(dir)
+          clearInterval(padRepeat)
+          padRepeat = setInterval(() => session && session.press(dir), 140)
+          return
+        }
+        fingersNow().set(event.pointerId, dir)
+      })
+      pad.addEventListener('pointermove', (event) => {
+        const fingers = fingersNow()
+        if (fingers.has(event.pointerId)) fingers.set(event.pointerId, under(event))
+      })
+      const lift = (event) => {
+        clearInterval(padRepeat)
+        fingersNow().delete(event.pointerId)
+      }
+      pad.addEventListener('pointerup', lift)
+      pad.addEventListener('pointercancel', lift)
+      pad.addEventListener('contextmenu', (event) => event.preventDefault())
+
+      window.runaPage = () => ({
+        screen,
+        juego: !!juego,
+        live,
+        term: termShown,
+        cols: termCols,
+        rows: termRows,
+        gait: gaitClip,
+        timeScale: gait ? gait.timeScale : 0,
+        speed: pace().speed,
+        map: world ? world.map : null
+      })
 
       // La lista de modelos se reintenta antes de arrancar: sin ella no aparece
-      // ningun modelo de Tripo. En el modo en vivo tambien se vuelve a pedir cada 5 s.
+      // ningun modelo de Tripo. El juego baja mientras tanto.
+      const gameReady = loadGame()
       for (let i = 0; !(await refreshModels()) && i < 4; i++) {
         await new Promise((resolve) => setTimeout(resolve, 600 * (i + 1)))
       }
-      if (DEMO) startDemo()
-      else {
-        await poll()
-        // El estado sale de la memoria del visor: consultarlo seguido es barato y
-        // deja que el heroe siga los pasos de la terminal.
-        setInterval(poll, 200)
-        setInterval(refreshModels, 5000)
-      }
+      document.documentElement.lang = settings.lang
+      if (!DEMO) await checkTerminal()
+      // Con la terminal abierta, la pagina la sigue como antes; si no, el menu.
+      if (terminalOpen) startMirror()
+      else showMenu()
+      await gameReady
+      if (!DEMO) setInterval(checkTerminal, 1500)
     </script>
   </body>
 </html>

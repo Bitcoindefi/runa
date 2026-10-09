@@ -2,8 +2,9 @@
 'use strict'
 
 // Visor local de los GLB de Tripo, al lado de la terminal del juego.
-// Sirve dos paginas: / con los GLB girando, y /heroe con el stickman 3D que lleva
-// el equipo de la ultima partida guardada. No toca la API ni ve la key.
+// Sirve dos paginas: / con los GLB girando, y /heroe con Runa en 2.5D: el juego
+// entero corre en la pagina (scripts/tripo-juego.js), y si la terminal esta
+// abierta con --teclas la pagina la sigue. No toca la API ni ve la key.
 //
 //   node scripts/tripo-viewer.js --fetch-lib   baja model-viewer y three.js una vez, con wifi
 //   node scripts/tripo-viewer.js               http://127.0.0.1:4173/ y /heroe
@@ -13,7 +14,8 @@ const fs = require('fs')
 const http = require('http')
 const os = require('os')
 const path = require('path')
-const { items } = require('../lib/content.js')
+const { WORLD_MAPS, describe } = require('./tripo-estado.js')
+const { buildGame, GAME_JS } = require('./build-juego.js')
 
 const root = path.resolve(__dirname, '..')
 const MODELS = path.join(root, 'assets/tripo')
@@ -72,14 +74,11 @@ const NPC_PREFIX = '/assets/npcs/'
 const NPC_PNG = /^[a-z]+\.png$/
 const skipped = new Set()
 
-const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
 // El juego reescribe la ranura en cada tecla (game.js saveCurrent), unas 15 veces
 // por segundo al caminar. Se lee cuando cambio y tras esta pausa, que junta las
 // rafagas. Medido en Windows: un escritor bare-fs (.tmp + renameSync cada 66 ms)
 // contra lecturas de Node cada 1 ms no fallo ningun rename en 127 guardados.
 const QUIET_MS = 40
-// Los mapas fijos del juego que el visor arma en 3D.
-const WORLD_MAPS = ['city', 'nox', 'castle', 'coliseum']
 
 async function fetchLibs() {
   for (const [name, [url, sha256]] of Object.entries(LIBS)) {
@@ -226,54 +225,68 @@ function sendKey(req, res, origins) {
   })
 }
 
-function item(id) {
-  if (typeof id !== 'string' || !id) return null
-  const known = items[id]
-  return known
-    ? { id, name: known.name, kind: known.kind, slot: known.slot || null }
-    : { id, name: id, kind: 'unknown', slot: null }
-}
-
-// Una escena por zona: el Coloso en sus ruinas, el reino en las ciudades y un
-// suelo segun el resto. Durante un duelo el juego guarda la ubicacion previa.
-function sceneOf(location) {
-  if (location.kind === 'boss') return 'ruinas'
-  if (location.kind === 'dungeon') return 'cripta'
-  if (location.kind === 'field' || location.kind === 'barbarian-camp') return 'pradera'
-  return 'reino'
-}
-
-// Donde esta el heroe en un mapa que el visor sabe armar en 3D.
-function worldOf(location) {
-  const at = { x: Math.floor(Number(location.x) || 0), y: Math.floor(Number(location.y) || 0) }
-  if (location.kind === 'boss') return { map: 'boss', ...at }
-  if (location.kind === 'map' && WORLD_MAPS.includes(location.mapId)) {
-    return { map: location.mapId, ...at }
+// Las partidas de la terminal, para copiarlas al juego de la pagina: el resumen
+// de cada ranura y el JSON tal cual. Solo se leen.
+function terminalSaves() {
+  const list = []
+  for (let slot = 1; slot <= 3; slot++) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(savesDir(), `slot-${slot}.json`), 'utf8'))
+      const summary = data.summary || {}
+      list.push({
+        slot,
+        name: String(data.name || 'viajero'),
+        level: Math.max(1, Math.floor(Number(summary.level) || 1)),
+        realm: String(summary.realm || data.realm || 'runa'),
+        place: String(summary.place || ''),
+        savedAt: data.savedAt || null
+      })
+    } catch {
+      // Ranura vacia o a medio escribir.
+    }
   }
-  return null
+  return list
 }
 
-function describe(slot, data) {
-  const player = data.player || {}
-  const worn = player.equipped || {}
-  const equipped = {}
-  for (const name of SLOTS) equipped[name] = item(worn[name])
-  const summary = data.summary || {}
-  const boss = data.worldBossState
-  return {
-    slot,
-    savedAt: data.savedAt || null,
-    name: String(data.name || 'viajero'),
-    level: Math.max(1, Math.floor(Number(summary.level) || 1)),
-    place: String(summary.place || ''),
-    scene: sceneOf(data.location || {}),
-    world: worldOf(data.location || {}),
-    boss: boss ? { hp: Number(boss.hp) || 0, defeated: !!boss.defeated } : null,
-    equipped,
-    // La mochila y el oro, para el inventario del modo navegador.
-    bag: (Array.isArray(player.items) ? player.items : []).map(item).filter(Boolean),
-    gold: Math.max(0, Math.floor(Number(player.gold) || 0))
+// El juego empaquetado para la pagina. Se rearma si cambio algo de lo que entra
+// (lib/ y los scripts del navegador): el visor sirve siempre el juego actual.
+const GAME_DIRS = [
+  path.join(root, 'lib'),
+  path.join(root, 'lib', 'locales'),
+  path.join(root, 'assets', 'ascii'),
+  path.join(__dirname, 'navegador')
+]
+const GAME_FILES = ['tripo-juego.js', 'tripo-estado.js', 'build-juego.js'].map((name) =>
+  path.join(__dirname, name)
+)
+let gameBuild = null
+let gameStamp = ''
+function gameSignature() {
+  const stamps = []
+  for (const dir of GAME_DIRS) {
+    for (const name of fs.readdirSync(dir)) {
+      const stat = fs.statSync(path.join(dir, name))
+      if (stat.isFile()) stamps.push(name + ':' + stat.mtimeMs)
+    }
   }
+  for (const file of GAME_FILES) stamps.push(fs.statSync(file).mtimeMs)
+  return stamps.join('|')
+}
+function gameBundle() {
+  let stamp = ''
+  try {
+    stamp = gameSignature()
+  } catch {
+    // Si no se puede firmar, se arma de nuevo.
+  }
+  if (!gameBuild || !stamp || stamp !== gameStamp) {
+    gameStamp = stamp
+    gameBuild = buildGame(GAME_JS).catch((error) => {
+      gameBuild = null
+      throw error
+    })
+  }
+  return gameBuild
 }
 
 // El mapa tal como lo dibuja la terminal, con la tabla TILES del juego. Se carga
@@ -431,6 +444,8 @@ function serve() {
     }
   }
   const hero = heroWatcher()
+  // El juego de la pagina se empaqueta al arrancar, asi el primer pedido no espera.
+  gameBundle().catch((error) => console.error(`No pude empaquetar el juego: ${error.message}`))
   // Solo estos Host: una pagina ajena con DNS rebinding no puede leer los GLB.
   const hosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`])
   const origins = new Set([...hosts].map((host) => `http://${host}`))
@@ -456,6 +471,22 @@ function serve() {
       if (urlPath === '/state.json') return json(res, { ...hero.state(), listening: listening() })
       if (urlPath === '/key' && req.method === 'POST') return sendKey(req, res, origins)
       if (urlPath === '/mundo.js') return send(res, WORLD_JS, 'text/javascript; charset=utf-8')
+      if (urlPath === '/juego.js') {
+        gameBundle().then(
+          () => send(res, GAME_JS, 'text/javascript; charset=utf-8'),
+          (error) => {
+            console.error(`No pude empaquetar el juego: ${error.message}`)
+            res.writeHead(503).end()
+          }
+        )
+        return
+      }
+      // Las partidas de la terminal, para seguirlas en la pagina (una copia).
+      if (urlPath === '/saves.json') return json(res, terminalSaves())
+      const saved = /^\/saves\/slot-([1-3])\.json$/.exec(urlPath)
+      if (saved) {
+        return send(res, path.join(savesDir(), `slot-${saved[1]}.json`), 'application/json')
+      }
       const world = /^\/world\/([a-z]+)\.json$/.exec(urlPath)
       if (world) {
         const data = worldMap(world[1])

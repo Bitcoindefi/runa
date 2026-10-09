@@ -21,3 +21,5 @@ vendor/model-viewer.min.js
 .playwright-cli/
 output/playwright/
 vendor/three/
+# El juego empaquetado para la pagina 2.5D: lo arma scripts/build-juego.js.
+vendor/runa-juego.js
