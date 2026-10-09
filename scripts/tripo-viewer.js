@@ -2,39 +2,89 @@
 'use strict'
 
 // Visor local de los GLB de Tripo, al lado de la terminal del juego.
-// Solo sirve cuatro cosas: el HTML, model-viewer, la lista de GLB y los GLB.
-// No toca la API ni ve la key.
+// Sirve dos paginas: / con los GLB girando, y /heroe con el stickman 3D que lleva
+// el equipo de la ultima partida guardada. No toca la API ni ve la key.
 //
-//   node scripts/tripo-viewer.js --fetch-lib   baja model-viewer una vez, con wifi
-//   node scripts/tripo-viewer.js               http://127.0.0.1:4173/
+//   node scripts/tripo-viewer.js --fetch-lib   baja model-viewer y three.js una vez, con wifi
+//   node scripts/tripo-viewer.js               http://127.0.0.1:4173/ y /heroe
 
 const crypto = require('crypto')
 const fs = require('fs')
 const http = require('http')
+const os = require('os')
 const path = require('path')
+const { items } = require('../lib/content.js')
 
 const root = path.resolve(__dirname, '..')
 const MODELS = path.join(root, 'assets/tripo')
-const HTML = path.join(__dirname, 'tripo-viewer.html')
-const LIB = path.join(root, 'vendor/model-viewer.min.js')
-const LIB_URL = 'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js'
-// sha256 de ese archivo: si el CDN devuelve otra cosa, no se guarda.
-const LIB_SHA256 = '283b0672384614b4847636c306fc93fe4b1fcadc76d668b4e47f0ca76bcf033b'
+const VENDOR = path.join(root, 'vendor')
+const PAGES = {
+  '/': path.join(__dirname, 'tripo-viewer.html'),
+  '/heroe': path.join(__dirname, 'tripo-heroe.html')
+}
+// Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
+// cosa, no se guarda. three.module.min.js importa ./three.core.js, por eso el
+// core minificado se guarda con ese nombre.
+const THREE = 'https://cdn.jsdelivr.net/npm/three@0.186.1/'
+const LIBS = {
+  'model-viewer.min.js': [
+    'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js',
+    '283b0672384614b4847636c306fc93fe4b1fcadc76d668b4e47f0ca76bcf033b'
+  ],
+  'three/three.module.min.js': [
+    THREE + 'build/three.module.min.js',
+    '3bc833fceb6577bd1a380388f832ae61cd6e2f78ad02b0bf0d5adf5a4a9334fe'
+  ],
+  'three/three.core.js': [
+    THREE + 'build/three.core.min.js',
+    '3b346151f65ffdfca3e4c002bd58966b78c423087fb48a873f83200de1bffc48'
+  ],
+  'three/addons/loaders/GLTFLoader.js': [
+    THREE + 'examples/jsm/loaders/GLTFLoader.js',
+    '131c0f78c01d19368ae495caa65b3adaa10487810a36a05bb5901b769a35ac16'
+  ],
+  'three/addons/utils/BufferGeometryUtils.js': [
+    THREE + 'examples/jsm/utils/BufferGeometryUtils.js',
+    '9fb63427ce6641fa14fd0baff9cc4d1b5f9c3d85fd084bf2e90e803c44ec1797'
+  ],
+  'three/addons/utils/SkeletonUtils.js': [
+    THREE + 'examples/jsm/utils/SkeletonUtils.js',
+    'b1632a703206c3d830de9fcbe515696770d04b71a15ee6b50afa6d2c3298c86f'
+  ],
+  'three/addons/controls/OrbitControls.js': [
+    THREE + 'examples/jsm/controls/OrbitControls.js',
+    '3d79d07ecb686b4e5d93232eedab255331c1beef711e13164eaa1f68655a5f2b'
+  ],
+  'three/addons/environments/RoomEnvironment.js': [
+    THREE + 'examples/jsm/environments/RoomEnvironment.js',
+    '55f466192cc84298755a424c5e040345006b2ee1455589b3b54126c2ea4123f4'
+  ]
+}
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4173
 const PREFIX = '/assets/tripo/'
 // El nombre tambien protege las rutas: solo se sirve lo que cumple esto.
 const GLB = /^[\w-]+\.glb$/
 const skipped = new Set()
 
-async function fetchLib() {
-  const response = await fetch(LIB_URL)
-  if (!response.ok) throw new Error(`model-viewer ${response.status}`)
-  const bytes = Buffer.from(await response.arrayBuffer())
-  const sha = crypto.createHash('sha256').update(bytes).digest('hex')
-  if (sha !== LIB_SHA256) throw new Error(`model-viewer no coincide: sha256 ${sha}`)
-  fs.mkdirSync(path.dirname(LIB), { recursive: true })
-  fs.writeFileSync(LIB, bytes)
-  console.log(LIB)
+const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
+// El juego reescribe la ranura en cada tecla (game.js saveCurrent). En Windows,
+// leerla justo cuando el juego la reemplaza puede hacer fallar ese guardado: el
+// juego lo avisa en el log y guarda en la tecla siguiente. Para que casi no pase,
+// se lee solo cuando cambio y despues de este rato sin cambios.
+const QUIET_MS = 250
+
+async function fetchLibs() {
+  for (const [name, [url, sha256]] of Object.entries(LIBS)) {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`${name}: ${response.status}`)
+    const bytes = Buffer.from(await response.arrayBuffer())
+    const sha = crypto.createHash('sha256').update(bytes).digest('hex')
+    if (sha !== sha256) throw new Error(`${name} no coincide: sha256 ${sha}`)
+    const dest = path.join(VENDOR, name)
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.writeFileSync(dest, bytes)
+    console.log(dest)
+  }
 }
 
 // Con mtime, para que el visor recargue un GLB regenerado con el mismo nombre.
@@ -63,6 +113,113 @@ function listModels() {
   return models.sort((a, b) => a.mtime - b.mtime)
 }
 
+// Donde guarda el juego: persistent() de bare-storage, "runa" y "saves"
+// (bin.mjs). RUNA_STORAGE equivale a --storage del juego. La ruta de macOS
+// sale de la documentacion de Apple, no de una prueba.
+function savesDir() {
+  if (process.env.RUNA_STORAGE) return path.join(process.env.RUNA_STORAGE, 'saves')
+  const home = os.homedir()
+  const base =
+    process.platform === 'win32'
+      ? process.env.APPDATA || path.join(home, 'Documents')
+      : process.platform === 'darwin'
+        ? path.join(home, 'Library', 'Application Support')
+        : process.env.XDG_DATA_HOME || path.join(home, '.local', 'share')
+  return path.join(base, 'runa', 'saves')
+}
+
+function item(id) {
+  if (typeof id !== 'string' || !id) return null
+  const known = items[id]
+  return known ? { id, name: known.name, kind: known.kind } : { id, name: id, kind: 'unknown' }
+}
+
+// Una escena por zona: el Coloso en sus ruinas, el reino en las ciudades y un
+// suelo segun el resto. Durante un duelo el juego guarda la ubicacion previa.
+function sceneOf(location) {
+  if (location.kind === 'boss') return 'ruinas'
+  if (location.kind === 'dungeon') return 'cripta'
+  if (location.kind === 'field' || location.kind === 'barbarian-camp') return 'pradera'
+  return 'reino'
+}
+
+function describe(slot, data) {
+  const player = data.player || {}
+  const worn = player.equipped || {}
+  const equipped = {}
+  for (const name of SLOTS) equipped[name] = item(worn[name])
+  const summary = data.summary || {}
+  const boss = data.worldBossState
+  return {
+    slot,
+    savedAt: data.savedAt || null,
+    name: String(data.name || 'viajero'),
+    level: Math.max(1, Math.floor(Number(summary.level) || 1)),
+    place: String(summary.place || ''),
+    scene: sceneOf(data.location || {}),
+    boss: boss ? { hp: Number(boss.hp) || 0, defeated: !!boss.defeated } : null,
+    equipped
+  }
+}
+
+function heroWatcher() {
+  const dir = savesDir()
+  let key = ''
+  let state = { empty: true, dir }
+  let timer = null
+
+  function newest() {
+    let found = null
+    for (let slot = 1; slot <= 3; slot++) {
+      const file = path.join(dir, `slot-${slot}.json`)
+      try {
+        const mtime = fs.statSync(file).mtimeMs
+        if (!found || mtime > found.mtime) found = { slot, file, mtime }
+      } catch {
+        // Ranura vacia.
+      }
+    }
+    return found
+  }
+
+  function refresh() {
+    timer = null
+    const found = newest()
+    if (!found) {
+      key = ''
+      state = { empty: true, dir }
+      return
+    }
+    const next = `${found.file}:${found.mtime}`
+    if (next === key) return
+    const age = Date.now() - found.mtime
+    if (age < QUIET_MS) {
+      later(QUIET_MS - age)
+      return
+    }
+    try {
+      state = describe(found.slot, JSON.parse(fs.readFileSync(found.file, 'utf8')))
+      key = next
+    } catch {
+      // Se estaba escribiendo o esta danada: se reintenta en el proximo aviso.
+      later(QUIET_MS)
+    }
+  }
+
+  function later(ms) {
+    if (!timer) timer = setTimeout(refresh, ms)
+  }
+
+  try {
+    fs.watch(dir, () => later(QUIET_MS)).on('error', () => {})
+  } catch {
+    // La carpeta todavia no existe: alcanza con la revision periodica.
+  }
+  setInterval(refresh, 1500).unref()
+  refresh()
+  return { dir, state: () => state }
+}
+
 function send(res, file, type) {
   fs.readFile(file, (error, data) => {
     if (error) {
@@ -78,14 +235,23 @@ function send(res, file, type) {
   })
 }
 
+function json(res, value) {
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+  res.end(JSON.stringify(value))
+}
+
 function serve() {
   if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
     console.error(`PORT invalido: "${process.env.PORT}". Usa un entero de 1 a 65535.`)
     process.exit(1)
   }
-  if (!fs.existsSync(LIB)) {
-    console.error('Falta vendor/model-viewer.min.js: corre una vez con --fetch-lib')
+  for (const name of Object.keys(LIBS)) {
+    if (!fs.existsSync(path.join(VENDOR, name))) {
+      console.error(`Falta vendor/${name}: corre una vez con --fetch-lib`)
+      break
+    }
   }
+  const hero = heroWatcher()
   // Solo estos Host: una pagina ajena con DNS rebinding no puede leer los GLB.
   const hosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`])
   http
@@ -101,14 +267,16 @@ function serve() {
         res.writeHead(400).end()
         return
       }
-      if (urlPath === '/') return send(res, HTML, 'text/html; charset=utf-8')
-      if (urlPath === '/model-viewer.min.js') {
-        return send(res, LIB, 'text/javascript; charset=utf-8')
+      if (Object.hasOwn(PAGES, urlPath)) {
+        return send(res, PAGES[urlPath], 'text/html; charset=utf-8')
       }
-      if (urlPath === '/models.json') {
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        res.end(JSON.stringify(listModels()))
-        return
+      if (urlPath === '/models.json') return json(res, listModels())
+      if (urlPath === '/state.json') return json(res, hero.state())
+      // La pagina de modelos pide model-viewer en la raiz; el resto va bajo /vendor/.
+      const lib = urlPath === '/model-viewer.min.js' ? 'model-viewer.min.js' : urlPath.slice(8)
+      const vendored = urlPath === '/model-viewer.min.js' || urlPath.startsWith('/vendor/')
+      if (vendored && Object.hasOwn(LIBS, lib)) {
+        return send(res, path.join(VENDOR, lib), 'text/javascript; charset=utf-8')
       }
       const name = urlPath.startsWith(PREFIX) ? urlPath.slice(PREFIX.length) : ''
       if (GLB.test(name)) return send(res, path.join(MODELS, name), 'model/gltf-binary')
@@ -123,12 +291,13 @@ function serve() {
       process.exit(1)
     })
     .listen(PORT, '127.0.0.1', () => {
-      console.log(`http://127.0.0.1:${PORT}/`)
+      console.log(`modelos: http://127.0.0.1:${PORT}/`)
+      console.log(`heroe:   http://127.0.0.1:${PORT}/heroe  (partidas en ${hero.dir})`)
     })
 }
 
 if (process.argv.includes('--fetch-lib')) {
-  fetchLib().catch((error) => {
+  fetchLibs().catch((error) => {
     console.error(error.message)
     process.exitCode = 1
   })
