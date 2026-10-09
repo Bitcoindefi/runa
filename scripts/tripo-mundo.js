@@ -2386,6 +2386,79 @@ function nameOf(rows, box) {
   return best.length >= 3 ? best : ''
 }
 
+// NPC pintados: un PNG por tipo en assets/npcs, recortado de una hoja hecha con
+// Higgsfield en el estilo del heroe de Tripo. Los tipos salen de NPC_SPRITES
+// (lib/map.js); uno sin dibujo usa la figura de la pagina.
+const NPC_ART = new Set([
+  'priest',
+  'resident',
+  'tavern',
+  'alchemist',
+  'smith',
+  'armorer',
+  'guard',
+  'king',
+  'villager'
+])
+// La figura mediana mide 256 px y 1,8 en el mundo. El cartel no se achica al
+// mirar desde arriba: asi se ve de la altura del heroe con la camara 2.5D.
+const NPC_PX = 1.8 / 256
+
+// Una textura y un material por tipo, compartidos por todos los mapas. Si el PNG
+// no llega, se olvida para volver a pedirlo en el proximo mapa.
+const npcLooks = new Map()
+function npcLook(kind) {
+  if (!npcLooks.has(kind)) {
+    const look = new THREE.TextureLoader()
+      .loadAsync('assets/npcs/' + kind + '.png')
+      .then((texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace
+        const material = new THREE.SpriteMaterial({ map: texture, alphaTest: 0.05 })
+        material.onBeforeCompile = npcShader
+        return material
+      })
+      .catch(() => {
+        npcLooks.delete(kind)
+        return null
+      })
+    npcLooks.set(kind, look)
+  }
+  return npcLooks.get(kind)
+}
+
+// Un cartel que mira a la camara queda entero a la profundidad de sus pies: desde
+// arriba se hundiria en la pared de atras y el heroe que pasa detras le taparia
+// la cabeza. Cada vertice se acerca a la camara por su propio rayo segun su
+// altura en el cartel, como una figura parada; en pantalla se ve igual.
+// Ademas la textura se lee medio nivel de mipmap mas nitida: de lejos el NPC
+// mide unos 60 px y el filtro lo borronea.
+function npcShader(shader) {
+  shader.vertexShader = shader.vertexShader.replace(
+    'gl_Position = projectionMatrix * mvPosition;',
+    'mvPosition.xyz *= 1.0 - alignedPosition.y * 0.9 / length( mvPosition.xyz );\n' +
+      'gl_Position = projectionMatrix * mvPosition;'
+  )
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <map_fragment>',
+    'diffuseColor *= texture2D( map, vMapUv, -0.5 );'
+  )
+}
+
+// La sombra blanda al pie de cada NPC, para que no flote.
+function blobTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const g = canvas.getContext('2d')
+  const shade = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  shade.addColorStop(0, 'rgba(0, 0, 0, 0.55)')
+  shade.addColorStop(0.6, 'rgba(0, 0, 0, 0.3)')
+  shade.addColorStop(1, 'rgba(0, 0, 0, 0)')
+  g.fillStyle = shade
+  g.fillRect(0, 0, 64, 64)
+  return new THREE.CanvasTexture(canvas)
+}
+
 /**
  * Arma el mapa. `data` es /world/<id>.json. `extras` trae lo que vive en la
  * pagina: figure(color) para los NPC y glb(file) para los modelos de Tripo.
@@ -2654,17 +2727,59 @@ export function buildWorld(data, extras = {}) {
     group.add(tag)
   }
 
-  // NPC: figuras del color que usa la terminal, con su nombre.
-  for (const npc of data.npcs || []) {
-    if (!extras.figure) break
-    const body = extras.figure(npc.color)
+  // NPC: el dibujo de su tipo, parado en su celda y mirando a la camara, con una
+  // sombra al pie y el nombre arriba. Sin dibujo, la figura de la pagina.
+  const npcs = data.npcs || []
+  const idlers = []
+  if (npcs.length) {
+    const blobs = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(1, 0.6).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false }),
+      npcs.length
+    )
+    const spot = new THREE.Matrix4()
+    npcs.forEach((npc, i) => {
+      const p = toWorld(npc.x, npc.y)
+      blobs.setMatrixAt(i, spot.makeTranslation(p.x, 0.02, p.z))
+    })
+    // Antes que los carteles, que la tapan donde se cruzan.
+    blobs.renderOrder = -1
+    group.add(blobs)
+  }
+  // 0,6 es lo que se ve de una altura con la camara 2.5D: asi el nombre queda
+  // justo sobre la cabeza de un cartel de alto h.
+  const over = (h) => (h + 0.4) / 0.6
+  for (const npc of npcs) {
     const p = toWorld(npc.x, npc.y)
-    body.position.copy(p)
-    body.rotation.y = hash(npc.x, npc.y) * Math.PI * 2
-    group.add(body)
     const tag = label(npc.name, '#d8d8d0')
-    tag.position.set(p.x, 2.6, p.z)
+    tag.position.set(p.x, over(NPC_PX * 256), p.z)
     group.add(tag)
+    const figure = () => {
+      if (!extras.figure) return group.remove(tag)
+      tag.position.y = 2.6
+      const body = extras.figure(npc.color)
+      body.position.copy(p)
+      body.rotation.y = hash(npc.x, npc.y) * Math.PI * 2
+      group.add(body)
+    }
+    if (!NPC_ART.has(npc.kind)) {
+      figure()
+      continue
+    }
+    npcLook(npc.kind).then((material) => {
+      if (!material) return figure()
+      // Dos NPC del mismo tipo no miden exactamente lo mismo.
+      const size = NPC_PX * (0.96 + hash(npc.y, npc.x) * 0.08)
+      const sprite = new THREE.Sprite(material)
+      sprite.center.set(0.5, 0)
+      sprite.position.copy(p)
+      sprite.scale.set(material.map.image.width * size, material.map.image.height * size, 1)
+      // Comparte textura y material con los demas NPC de su tipo.
+      sprite.userData.shared = true
+      group.add(sprite)
+      tag.position.y = over(sprite.scale.y)
+      idlers.push({ sprite, w: sprite.scale.x, h: sprite.scale.y, phase: hash(npc.x, npc.y) * 7 })
+    })
   }
 
   // Modelos de Tripo como hitos: la estatua de los heroes es el heroe de Tripo,
@@ -2724,6 +2839,13 @@ export function buildWorld(data, extras = {}) {
     toWorld,
     buildings: buildings.length,
     loading: Promise.all(loads),
+    // Los NPC respiran: se estiran apenas desde los pies, cada uno a su ritmo.
+    update(time) {
+      for (const n of idlers) {
+        const k = Math.sin(time * 2.2 + n.phase)
+        n.sprite.scale.set(n.w * (1 - k * 0.012), n.h * (1 + k * 0.025), 1)
+      }
+    },
     dispose() {
       const free = (node) => {
         if (node.userData.shared) return

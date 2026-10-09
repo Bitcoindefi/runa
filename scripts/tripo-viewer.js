@@ -67,6 +67,9 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4173
 const PREFIX = '/assets/tripo/'
 // El nombre tambien protege las rutas: solo se sirve lo que cumple esto.
 const GLB = /^[\w-]+\.glb$/
+// Los NPC pintados de la vista 2.5D: un PNG por tipo, con el mismo cuidado.
+const NPC_PREFIX = '/assets/npcs/'
+const NPC_PNG = /^[a-z]+\.png$/
 const skipped = new Set()
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
@@ -466,6 +469,8 @@ function serve() {
       }
       const name = urlPath.startsWith(PREFIX) ? urlPath.slice(PREFIX.length) : ''
       if (GLB.test(name)) return send(res, path.join(MODELS, name), 'model/gltf-binary')
+      const art = urlPath.startsWith(NPC_PREFIX) ? urlPath.slice(NPC_PREFIX.length) : ''
+      if (NPC_PNG.test(art)) return send(res, path.join(root, 'assets/npcs', art), 'image/png')
       res.writeHead(404).end()
     })
     .on('error', (error) => {
