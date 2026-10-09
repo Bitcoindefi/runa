@@ -499,11 +499,82 @@ function soilColor(hex, tint) {
   return [((hex >> 16) & 255) * tint[0], ((hex >> 8) & 255) * tint[1], (hex & 255) * tint[2]]
 }
 
+// Cuanto surco hay en el punto (px, pz) de una celda de camino de tierra que corre
+// derecho (ver roadLanes): dos huellas de rueda de medio metro a la trocha de un
+// carro (1,5 m) y entre ellas el lomo, que queda mas alto y claro (negativo). Un
+// camino de cinco metros o mas tiene dos manos, cada una con sus huellas; en un
+// sendero angosto hay una sola huella en el medio, mas suave, la de los pies.
+// De -0,4 a 1.
+function rutAt(job, cell, px, pz) {
+  const size = job.laneSize[cell]
+  let across = (job.laneAxis[cell] === 1 ? px : pz) - job.laneFrom[cell] - size / 2
+  if (size < 2.4) {
+    const off = Math.abs(across)
+    return off < 0.35 ? (1 - off / 0.35) * (1 - off / 0.35) * 0.6 : 0
+  }
+  if (size >= 5) across = Math.abs(across) - size / 4
+  const off = Math.abs(Math.abs(across) - 0.75)
+  if (off < 0.26) return (1 - off / 0.26) * (1 - off / 0.26)
+  return Math.abs(across) < 0.5 ? -0.4 * (1 - Math.abs(across) / 0.5) : 0
+}
+
+// Hacia donde corre cada celda de camino de tierra (`road`, 1 en las celdas de
+// camino): axis 1 de norte a sur, 2 de este a oeste, 0 en un cruce o una plaza.
+// from es donde empieza su ancho y size cuanto mide, en metros. Un tramo corre
+// hacia donde es bastante mas largo que ancho.
+function roadLanes(width, height, road) {
+  const cells = width * height
+  // Los extremos del tramo de camino de cada celda, en su fila y en su columna:
+  // `line(a, b)` es la celda b de la linea a.
+  const runs = (count, span, line) => {
+    const first = new Int16Array(cells)
+    const last = new Int16Array(cells)
+    for (let a = 0; a < count; a++) {
+      let b = 0
+      while (b < span) {
+        if (!road[line(a, b)]) {
+          b++
+          continue
+        }
+        let end = b
+        while (end + 1 < span && road[line(a, end + 1)]) end++
+        for (let k = b; k <= end; k++) {
+          first[line(a, k)] = b
+          last[line(a, k)] = end
+        }
+        b = end + 1
+      }
+    }
+    return [first, last]
+  }
+  const [x0, x1] = runs(height, width, (y, x) => y * width + x)
+  const [y0, y1] = runs(width, height, (x, y) => y * width + x)
+  const axis = new Uint8Array(cells)
+  const from = new Float32Array(cells)
+  const size = new Float32Array(cells)
+  for (let i = 0; i < cells; i++) {
+    if (!road[i]) continue
+    const wide = (x1[i] - x0[i] + 1) * CX
+    const deep = (y1[i] - y0[i] + 1) * CZ
+    if (deep >= 2.5 * wide) {
+      axis[i] = 1
+      from[i] = x0[i] * CX
+      size[i] = wide
+    } else if (wide >= 2.5 * deep) {
+      axis[i] = 2
+      from[i] = y0[i] * CZ
+      size[i] = deep
+    }
+  }
+  return { axis, from, size }
+}
+
 // Pinta una fila de texeles del suelo (ver soilTexture). Mezcla las cuatro
 // celdas que rodean cada texel: si son el mismo suelo no hay nada que mezclar;
 // si no, el borde se tuerce con ruido y se funde segun la familia. Despues van el
-// grano, las flores, la sombra al pie de lo alto y bajo las copas, y el resplandor
-// de la lava. Sin crear objetos: corre medio millon de veces por mapa.
+// grano, las flores, las huellas de los caminos, la sombra al pie de lo alto y
+// bajo las copas, y el resplandor de la lava. Sin crear objetos: corre medio
+// millon de veces por mapa.
 function soilRow(job, v) {
   const { width, height, tx, tw, th, soil, shade, heat, near, base, grain, pattern } = job
   const { family, warp, own, colA, colB, along, gridF, pixels } = job
@@ -531,12 +602,15 @@ function soilRow(job, v) {
     let b = 0
     let loose = 0
     let draw = 0
+    // Cuanto de este texel es camino de tierra.
+    let worn = 0
     if (s00 === s10 && s00 === s01 && s00 === s11) {
       r = base[s00 * 3]
       gr = base[s00 * 3 + 1]
       b = base[s00 * 3 + 2]
       loose = grain[s00]
       draw = pattern[s00]
+      worn = s00 === job.road ? 1 : 0
     } else {
       const k = g + own[u]
       const f = gridF[u]
@@ -559,6 +633,7 @@ function soilRow(job, v) {
         b += base[s * 3 + 2] * w
         loose += grain[s] * w
         draw += pattern[s] * w
+        if (s === job.road) worn += w
       }
     }
     const speck = (dice(u, v, 1) - 0.5) * loose
@@ -572,6 +647,15 @@ function soilRow(job, v) {
       r += (((hex >> 16) & 255) - r) * 0.35
       gr += (((hex >> 8) & 255) - gr) * 0.35
       b += ((hex & 255) - b) * 0.35
+    }
+    // Las huellas de los caminos: tierra apretada, mas oscura y sin grava suelta;
+    // el lomo entre ellas, mas claro y con grava.
+    if (worn && job.laneAxis[cell]) {
+      const rut = rutAt(job, cell, ((u + 0.5) * CX) / tx, pz) * worn
+      r *= 1 - 0.36 * rut
+      gr *= 1 - 0.4 * rut
+      b *= 1 - 0.46 * rut
+      draw *= 1 - 0.8 * Math.max(0, rut)
     }
     let lit = 1
     if (near[cell]) {
@@ -653,6 +737,8 @@ function soilTexture(data, kinds) {
   const soil = new Uint8Array(cells).fill(NONE)
   const shade = new Float32Array(cells)
   const heat = new Uint8Array(cells)
+  // Las celdas de camino de tierra, para sus huellas (roadLanes).
+  const road = new Uint8Array(cells)
   const round = []
   const paved = (x, y) => ((rows[y] || '')[x] === ';' ? 1 : 0)
   for (let y = 0; y < height; y++) {
@@ -676,6 +762,7 @@ function soilTexture(data, kinds) {
         key = 'stones'
       }
       if (key) soil[i] = index[key]
+      road[i] = key === '.' ? 1 : 0
       shade[i] = SHADE[kind] || 0
       heat[i] = kind === 'lava' ? 1 : 0
       if (ROUND[kind]) round.push([(x + 0.5) * CX, (y + 0.5) * CZ, ...ROUND[kind]])
@@ -727,6 +814,7 @@ function soilTexture(data, kinds) {
   const tx = soilDensity(width, height)
   const tw = width * tx
   const th = height * tx * 2
+  const lanes = roadLanes(width, height, road)
   const job = {
     width,
     height,
@@ -744,6 +832,11 @@ function soilTexture(data, kinds) {
     family,
     flowery: index['*'],
     blooms,
+    // Los caminos de tierra: su suelo y hacia donde corre cada celda.
+    road: index['.'],
+    laneAxis: lanes.axis,
+    laneFrom: lanes.from,
+    laneSize: lanes.size,
     // Ruido que tuerce los bordes entre suelos, en una grilla de media unidad
     // (una columna de ancho, media fila de alto). El de z se lee corrido.
     warp: noiseField(width + 40, height * 2 + 2, [[3, 1, 5]]),
@@ -1266,24 +1359,60 @@ function plantMeshes(geometry, material, items, { zone = 0, shadow = false } = {
   })
 }
 
+// Cuantos metros hay de cada esquina de celda hasta la orilla, sin pasar de
+// `reach`: 0 en las esquinas de la orilla. Una entrada por esquina, (width + 1)
+// por (height + 1). `wet(x, z)` dice si la celda es del liquido; la orilla son
+// las esquinas que tocan liquido y tierra a la vez.
+function shoreDistance(width, height, wet, reach) {
+  const cols = width + 1
+  const far = new Float32Array(cols * (height + 1)).fill(reach)
+  const rx = Math.ceil(reach / CX)
+  const rz = Math.ceil(reach / CZ)
+  for (let z = 0; z <= height; z++) {
+    for (let x = 0; x <= width; x++) {
+      const around = [wet(x - 1, z - 1), wet(x, z - 1), wet(x - 1, z), wet(x, z)]
+      if (!around.includes(true) || !around.includes(false)) continue
+      // Una esquina de la orilla acerca a la orilla a las que la rodean.
+      for (let dz = -rz; dz <= rz; dz++) {
+        for (let dx = -rx; dx <= rx; dx++) {
+          const [nx, nz] = [x + dx, z + dz]
+          if (nx < 0 || nz < 0 || nx > width || nz > height) continue
+          const o = nz * cols + nx
+          far[o] = Math.min(far[o], Math.hypot(dx * CX, dz * CZ))
+        }
+      }
+    }
+  }
+  return far
+}
+
 // Agua y lava: una superficie por liquido sobre los bloques chatos de la tercera
 // pasada, con un cuadro por celda. `shore` vale 1 en las esquinas que tocan
-// tierra: ahi el agua es baja y la lava se enfria. En el borde baja un faldon
-// corto que tapa el costado del bloque de abajo.
+// tierra: ahi el agua es baja y la lava se enfria. `depth` es la distancia de la
+// esquina a la orilla, en metros (hasta 3): la espuma y lo hondo la siguen. En el
+// borde baja un faldon corto que tapa el costado del bloque de abajo.
 function liquidMesh(data, kinds, kind, y, material) {
   const { width, height } = data
   const wet = (x, z) => x >= 0 && z >= 0 && x < width && z < height && kinds[z * width + x] === kind
   const dry = (x, z) => (wet(x - 1, z - 1) && wet(x, z - 1) && wet(x - 1, z) && wet(x, z) ? 0 : 1)
+  // Se calcula al llegar al primer cuadro de liquido: casi ningun mapa tiene.
+  let far = null
+  const away = (x, z) => {
+    far = far || shoreDistance(width, height, wet, 3)
+    return far[z * (width + 1) + x]
+  }
   const position = []
   const normal = []
   const shore = []
+  const depth = []
   // Un cuadro de cuatro esquinas (a b c d, en dos triangulos a b c y c b d) con su
-  // normal y la orilla de cada esquina.
-  const quad = (corners, n, s) => {
+  // normal, la orilla de cada esquina y su distancia a la orilla.
+  const quad = (corners, n, s, deep = [0, 0, 0, 0]) => {
     for (const k of [0, 1, 2, 2, 1, 3]) {
       position.push(corners[k * 3], corners[k * 3 + 1], corners[k * 3 + 2])
       normal.push(...n)
       shore.push(s[k])
+      depth.push(deep[k])
     }
   }
   // El faldon de un borde seco, de a hacia b mirando hacia afuera (n), apenas
@@ -1312,7 +1441,8 @@ function liquidMesh(data, kinds, kind, y, material) {
       if (!wet(x, z)) continue
       const [x0, x1, z0, z1] = [x * CX, (x + 1) * CX, z * CZ, (z + 1) * CZ]
       const s = [dry(x, z), dry(x, z + 1), dry(x + 1, z), dry(x + 1, z + 1)]
-      quad([x0, y, z0, x0, y, z1, x1, y, z0, x1, y, z1], [0, 1, 0], s)
+      const deep = [away(x, z), away(x, z + 1), away(x + 1, z), away(x + 1, z + 1)]
+      quad([x0, y, z0, x0, y, z1, x1, y, z0, x1, y, z1], [0, 1, 0], s, deep)
       if (!wet(x, z + 1)) wall(x0, z1, x1, z1, [0, 0, 1])
       if (!wet(x, z - 1)) wall(x1, z0, x0, z0, [0, 0, -1])
       if (!wet(x - 1, z)) wall(x0, z0, x0, z1, [-1, 0, 0])
@@ -1324,17 +1454,19 @@ function liquidMesh(data, kinds, kind, y, material) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3))
   geometry.setAttribute('shore', new THREE.Float32BufferAttribute(shore, 1))
+  geometry.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1))
   const mesh = new THREE.Mesh(geometry, material)
   mesh.receiveShadow = true
   return mesh
 }
 
 // Un liquido que se mueve: dos capas del grano grueso que corren en direcciones
-// distintas. `paint` es GLSL que usa wave (0..2) y shore (0..1) para cambiar
-// diffuseColor, dejar la luz propia en `liquidGlow`, la espuma en `foam` y la
-// pendiente de la superficie en `liquidSlope`, que tuerce la normal de arriba
-// (los costados no). `shine` corre despues de las luces, con la normal final:
-// reflejos y destellos. `sky` es el color del cielo que refleja.
+// distintas. `paint` es GLSL que usa wave (0..2), shore (0..1) y vDepth (metros
+// hasta la orilla) para cambiar diffuseColor, dejar la luz propia en
+// `liquidGlow`, la espuma en `foam` y la pendiente de la superficie en
+// `liquidSlope`, que tuerce la normal de arriba (los costados no). `shine` corre
+// despues de las luces, con la normal final: reflejos y destellos. `sky` es el
+// color del cielo que refleja.
 function liquidMaterial(clock, options, { paint, shine = '', sky = 0x9fb6cc }) {
   const material = new THREE.MeshStandardMaterial(options)
   material.onBeforeCompile = (shader) => {
@@ -1344,11 +1476,17 @@ function liquidMaterial(clock, options, { paint, shine = '', sky = 0x9fb6cc }) {
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nattribute float shore;\nvarying float vShore;\nvarying vec2 vLiquid;\nvarying float vTop;'
+        `#include <common>
+        attribute float shore;
+        attribute float depth;
+        varying float vShore;
+        varying float vDepth;
+        varying vec2 vLiquid;
+        varying float vTop;`
       )
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvShore = shore;\nvLiquid = position.xz;\nvTop = normal.y;'
+        '#include <begin_vertex>\nvShore = shore;\nvDepth = depth;\nvLiquid = position.xz;\nvTop = normal.y;'
       )
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -1358,6 +1496,7 @@ function liquidMaterial(clock, options, { paint, shine = '', sky = 0x9fb6cc }) {
         uniform sampler2D soilDetail;
         uniform vec3 liquidSky;
         varying float vShore;
+        varying float vDepth;
         varying vec2 vLiquid;
         varying float vTop;`
       )
@@ -1389,9 +1528,11 @@ function liquidMaterial(clock, options, { paint, shine = '', sky = 0x9fb6cc }) {
   return material
 }
 
-// Agua: honda y azul en el medio, turquesa en la orilla, con espuma que lame el
-// borde. Dos capas de olas cruzadas tuercen la normal: el sol deja destellos
-// chicos que corren y, de costado, el agua refleja el cielo (Fresnel).
+// Agua: turquesa donde se ve el fondo, junto a la orilla, y honda y azul a un
+// metro y medio; dos capas de olas cruzadas tuercen la normal. Contra la orilla
+// la espuma respira en una franja cortada por el grano, y cada tanto una ola
+// finita corre hacia la orilla y se deshace. El sol deja destellos chicos y, de
+// costado, el agua refleja el cielo (Fresnel).
 const WATER = {
   paint: `
     vec2 flowA = vLiquid * 0.46 + vec2( 0.05, 0.03 ) * clock;
@@ -1403,13 +1544,23 @@ const WATER = {
       texture2D( soilDetail, flowA + vec2( 0.0, rippleStep ) ).a - a0 );
     liquidSlope += vec2( texture2D( soilDetail, flowB + vec2( rippleStep, 0.0 ) ).a - b0,
       texture2D( soilDetail, flowB + vec2( 0.0, rippleStep ) ).a - b0 );
-    liquidSlope *= 1.1 * ( 1.0 - 0.5 * shore );
-    float deep = 1.0 - smoothstep( 0.0, 0.85, shore );
-    diffuseColor.rgb = mix( vec3( 0.08, 0.28, 0.31 ), vec3( 0.02, 0.1, 0.17 ), deep ) * ( 0.9 + 0.22 * ( a0 + b0 - 1.0 ) );
-    float lace = texture2D( soilDetail, vLiquid * 1.1 + vec2( 0.03, -0.05 ) * clock ).b;
-    float lap = 0.08 * sin( clock * 1.8 + vLiquid.x * 3.0 + vLiquid.y * 2.0 );
-    foam = smoothstep( 0.8, 1.0, shore - 0.1 + ( lace - 0.5 ) * 0.8 + lap ) * 0.6 * step( 0.5, vTop );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.74, 0.83, 0.85 ), foam );
+    float deep = smoothstep( 0.05, 1.5, vDepth );
+    liquidSlope *= 0.6 + 0.5 * deep;
+    vec3 shallow = vec3( 0.12, 0.34, 0.33 );
+    vec3 abyss = vec3( 0.02, 0.09, 0.16 );
+    diffuseColor.rgb = mix( shallow, abyss, deep ) * ( 0.9 + 0.22 * ( a0 + b0 - 1.0 ) );
+    float breakup = texture2D( soilDetail, vLiquid * 0.9 + vec2( 0.02, -0.03 ) * clock ).r;
+    float lace = texture2D( soilDetail, vLiquid * 2.3 - vec2( 0.03, 0.01 ) * clock ).b;
+    float breath = 0.12 + 0.05 * sin( clock * 1.3 + vLiquid.x * 1.9 + vLiquid.y * 1.2 );
+    float band = 1.0 - smoothstep( breath * 0.3, breath, vDepth + ( breakup - 0.5 ) * 0.1 );
+    float swell = fract( vDepth * 1.6 + clock * 0.3 + waveA * 0.4 );
+    float crest = ( 1.0 - smoothstep( 0.0, 0.06, abs( swell - 0.5 ) ) ) * ( 1.0 - smoothstep( 0.1, 0.6, vDepth ) );
+    float patches = smoothstep( 0.4, 0.62, breakup );
+    foam = max( band * patches * smoothstep( 0.3, 0.6, lace ), crest * smoothstep( 0.5, 0.7, breakup ) * 0.4 );
+    foam *= 0.45 * step( 0.5, vTop );
+    // Junto a la orilla el agua es baja y clara: se ve el fondo.
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.2, 0.4, 0.36 ), ( 1.0 - smoothstep( 0.0, 0.4, vDepth ) ) * 0.5 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.8, 0.88, 0.9 ), foam );
     // Los costados del agua son la orilla mojada, oscura.
     if ( vTop < 0.5 ) diffuseColor.rgb = vec3( 0.05, 0.08, 0.08 );
   `,
@@ -1418,7 +1569,8 @@ const WATER = {
     float facing = clamp( dot( normal, liquidView ), 0.0, 1.0 );
     float fresnel = 0.03 + 0.97 * pow( 1.0 - facing, 5.0 );
     float open = ( 1.0 - foam ) * step( 0.5, vTop );
-    totalEmissiveRadiance += liquidSky * fresnel * 0.6 * open;
+    // Lo hondo refleja un poco de cielo aun mirado desde arriba.
+    totalEmissiveRadiance += liquidSky * ( fresnel * 0.6 + 0.05 * deep ) * open;
     #if NUM_DIR_LIGHTS > 0
       vec3 sunHalf = normalize( directionalLights[ 0 ].direction + liquidView );
       float sparkle = pow( clamp( dot( normal, sunHalf ), 0.0, 1.0 ), 380.0 );

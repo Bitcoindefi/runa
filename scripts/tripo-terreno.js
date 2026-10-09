@@ -57,8 +57,9 @@ const REACH = 215
 // bajo los arboles, rock la roca de lo empinado, top la de las cumbres y
 // snowColor la nieve. pines y oaks son las copas y trunk los troncos; trees
 // cuanto bosque hay, oak cuantos son robles, cypress cambia los pinos cercanos
-// por cipreses y rocks cuantas piedras sueltas hay. glow enciende vetas en el
-// suelo: lava en las ruinas, hongos en NOX.
+// por cipreses y rocks cuantas piedras sueltas hay. glow enciende el suelo: vetas
+// de lava en las ruinas, musgo en NOX; fungi cuantas rondas de hongos que brillan
+// crecen junto al mapa.
 const LANDS = {
   city: {
     seed: 3,
@@ -116,7 +117,8 @@ const LANDS = {
     trees: 0.48,
     oak: 0.25,
     rocks: 0.16,
-    glow: 'fungi'
+    glow: 'fungi',
+    fungi: 0.3
   },
   coliseum: {
     seed: 5,
@@ -145,17 +147,17 @@ const LANDS = {
     far: [45, 130],
     span: 48,
     snow: 99,
-    meadow: [0x2a2422, 0x3a322e, 0x4d433b],
-    forest: 0x1e1816,
-    rock: 0x1f1a19,
-    top: 0x2b2421,
+    meadow: [0x3a332f, 0x4b423c, 0x5d5249],
+    forest: 0x2a2320,
+    rock: 0x1b1819,
+    top: 0x4f4741,
     snowColor: 0x8a8079,
     pines: [0x2a2420],
     oaks: [0x2a2420],
     trunk: 0x1e1816,
     trees: 0,
     oak: 0,
-    rocks: 0.5,
+    rocks: 0.6,
     glow: 'lava'
   }
 }
@@ -319,33 +321,44 @@ function perimeter(W, D, step, arc) {
   return out
 }
 
-// Arboles y piedras de afuera, armados una vez: cada parte con sus caras planas
-// (el look de pocos poligonos), y por vertice si es copa (1) o tronco (0) y
-// cuanto se oscurece abajo. Los de lejos tienen menos caras.
+// Arboles, piedras y hongos de afuera, armados una vez: cada parte con sus caras
+// planas (el look de pocos poligonos), y por vertice si es copa (1) o tronco (0),
+// cuanto se oscurece abajo y si brilla sola (shine, el sombrero de un hongo). Los
+// de lejos tienen menos caras.
 let shapes = null
 function landShapes() {
   if (shapes) return shapes
-  const part = (geometry, leaf, shade) => {
+  const part = (geometry, leaf, shade, shine = 0) => {
     const flat = geometry.index ? geometry.toNonIndexed() : geometry
     flat.computeVertexNormals()
     flat.computeBoundingBox()
     const { min, max } = flat.boundingBox
     const p = flat.attributes.position
     const n = flat.attributes.normal
-    const out = { position: [], normal: [], leaf: [], dark: [] }
+    const out = { position: [], normal: [], leaf: [], dark: [], shine: [] }
     for (let i = 0; i < p.count; i++) {
       out.position.push(p.getX(i), p.getY(i), p.getZ(i))
       out.normal.push(n.getX(i), n.getY(i), n.getZ(i))
       out.leaf.push(leaf)
       out.dark.push(1 - shade * (1 - (p.getY(i) - min.y) / (max.y - min.y || 1)))
+      out.shine.push(shine)
     }
     return out
   }
   const join = (parts) => {
-    const out = { position: [], normal: [], leaf: [], dark: [] }
+    const out = { position: [], normal: [], leaf: [], dark: [], shine: [] }
     for (const p of parts) for (const key in out) out[key].push(...p[key])
     return out
   }
+  // Un hongo: pie palido y sombrero chato que brilla. [radio, alto, x, z]
+  const mushroom = ([r, h, x, z]) => [
+    part(
+      new THREE.CylinderGeometry(r * 0.22, r * 0.3, h, 5, 1, true).translate(x, h / 2, z),
+      0,
+      0.3
+    ),
+    part(new THREE.ConeGeometry(r, r * 0.55, 7).translate(x, h + r * 0.2, z), 1, 0.15, 1)
+  ]
   const trunk = (r, h, sides = 3) =>
     part(new THREE.CylinderGeometry(r * 0.6, r, h, sides, 1, true).translate(0, h / 2, 0), 0, 0)
   const cone = (r, h, y, sides) =>
@@ -367,7 +380,17 @@ function landShapes() {
     cypress: join([trunk(0.12, 0.6), cone(0.52, 3.6, 0.35, 6)]),
     farPine: cone(0.95, 3.2, 0.2, 5),
     farOak: part(new THREE.OctahedronGeometry(1.3).scale(1, 0.9, 1).translate(0, 2, 0), 1, 0.4),
-    rock: part(stone, 0, 0.35)
+    rock: part(stone, 0, 0.35),
+    // Una ronda de hongos de NOX, grandes como para verse desde la camara alta.
+    fungi: join(
+      [
+        [0.42, 0.55, 0, 0],
+        [0.3, 0.4, 0.62, 0.25],
+        [0.24, 0.3, -0.45, 0.5],
+        [0.2, 0.26, 0.15, -0.6],
+        [0.16, 0.2, -0.55, -0.35]
+      ].flatMap(mushroom)
+    )
   }
   return shapes
 }
@@ -381,9 +404,9 @@ function landMaterial(world, land, roads, road) {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 })
   const patch = (world.mood && world.mood.patch) || [1.9, 1.45, 1.15]
   const clock = world.clock || { value: 0 }
-  const glow = new THREE.Color(
-    land.glow === 'lava' ? 0xff5a1a : (world.palette && world.palette.glow) || 0xb78cff
-  )
+  const palette = world.palette || {}
+  const glow = new THREE.Color(land.glow === 'lava' ? 0xff5a1a : palette.glow || 0xb78cff)
+  const vein = new THREE.Color(palette.vein || palette.glow || 0x5fe8c8)
   const lanes = roads.map((r) => new THREE.Vector4(r.ox, r.oz, r.dx, r.dz))
   const waves = roads.map((r) => new THREE.Vector4(r.amp, r.phase, r.half, r.length))
   while (lanes.length < 4) {
@@ -401,16 +424,17 @@ function landMaterial(world, land, roads, road) {
       landWaves: { value: waves },
       landRoadCount: { value: roads.length },
       landRoad: { value: road },
-      landGlow: { value: glow }
+      landGlow: { value: glow },
+      landVein: { value: vein }
     })
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nattribute vec2 land;\nvarying vec3 vLand;\nvarying float vLandEdge;'
+        '#include <common>\nattribute vec2 land;\nvarying vec3 vLand;\nvarying float vLandEdge;\nvarying float vLandShine;'
       )
       .replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvLand = position;\nvLandEdge = land.x;'
+        '#include <begin_vertex>\nvLand = position;\nvLandEdge = land.x;\nvLandShine = land.y;'
       )
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -423,9 +447,27 @@ function landMaterial(world, land, roads, road) {
         uniform int landRoadCount;
         uniform vec3 landRoad;
         uniform vec3 landGlow;
+        uniform vec3 landVein;
         uniform float clock;
         varying vec3 vLand;
         varying float vLandEdge;
+        varying float vLandShine;
+        // Ruido de valor calculado y no leido de una textura: sus curvas de nivel
+        // quedan netas a cualquier distancia (las de una textura de 8 bits se
+        // escalonan). De 0 a 1.
+        float landHash( vec2 p ) {
+          return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 );
+        }
+        float landNoise( vec2 p ) {
+          vec2 i = floor( p );
+          vec2 f = fract( p );
+          vec2 u = f * f * f * ( f * ( f * 6.0 - 15.0 ) + 10.0 );
+          float a = landHash( i );
+          float b = landHash( i + vec2( 1.0, 0.0 ) );
+          float c = landHash( i + vec2( 0.0, 1.0 ) );
+          float d = landHash( i + vec2( 1.0, 1.0 ) );
+          return mix( mix( a, b, u.x ), mix( c, d, u.x ), u.y );
+        }
         // Cuanto camino hay en p: el eje sale del porton y ondula como en la CPU.
         float landRoadAt( vec2 p, float grain ) {
           float road = 0.0;
@@ -461,25 +503,43 @@ function landMaterial(world, land, roads, road) {
         diffuseColor.rgb = mix( diffuseColor.rgb * ( 1.0 - 0.12 * road ), dirt, road * 0.92 );
         vec3 landShine = vec3( 0.0 );
         #ifdef LAND_LAVA
-          // Vetas de lava: donde el ruido grande cruza su mitad, solo lejos del mapa.
-          float vein = abs( texture2D( landDetail, landAt * 0.013 + vec2( 0.3, 0.8 ) ).a - 0.5 );
-          float lava = ( 1.0 - smoothstep( 0.008, 0.03, vein + ( fine.r - 0.5 ) * 0.02 ) ) * smoothstep( 25.0, 45.0, vLandEdge );
-          float pulse = 0.8 + 0.2 * sin( clock * 1.3 + landAt.x * 0.05 );
-          diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.05, 0.02, 0.01 ), lava );
-          landShine = landGlow * lava * 2.2 * pulse;
+          // Rios de lava: donde el ruido grande cruza su mitad, desde unos metros
+          // afuera de la muralla. El cauce brilla amarillo en el medio y rojo en el
+          // borde; a los costados la lava se enfrio en una costra negra con alguna
+          // grieta todavia al rojo. Coladas viejas oscurecen la ceniza en manchones.
+          vec2 flowAt = landAt * 0.021 + vec2( 3.7, 1.3 );
+          float course = landNoise( flowAt ) * 0.7 + landNoise( flowAt * 2.7 + 5.1 ) * 0.3;
+          float vein = abs( course - 0.5 ) + ( fine.r - 0.5 ) * 0.006;
+          float edge = fwidth( vein ) * 0.75;
+          float away = smoothstep( 6.0, 16.0, vLandEdge );
+          float lava = ( 1.0 - smoothstep( 0.016 - edge, 0.016 + edge, vein ) ) * away;
+          float core = 1.0 - smoothstep( 0.0, 0.01, vein );
+          float crust = ( 1.0 - smoothstep( 0.03, 0.05 + edge, vein ) ) * away;
+          float flowsOld = smoothstep( 0.55, 0.7, macro ) * smoothstep( 4.0, 12.0, vLandEdge );
+          diffuseColor.rgb *= 1.0 - 0.45 * flowsOld;
+          diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.035, 0.025, 0.022 ) * ( 0.7 + 0.6 * fine.g ), max( lava, crust ) );
+          float pulse = 0.82 + 0.18 * sin( clock * 1.3 + landAt.x * 0.05 + landAt.y * 0.03 );
+          vec3 molten = mix( vec3( 1.5, 0.3, 0.05 ), vec3( 2.6, 1.3, 0.3 ), core );
+          float cracks = crust * ( 1.0 - lava ) * ( 1.0 - smoothstep( 0.2, 0.32, fine.g ) );
+          landShine = ( molten * lava + vec3( 0.6, 0.1, 0.02 ) * cracks ) * pulse;
         #endif
         #ifdef LAND_FUNGI
-          // Hongos que brillan: manchas de la grava, grandes y suaves, solo en
-          // algunas colonias (de lejos un puntito fino seria ruido).
-          float colony = smoothstep( 0.76, 0.84, texture2D( landDetail, landAt * 0.045 + vec2( 0.7, 0.1 ) ).a );
-          float caps = texture2D( landDetail, landAt * 0.09 + vec2( 0.2, 0.4 ) ).b;
-          float dots = smoothstep( 0.7, 0.84, caps ) * colony * smoothstep( 4.0, 10.0, vLandEdge );
-          landShine = landGlow * dots * 0.35 * ( 0.9 + 0.2 * sin( clock * 0.9 + landAt.y * 0.2 ) );
+          // Musgo humedo en manchones grandes, apenas tenido de los colores de la
+          // luz de NOX. Lo que brilla son los hongos, caras de la malla (vLandShine):
+          // un musgo que brillara de lejos se ve como niebla.
+          float colony = smoothstep( 0.6, 0.82, texture2D( landDetail, landAt * 0.019 + vec2( 0.7, 0.1 ) ).a );
+          float moss = colony * smoothstep( 3.0, 9.0, vLandEdge );
+          vec3 mossTone = mix( landGlow, landVein, texture2D( landDetail, landAt * 0.007 + vec2( 0.4, 0.2 ) ).a );
+          diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * ( 0.62 + 0.5 * mossTone ), moss * 0.55 );
         #endif`
       )
       .replace(
         '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\ntotalEmissiveRadiance += landShine;'
+        `#include <emissivemap_fragment>
+        totalEmissiveRadiance += landShine;
+        #ifdef USE_COLOR
+          totalEmissiveRadiance += vColor.rgb * vLandShine * 1.6;
+        #endif`
       )
   }
   return material
@@ -589,13 +649,14 @@ function landColors(world, land, grid, texel, fbm, woods) {
   return color
 }
 
-// Copia una forma de landShapes en `out`, girada, escalada y con sus colores:
-// las caras de copa con `leaf`, las de tronco con `bark`. `r` es su distancia
-// al mapa, para el shader.
-function placeShape(out, shape, [x, y, z], yaw, size, tall, leaf, bark, r) {
+// Copia una forma de landShapes en `out` en [x, y, z], girada `yaw`, escalada
+// `size` (y `tall` mas en alto) y con sus colores: las caras de copa con `leaf`,
+// las de tronco con `bark`. `r` es su distancia al mapa y `glow` cuanto brilla
+// lo que brilla, para el shader.
+const paint = new THREE.Color()
+function placeShape(out, shape, [x, y, z], { yaw, size, tall = 1, leaf, bark, r, glow = 0 }) {
   const cs = Math.cos(yaw)
   const sn = Math.sin(yaw)
-  const paint = new THREE.Color()
   for (let j = 0; j < shape.leaf.length; j++) {
     const [lx, ly, lz] = shape.position.slice(j * 3, j * 3 + 3)
     const [ax, ay, az] = shape.normal.slice(j * 3, j * 3 + 3)
@@ -607,7 +668,7 @@ function placeShape(out, shape, [x, y, z], yaw, size, tall, leaf, bark, r) {
     out.normal.push(ax * cs + az * sn, ay, az * cs - ax * sn)
     paint.copy(shape.leaf[j] ? leaf : bark).multiplyScalar(shape.dark[j])
     out.color.push(paint.r, paint.g, paint.b)
-    out.land.push(r, 0)
+    out.land.push(r, shape.shine[j] * glow)
   }
 }
 
@@ -660,10 +721,12 @@ function landObjects(land, roads, grid, woods) {
         if (nearRoad(at[0], at[2])) continue
         const yaw = hash(seed, 3) * 6.28
         if (hash(seed, 5) * (trees + stones) < stones) {
+          // Piedras medio enterradas, mas chatas cuanto mas grandes.
           tint.copy(rock).lerp(top, hash(seed, 6))
           const size = (near ? 0.45 : 0.8) + hash(seed, 7) * (near ? 0.9 : 1.6)
-          at[1] -= size * 0.22
-          placeShape(out, kit.rock, at, yaw, size, 1, tint, tint, r)
+          at[1] -= size * 0.34
+          const tall = 1 - Math.min(0.35, size * 0.12)
+          placeShape(out, kit.rock, at, { yaw, size, tall, leaf: tint, bark: tint, r })
           continue
         }
         const oak = land.oak > hash(seed, 8)
@@ -676,11 +739,37 @@ function landObjects(land, roads, grid, woods) {
         const size =
           (near ? 1.6 : 2.1) * (0.85 + hash(seed, 4) * 0.5) * (1 + smooth(40, 160, r) * 0.6)
         at[1] -= 0.2
-        placeShape(out, shape, at, yaw, size, 1 + hash(seed, 11) * 0.25, leaf, bark, r)
+        const tall = 1 + hash(seed, 11) * 0.25
+        placeShape(out, shape, at, { yaw, size, tall, leaf, bark, r })
+      }
+      if (land.fungi && r < 46 && steep < 0.6) {
+        landFungi(out, land, [a, b, c, d], onQuad, { i, k, r, area, woods, nearRoad })
       }
     }
   }
   return out
+}
+
+// Las rondas de hongos que brillan junto al mapa (en NOX): mas en el bosque y
+// ninguna sobre un camino; cada una toma uno de los colores de la luz del mapa
+// (glows). `quad` son los cuatro vertices del cuadro de la malla y `onQuad` el
+// punto (u, v) sobre el.
+function landFungi(out, land, quad, onQuad, { i, k, r, area, woods, nearRoad }) {
+  const kit = landShapes()
+  const [mx, , mz] = onQuad(...quad, 0.5, 0.5)
+  const many = (land.fungi * (0.35 + woods(mx, mz)) * area) / 40 + hash(i * 3 - k, k * 7 + i)
+  const cap = new THREE.Color()
+  const stem = new THREE.Color(0x8a86a0)
+  for (let t = 0; t < Math.floor(many); t++) {
+    const seed = i * 53 + k * 641 + t * 3571
+    const at = onQuad(...quad, hash(seed, 1), hash(seed, 2))
+    if (nearRoad(at[0], at[2])) continue
+    cap.setHex(land.glows[Math.floor(hash(seed, 3) * land.glows.length)])
+    const size = 0.8 + hash(seed, 4) * 0.7
+    at[1] -= 0.05
+    const yaw = hash(seed, 5) * 6.28
+    placeShape(out, kit.fungi, at, { yaw, size, leaf: cap, bark: stem, r, glow: 0.9 })
+  }
 }
 
 // Une el suelo (con sus indices) y lo que tiene encima (caras sueltas) en una
@@ -859,28 +948,40 @@ function clumpGeometry() {
   return geometry
 }
 
-// El pasto: `count` matas repartidas en un cuadrado de `side` metros que se
-// repite como baldosa. El shader lleva cada mata a la copia de la baldosa que
-// cae alrededor de lo que mira la camara, asi el pasto no se mueve al caminar y
-// alcanzan unas miles de matas para todo el mapa. Cada mata mira la mascara: sin
-// pasto en su celda no crece. `outside` es el paisaje (ver grassMask).
+// Donde toca el suelo (y = 0) el rayo de la camara que pasa por la altura `ndcY`
+// de la pantalla (-1 abajo, 1 arriba), sin pasar de `reach` metros.
+const ray = new THREE.Vector3()
+function groundHit(camera, ndcY, reach, out) {
+  ray.set(0, ndcY, 0.5).unproject(camera).sub(camera.position).normalize()
+  const down = -ray.y
+  const t = down > 0.02 ? Math.min(reach, camera.position.y / down) : reach
+  return out.copy(camera.position).addScaledVector(ray, t)
+}
+
+// El pasto: `count` matas repartidas en un rectangulo que se repite como
+// baldosa. El shader lleva cada mata a la copia de la baldosa que cae sobre el
+// suelo que se ve, asi el pasto no se mueve al caminar y alcanzan unas miles de
+// matas para todo el mapa. La baldosa cubre `area` metros cuadrados y toma la
+// forma de la pantalla: ancha en una compu, larga en un telefono parado, que ve
+// mucho mas lejos que ancho. Cada mata mira la mascara: sin pasto en su celda no
+// crece. `outside` es el paisaje (ver grassMask).
 function grassField(world, spec, outside) {
   const crowded =
     (matchMedia && matchMedia('(pointer: coarse)').matches) ||
     Math.min(globalThis.innerWidth || 1280, globalThis.innerHeight || 720) < 600
   const count = crowded ? 5600 : 14400
-  const side = crowded ? 48 : 60
+  const area = crowded ? 2300 : 3600
   const geometry = clumpGeometry()
+  // Cada mata en el cuadrado unidad; el shader la estira a la baldosa.
   const spots = new Float32Array(count * 4)
   const n = Math.ceil(Math.sqrt(count))
-  const cell = side / n
   for (let k = 0; k < count; k++) {
     const i = k % n
     const j = Math.floor(k / n)
     spots.set(
       [
-        (i + hash(i, j * 3 + 1)) * cell,
-        (j + hash(j + 7, i)) * cell,
+        (i + hash(i, j * 3 + 1)) / n,
+        (j + hash(j + 7, i)) / n,
         hash(i * 5, j) * 6.283,
         hash(j * 3, i * 11)
       ],
@@ -897,7 +998,7 @@ function grassField(world, spec, outside) {
     grassMask: { value: mask.texture },
     grassSoil: { value: map },
     grassNoise: { value: world.detail },
-    grassField: { value: new THREE.Vector4(0, 0, side, 1) },
+    grassField: { value: new THREE.Vector4(0, 0, 60, 60) },
     grassArea: {
       value: new THREE.Vector4(mask.from[0], mask.from[1], 1 / mask.size[0], 1 / mask.size[1])
     },
@@ -911,7 +1012,9 @@ function grassField(world, spec, outside) {
     grassBlooms: { value: spec.blooms.map((hex) => new THREE.Color(hex)) },
     grassBloom: { value: new THREE.Vector2(...spec.bloom) }
   }
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.82, side: THREE.DoubleSide })
+  // Lambert: una hoja de pasto es mate y no necesita el sombreado fisico, y son
+  // decenas de miles de triangulos en pantalla.
+  const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide })
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms)
     shader.vertexShader = shader.vertexShader
@@ -940,8 +1043,8 @@ function grassField(world, spec, outside) {
       .replace(
         '#include <color_vertex>',
         `// La copia de la mata que cae cerca del centro del pasto.
-        float tile = grassField.z;
-        vec2 root = grassField.xy + mod( spot.xy - grassField.xy + 0.5 * tile, tile ) - 0.5 * tile;
+        vec2 tile = grassField.zw;
+        vec2 root = grassField.xy + mod( spot.xy * tile - grassField.xy + 0.5 * tile, tile ) - 0.5 * tile;
         // La mascara se lee un poco corrida en cada mata: el borde del pasto con
         // un camino queda desparejo, gastado, y no sigue la grilla de celdas.
         vec2 ragged = ( vec2( fract( spot.w * 91.7 ), fract( spot.w * 53.3 ) ) - 0.5 ) * vec2( 0.45, 0.7 );
@@ -950,7 +1053,11 @@ function grassField(world, spec, outside) {
         float inside = step( 0.0, inMap.x ) * step( inMap.x, 1.0 ) * step( 0.0, inMap.y ) * step( inMap.y, 1.0 );
         vec2 rim = abs( root - grassField.xy ) / ( 0.5 * tile );
         float size = smoothstep( spot.w, spot.w + 0.1, mask.r ) * ( 1.0 - smoothstep( 0.84, 1.0, max( rim.x, rim.y ) ) );
+        // Un prado no es parejo: hay manchones de pasto alto y claros mas ralos,
+        // de unos diez metros.
+        float meadow = texture2D( grassNoise, root * 0.012 + vec2( 0.31, 0.87 ) ).a;
         float tall = ( 0.5 + 0.75 * mask.g ) * ( 0.8 + 0.45 * fract( spot.w * 37.13 ) ) * size;
+        tall *= 0.62 + 0.76 * smoothstep( 0.2, 0.8, meadow );
         // El viento: rafagas que corren por el campo y una onda chica de cada mata.
         float gust = texture2D( grassNoise, root * 0.019 - clock * vec2( 0.034, 0.013 ) ).a;
         float sway = ( gust - 0.4 ) * 0.95 + sin( clock * 2.4 - root.x * 0.5 + root.y * 0.23 + spot.w * 6.0 ) * 0.14;
@@ -1016,23 +1123,32 @@ function grassField(world, spec, outside) {
   // Las matas se mueven en el shader: three.js no sabe donde quedan.
   mesh.frustumCulled = false
   mesh.receiveShadow = true
-  // Antes de dibujar: el centro del pasto es el punto del suelo que mira la
-  // camara, apenas corrido hacia adelante (de lejos se ve mas ancho); el heroe
-  // es su objetivo (a 1 m de alto).
+  // Antes de dibujar: la baldosa toma la forma de la pantalla, con el lado largo
+  // hacia donde mira la camara, y se centra en el suelo que se ve, entre el pie y
+  // el borde de arriba de la pantalla; si ese tramo no entra, cubre lo cercano.
+  // El heroe es el objetivo de la camara (a 1 m de alto).
   const look = new THREE.Vector3()
+  const near = new THREE.Vector3()
+  const far = new THREE.Vector3()
   mesh.onBeforeRender = (renderer, scene, camera) => {
     camera.getWorldDirection(look)
     const p = camera.position
-    const down = Math.max(0.12, -look.y)
-    const reach = Math.min(70, p.y / down)
-    const flat = Math.hypot(look.x, look.z) || 1
-    const ahead = side * 0.05
+    const ratio = clamp((camera.aspect || 1) * 0.85, 0.4, 1.6)
+    const wide = Math.sqrt(area * ratio)
+    const deep = Math.sqrt(area / ratio)
+    const alongZ = Math.abs(look.z) >= Math.abs(look.x)
+    const [sx, sz] = alongZ ? [wide, deep] : [deep, wide]
+    groundHit(camera, -1, 120, near)
+    groundHit(camera, 1, 120, far)
+    const span = Math.hypot(far.x - near.x, far.z - near.z) || 1
+    const reach = Math.min(span / 2, 0.4 * (alongZ ? sz : sx))
     uniforms.grassField.value.set(
-      p.x + look.x * reach + (look.x / flat) * ahead,
-      p.z + look.z * reach + (look.z / flat) * ahead,
-      side,
-      1
+      near.x + ((far.x - near.x) / span) * reach,
+      near.z + ((far.z - near.z) / span) * reach,
+      sx,
+      sz
     )
+    const down = Math.max(0.12, -look.y)
     const hero = Math.min(80, Math.max(0, p.y - 1) / down)
     uniforms.grassHero.value.set(p.x + look.x * hero, p.z + look.z * hero, 0)
   }
@@ -1042,7 +1158,10 @@ function grassField(world, spec, outside) {
 export function buildTerrain(world) {
   const { data, group } = world
   if (!data || !world.detail) return null
-  const land = LANDS[data.id] || (data.kind === 'boss' ? LANDS.boss : LANDS.city)
+  const palette = world.palette || {}
+  // Los hongos de afuera brillan con los colores de la luz del mapa.
+  const glows = [palette.glow || 0xb78cff, palette.vein || palette.glow || 0x5fe8c8]
+  const land = { ...(LANDS[data.id] || (data.kind === 'boss' ? LANDS.boss : LANDS.city)), glows }
   const roads = gateRoads(data, world.CX, world.CZ)
   const mesh = landscape(world, land, roads)
   group.add(mesh)
