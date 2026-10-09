@@ -122,14 +122,46 @@ if __name__ == '__main__':
     parser.add_argument('input')
     parser.add_argument('--output', required=True)
     parser.add_argument('--frames', type=int, default=24)
+    parser.add_argument('--sizes', default='64x22,40x10,28x5',
+                        help='Comma-separated character canvases, e.g. 43x13')
+    parser.add_argument('--hero', help='Compose a hero GLB in front of this landscape')
+    parser.add_argument('--colossus', help='Compose a colossus GLB opposite the hero')
     args = parser.parse_args()
     if not 2 <= args.frames <= 120:
         parser.error('--frames must be between 2 and 120')
+    try:
+        sizes = [tuple(map(int, size.split('x'))) for size in args.sizes.split(',')]
+        if any(len(size) != 2 or not 8 <= size[0] <= 160 or not 4 <= size[1] <= 60 for size in sizes):
+            raise ValueError('Invalid canvas size')
+    except ValueError:
+        parser.error('--sizes expects widths 8..160 and heights 4..60, e.g. 43x13')
     mesh = load_mesh(args.input)
+    if bool(args.hero) != bool(args.colossus):
+        parser.error('--hero and --colossus must be supplied together')
+    if args.hero:
+        # Reuse the actual generated meshes, positioning them on the landscape
+        # base. This is an offline tableau, not a skeletal combat animation.
+        mesh *= 10 / np.ptp(mesh[:, :, 0])
+        mesh[:, :, 2] -= 3
+        floor = mesh[:, :, 1].min() + 0.35
+        parts = [mesh]
+        for file, height, x, angle in [(args.hero, 1.8, -2, math.pi/4),
+                                       (args.colossus, 4.0, 2, -math.pi/4)]:
+            part = load_mesh(file)
+            part *= height / np.ptp(part[:, :, 1])
+            c, s = math.cos(angle), math.sin(angle)
+            part = part @ np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])
+            part[:, :, 0] += x
+            part[:, :, 1] += floor - part[:, :, 1].min()
+            part[:, :, 2] += 3
+            parts.append(part)
+        mesh = np.concatenate(parts)
+        mesh -= (mesh.min(axis=(0, 1)) + mesh.max(axis=(0, 1))) / 2
     result = {'source': Path(args.input).name, 'frameMs': 125,
-              'variants': [bake(mesh, 64, 22, args.frames), bake(mesh, 40, 10, args.frames),
-                           bake(mesh, 28, 5, args.frames)]}
+              'variants': [bake(mesh, width, height, args.frames) for width, height in sizes]}
+    if args.hero:
+        result['composedFrom'] = [Path(args.input).name, Path(args.hero).name, Path(args.colossus).name]
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=True, indent=2) + '\n')
-    print(f'{output}: {args.frames} angles, three sizes, {output.stat().st_size} bytes')
+    print(f'{output}: {args.frames} angles, {len(sizes)} sizes, {output.stat().st_size} bytes')

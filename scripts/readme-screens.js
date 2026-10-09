@@ -311,16 +311,22 @@ function frames() {
     inventario: { title: 'inventario y equipo', frame: inventory.view() },
     'tripo-coloso': { title: 'Tripo - coloso en el menu', frame: colossusFrame },
     'tripo-heroe': { title: 'Tripo - heroe en el menu', frame: tripoMenu.view() },
+    'tripo-paisaje': { title: 'Tripo - reino, heroe y Coloso', frame: colossusFrame },
+    'tripo-coloso-mapa': { title: 'Tripo - Coloso dentro del mapa', frame: worldBoss.view() },
     'tripo-personaje': { title: 'Tripo - creacion de personaje', frame: tripoName.view() },
     'tripo-yelmo-tienda': { title: 'Tripo - yelmo en la armeria', frame: tripoShop.view() },
     'tripo-yelmo-inventario': { title: 'Tripo - yelmo equipado', frame: tripoInventory.view() }
   }
 }
 
-const output = path.resolve(Bare.argv[2] || '.readme-screens')
-fs.mkdirSync(output, { recursive: true })
-for (const [name, screen] of Object.entries(frames())) {
-  const target = path.join(output, name + '.html')
-  fs.writeFileSync(target, page(screen.title, screen.frame))
-  console.log(target)
+module.exports = { ansiToHtml, page }
+
+if (require.main === module) {
+  const output = path.resolve(Bare.argv[2] || '.readme-screens')
+  fs.mkdirSync(output, { recursive: true })
+  for (const [name, screen] of Object.entries(frames())) {
+    const target = path.join(output, name + '.html')
+    fs.writeFileSync(target, page(screen.title, screen.frame))
+    console.log(target)
+  }
 }

@@ -1,8 +1,8 @@
 # Tripo en Runa, para el Demo Day
 
 > Actualizacion implementada: los modelos reales de heroe, yelmo y Coloso ya
-> fueron generados y convertidos a 24 cuadros ASCII. El menu alterna heroe y
-> Coloso; la creacion de personaje muestra al heroe y tienda/inventario muestran
+> fueron generados y convertidos a 24 cuadros ASCII. El menu muestra
+> el paisaje del reino compuesto con heroe y Coloso; la creacion muestra al heroe y tienda/inventario muestran
 > el yelmo. El juego carga esos cuadros de texto sin usar la API ni abrir GLB.
 > Ver [ascii-turntable.md](ascii-turntable.md) y el [README](../README.md).
 > El plan de demo con dos ventanas que sigue abajo fue la propuesta inicial;

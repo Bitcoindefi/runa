@@ -13,35 +13,47 @@ automático de estilo gráfico al subir de nivel.
 
 El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el arte dentro de una grilla ASCII estable. El personaje, los NPC y los monstruos se mueven sin borrar el terreno ni romper las líneas de la consola.
 
-![Menú principal de RUNA](docs/screens/menu.png)
+![Menú principal de RUNA](docs/screens/tripo-paisaje.png)
 
 ## Actualización para el hackathon de Tripo
 
+[Ver la demo grabada (MP4, 68 segundos)](docs/demo/runa-tripo-demo.mp4).
+Es un recorrido reproducible por el render real del juego, grabado en un
+navegador a partir de entradas y cuadros de Runa. Usa una partida de muestra
+en memoria, sin tocar guardados. [Cómo se grabó](docs/demo-walkthrough.md).
+
 RUNA incorpora modelos 3D generados con Tripo **dentro de la terminal**.
-Generamos un héroe medieval, un Coloso de piedra y un yelmo de hierro con
+Generamos un héroe medieval, un Coloso de piedra, un yelmo de hierro y un paisaje del reino con
 texto a 3D, descargamos los GLB y convertimos sus geometrías a cuadros ASCII.
 El juego reproduce esos cuadros: no necesita navegador, GPU, API key ni una
 conexión a Tripo para mostrarlos. Los cuadros ya están incluidos en el repo.
 
 ### Qué cambió y dónde verlo
 
-| Modelo generado con Tripo | Integración en RUNA                                                                     |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| Coloso de piedra          | Gira en el menú principal, dentro del marco RUNA LAUNCHER.                              |
-| Héroe con espada y escudo | Alterna con el Coloso en el menú y gira al crear un personaje.                          |
-| Yelmo de hierro           | Gira al seleccionarlo en la armería o en la mochila, cuando hay espacio en la terminal. |
+| Modelo generado con Tripo | Integración en RUNA                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Paisaje del reino         | Gira en el menú. Se combina con el héroe y el Coloso ya generados para componer el enfrentamiento fuera de las murallas. |
+| Coloso de piedra          | Aparece en su arena, reutilizando el modelo generado y conservando la lógica de combate.                                 |
+| Héroe con espada y escudo | Gira al crear un personaje y forma parte de la escena del menú.                                                          |
+| Yelmo de hierro           | Gira al seleccionarlo en la armería o en la mochila, cuando hay espacio en la terminal.                                  |
 
 Cada modelo tiene **24 vistas separadas por 15 grados**. Una vuelta tarda
-aproximadamente tres segundos; el menú alterna una vuelta del Coloso con una
-del héroe. Los cuadros existen en `64×22`, `40×10` y `28×5` caracteres y se
+aproximadamente tres segundos. Los cuadros del menú existen en `64×22`, `40×10` y `28×5` caracteres y se
 elige el mayor que cabe sin ocultar los controles. Maximizar la terminal
 permite ver más detalle.
 
-**Coloso y héroe en el menú.** Estas son dos fases de la misma animación:
+**El reino y el enfrentamiento en el menú.** El diorama del reino se completa
+offline con las geometrías originales del héroe y el Coloso. Tripo generó el
+castillo sin los combatientes del prompt; reutilizamos sus modelos para
+completar la escena. Es una composición de figuras enfrentadas, sin rig.
 
-![Coloso generado con Tripo en el menú de RUNA](docs/screens/tripo-coloso.png)
+![Paisaje del reino con héroe y Coloso en el menú de RUNA](docs/screens/tripo-paisaje.png)
 
-![Héroe generado con Tripo en el menú de RUNA](docs/screens/tripo-heroe.png)
+**Coloso dentro del mapa.** Su dibujo utiliza ahora el GLB real convertido a
+un lienzo `43×13`. La vida, los ataques, los avisos y las colisiones siguen
+controlados por el juego.
+
+![Coloso de Tripo dentro de las ruinas volcánicas](docs/screens/tripo-coloso-mapa.png)
 
 **Creación de personaje.** El héroe generado es una vista previa; el personaje
 que camina conserva el sprite compacto, su inicial y el equipo que posee.
@@ -61,7 +73,7 @@ el equilibrio del equipo.
 **Los modelos antes de convertirlos a texto.** El visor local es una herramienta
 opcional para inspeccionar los GLB originales; el juego funciona sin él.
 
-![GLB reales del yelmo, héroe y Coloso generados con Tripo](docs/screens/tripo-modelos.png)
+![GLB reales del yelmo, héroe, Coloso y paisaje generados con Tripo](docs/screens/tripo-modelos.png)
 
 ### Cómo lo hicimos
 
@@ -77,7 +89,7 @@ Prompt de texto
 1. [tripo-generate.js](scripts/tripo-generate.js) crea una tarea en la API v3,
    consulta su progreso y descarga el GLB cuando termina. Usamos
    `P1-20260311`, `face_limit: 3000`, `texture: true` y `pbr: true`. Cada uno
-   de estos tres pedidos reales consumió 40 créditos según la respuesta de
+   de estos cuatro pedidos reales consumió 40 créditos según la respuesta de
    la API. Un pedido interrumpido puede retomarse con `--task`, sin crear otro.
 2. [glb-to-ascii.py](scripts/glb-to-ascii.py) lee la escena GLB y aplica las
    transformaciones de los nodos. Rota la geometría, proyecta los triángulos
@@ -90,8 +102,7 @@ Prompt de texto
    [game.js](lib/game.js) avanza la animación cada 125 ms aproximadamente.
    **Durante el juego solo se carga texto; el procesamiento 3D ocurre antes.**
 
-Los modelos Tripo se usan en el menú, la creación y las vistas del yelmo.
-El sprite del Coloso durante el combate sigue siendo el arte ASCII existente.
+Los modelos Tripo se usan en el menú, la creación, las vistas del yelmo y el mapa del Coloso.
 No hicimos rig ni animación esquelética: el movimiento nuevo es una rotación
 de vistas precalculadas.
 
@@ -102,7 +113,7 @@ npm install
 npm start -- --solo
 ```
 
-Esperá en el menú para ver ambos modelos y elegí **Nueva partida** para ver
+Esperá en el menú para ver el paisaje y elegí **Nueva partida** para ver
 al héroe. Para inspeccionar el yelmo en detalle, seleccioná la pieza en la
 armería o, después de comprarla, en la mochila. No hace falta generar nada
 para probar las animaciones incluidas.
