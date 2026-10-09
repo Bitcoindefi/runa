@@ -2461,24 +2461,35 @@ function blobTexture() {
 
 /**
  * Arma el mapa. `data` es /world/<id>.json. `extras` trae lo que vive en la
- * pagina: figure(color) para los NPC y glb(file) para los modelos de Tripo.
+ * pagina: figure(color) para los NPC, glb(file) para los modelos de Tripo y
+ * text(nombre) para los carteles en el idioma elegido. Si `data.signs` trae las
+ * filas con los letreros traducidos (mapLabels de lib/locale.js, que no cambia
+ * su largo), las letras salen de ahi; que es cada celda sigue saliendo del mapa.
  */
 export function buildWorld(data, extras = {}) {
   const { width, height, rows, tiles } = data
   const palette = PALETTES[data.id] || PALETTES.city
   const group = new THREE.Group()
   const toWorld = (x, y) => new THREE.Vector3(x * CX + CX / 2, 0, y * CZ + CZ / 2)
+  const text = extras.text || ((name) => name)
+  const letters = data.signs || rows
 
   // Primera pasada: que es cada celda y donde van las puertas.
   const kinds = new Array(width * height).fill(null)
   const doors = []
   for (let y = 0; y < height; y++) {
     const row = rows[y] || ''
+    const sign = letters[y] || ''
     for (let x = 0; x < width; x++) {
       const ch = row[x] || ' '
       const tile = tiles[ch]
       const word = data.kind !== 'boss' && (ch === 'o' || ch === 't') && inWord(row, x)
-      const kind = word ? 'sign' : classify(ch, tile, data.kind)
+      let kind = word ? 'sign' : classify(ch, tile, data.kind)
+      // En un cartel traducido la letra nueva puede caer donde el original tenia
+      // un espacio entre palabras (un pilar): ahi tambien va un bloque de cartel.
+      // La celda no se pisa en ninguno de los dos casos.
+      const shown = sign[x] || ' '
+      if (shown !== ch && /[a-z]/.test(shown) && kind === 'body') kind = 'sign'
       kinds[y * width + x] = kind
       if (kind === 'door') doors.push({ x, y, ch, name: tile ? tile.name : ch })
     }
@@ -2571,7 +2582,7 @@ export function buildWorld(data, extras = {}) {
     const big = Math.min(rect.x1 - rect.x0, rect.z1 - rect.z0) >= 30
     const top = big ? fortress(site, rect, opts) : house(site, rect, opts)
     if (name) {
-      const tag = label(name)
+      const tag = label(text(name))
       tag.position.set((rect.x0 + rect.x1) / 2, top + 1.2, (rect.z0 + rect.z1) / 2)
       group.add(tag)
     }
@@ -2674,7 +2685,7 @@ export function buildWorld(data, extras = {}) {
         while (end < width && kinds[y * width + end] === kind && !inBuilding[y * width + end]) end++
       }
       if (!runs[kind]) runs[kind] = []
-      runs[kind].push([x, end - x, y, (rows[y] || '')[x] || ' '])
+      runs[kind].push([x, end - x, y, (letters[y] || '')[x] || ' '])
       x = end
     }
   }
@@ -2722,7 +2733,7 @@ export function buildWorld(data, extras = {}) {
     )
     beam.position.set(p.x, 1.7, p.z)
     group.add(beam)
-    const tag = label(door.name)
+    const tag = label(text(door.name))
     tag.position.set(p.x, 3.9, p.z)
     group.add(tag)
   }
@@ -2751,7 +2762,7 @@ export function buildWorld(data, extras = {}) {
   const over = (h) => (h + 0.4) / 0.6
   for (const npc of npcs) {
     const p = toWorld(npc.x, npc.y)
-    const tag = label(npc.name, '#d8d8d0')
+    const tag = label(text(npc.name), '#d8d8d0')
     tag.position.set(p.x, over(NPC_PX * 256), p.z)
     group.add(tag)
     const figure = () => {
@@ -2827,7 +2838,7 @@ export function buildWorld(data, extras = {}) {
     group.add(plinth)
     // La estatua mira al sur, hacia la plaza.
     place('heroe.glb', center.setY(0.8), 3.2, -Math.PI / 2)
-    const tag = label(mark.name)
+    const tag = label(text(mark.name))
     tag.position.set(center.x, 4.8, center.z)
     group.add(tag)
   }
