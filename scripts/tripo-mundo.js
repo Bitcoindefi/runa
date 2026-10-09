@@ -1021,11 +1021,14 @@ function soilMaterial(texture, data, w, d, { clock = { value: 0 }, glow = null }
           soil *= 0.82 + 0.36 * ( fine.r * 0.4 + broad * 0.6 );
           soil *= mix( 1.0, 0.4 + 0.9 * fine.g, cobble );
           #ifdef SOIL_SAND
-            // Arena rastrillada: surcos en circulos alrededor del centro de la arena.
+            // Arena rastrillada: surcos en circulos alrededor del centro de la arena,
+            // cada 60 cm. Cuando de lejos un surco ocupa menos de un par de pixeles
+            // se apagan, si no tiemblan.
             vec2 fromMiddle = soilAt - 0.5 * soilSize;
-            float ring = length( fromMiddle ) * 21.0 + broad * 7.0;
-            soil *= mix( 1.0, ( 0.9 + 0.2 * fine.r ) * ( 0.97 + 0.04 * sin( ring ) ), gravel );
-            soilSlope += normalize( fromMiddle + 0.001 ) * cos( ring ) * 0.07 * gravel;
+            float ring = length( fromMiddle ) * 10.5 + broad * 4.0;
+            float rakeFade = 1.0 - smoothstep( 0.6, 1.6, fwidth( ring ) );
+            soil *= mix( 1.0, ( 0.9 + 0.2 * fine.r ) * ( 1.0 + 0.07 * sin( ring ) * rakeFade ), gravel );
+            soilSlope += normalize( fromMiddle + 0.001 ) * cos( ring ) * 0.16 * gravel * rakeFade;
           #else
             soil *= mix( 1.0, 0.62 + 0.62 * fine.b, gravel );
           #endif
@@ -1678,12 +1681,14 @@ function natureMeshes(data, kinds, clock, fungi = []) {
         const bush = night ? 0x3b3f66 : 0x3f6e2e
         bushes.push([tx, cz + 0.22, spin + 2, 0.8 + r(x, y, 11) * 0.2, 1, bush, vary])
       } else if (kind === 'water') {
-        // Juncos en la orilla, dentro del agua y del lado de la tierra.
+        // Juncos en la orilla, dentro del agua y del lado de la tierra: pajizos de
+        // dia, verde agua en la noche de NOX.
         const side = land(x + 1, y) ? 1 : land(x - 1, y) ? -1 : 0
         const shore = side ? 0 : land(x, y + 1) ? 1 : land(x, y - 1) ? -1 : 0
         if ((side || shore) && r(x, y, 1) < 0.35) {
           const [rx, rz] = [cx + side * CX * 0.3, cz + shore * CZ * 0.3]
-          tufts.push([rx, rz, spin, 0.9 + r(x, y, 3) * 0.3, 1.8, 0xd8d08a, vary, 0.05])
+          const reed = night ? 0x86b2aa : 0xd8d08a
+          tufts.push([rx, rz, spin, 0.9 + r(x, y, 3) * 0.3, 1.8, reed, vary, 0.05])
         }
       } else if (kind) continue
       else if (boss) {

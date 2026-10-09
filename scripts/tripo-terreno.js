@@ -468,9 +468,10 @@ function landMaterial(world, land, roads, road) {
           float d = landHash( i + vec2( 1.0, 1.0 ) );
           return mix( mix( a, b, u.x ), mix( c, d, u.x ), u.y );
         }
-        // Cuanto camino hay en p: el eje sale del porton y ondula como en la CPU.
-        float landRoadAt( vec2 p, float grain ) {
-          float road = 0.0;
+        // Cuanto camino hay en p (x) y cuanto de sus huellas de carro (y), a 75 cm
+        // del eje como las del mapa: el eje sale del porton y ondula como en la CPU.
+        vec2 landRoadAt( vec2 p, float grain ) {
+          vec2 lane = vec2( 0.0 );
           for ( int i = 0; i < 4; i ++ ) {
             if ( i >= landRoadCount ) break;
             vec2 q = p - landRoads[ i ].xy;
@@ -480,9 +481,13 @@ function landMaterial(world, land, roads, road) {
             float side = dot( q, vec2( - d.y, d.x ) ) - w.x * sin( t * 0.05 + w.y ) * smoothstep( 0.0, 30.0, t );
             float wide = w.z * ( 1.0 + 0.25 * smoothstep( 20.0, 120.0, t ) ) + ( grain - 0.5 ) * 0.6;
             float on = 1.0 - smoothstep( wide - 0.35, wide + 0.35, abs( side ) );
-            road = max( road, on * step( 0.0, t ) * ( 1.0 - smoothstep( w.w * 0.7, w.w, t ) ) );
+            on *= step( 0.0, t ) * ( 1.0 - smoothstep( w.w * 0.7, w.w, t ) );
+            if ( on > lane.x ) {
+              float track = abs( abs( side ) - 0.75 );
+              lane = vec2( on, on * ( 1.0 - smoothstep( 0.0, 0.26, track ) ) );
+            }
           }
-          return road;
+          return lane;
         }`
       )
       .replace(
@@ -498,11 +503,20 @@ function landMaterial(world, land, roads, road) {
         diffuseColor.rgb *= mix( vec3( 1.0 ), tone, smoothstep( 0.34, 0.66, spots ) );
         diffuseColor.rgb *= 0.82 + 0.36 * ( fine.r * 0.4 + broad * 0.6 );
         diffuseColor.rgb *= mix( 1.0, 0.78 + 0.44 * macro, smoothstep( 3.0, 30.0, vLandEdge ) );
-        float road = landRoadAt( landAt, fine.r );
-        vec3 dirt = landRoad * ( 0.62 + 0.62 * fine.b ) * ( 0.9 + 0.2 * broad );
+        // El camino lleva el mismo grano y la misma grava que el del mapa, y sus
+        // huellas, asi del porton para afuera sigue igual.
+        vec2 lane = landRoadAt( landAt, fine.r );
+        float road = lane.x;
+        vec3 dirt = landRoad * mix( 1.0, 0.62 + 0.62 * fine.b, 0.45 ) * ( 0.82 + 0.36 * ( fine.r * 0.4 + broad * 0.6 ) );
+        dirt *= vec3( 1.0 - 0.36 * lane.y, 1.0 - 0.4 * lane.y, 1.0 - 0.46 * lane.y );
         diffuseColor.rgb = mix( diffuseColor.rgb * ( 1.0 - 0.12 * road ), dirt, road * 0.92 );
         vec3 landShine = vec3( 0.0 );
         #ifdef LAND_LAVA
+          // La ceniza se agrieta en placas como la de las ruinas, y de lejos las
+          // grietas se pierden.
+          float plates = texture2D( landDetail, landAt * 0.085 + vec2( 0.41, 0.17 ) ).g;
+          float ashCrack = ( 1.0 - smoothstep( 0.16, 0.36, plates ) ) * ( 1.0 - smoothstep( 35.0, 80.0, vLandEdge ) );
+          diffuseColor.rgb *= 1.0 - 0.55 * ashCrack;
           // Rios de lava: donde el ruido grande cruza su mitad, desde unos metros
           // afuera de la muralla. El cauce brilla amarillo en el medio y rojo en el
           // borde; a los costados la lava se enfrio en una costra negra con alguna
