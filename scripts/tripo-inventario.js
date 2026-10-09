@@ -394,6 +394,7 @@ const CSS = `
   pointer-events: auto;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   container-type: inline-size;
   overflow: hidden;
@@ -1017,6 +1018,15 @@ const CSS = `
     display: none;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .inv,
+  .inv-row,
+  .inv-slot,
+  .inv-bar i {
+    animation: none;
+    transition: none;
+  }
+}
 /* Celular y ventanas chicas: el panel ocupa la pantalla, sin transparencia, y
    tapa el aviso de la pagina (#toast): la linea de estado ya dice lo mismo. */
 @media (max-width: 899px), (max-height: 539px) {
@@ -1111,9 +1121,13 @@ function number(value, stat) {
   return stat.sign && n > 0 ? '+' + text : text
 }
 
+// Quien pidio menos movimiento en su sistema no ve saltos ni brillos.
+const calm = () =>
+  !!(globalThis.matchMedia && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches)
+
 // Un salto corto, como el pop de equipar del heroe 3D.
 function bounce(element) {
-  if (!element.animate) return
+  if (!element.animate || calm()) return
   element.animate(
     [
       { transform: 'scale(0.6)' },
@@ -1126,14 +1140,12 @@ function bounce(element) {
 
 // Un brillo que se apaga: algo recien llegado.
 function glow(element) {
-  if (!element.animate) return
-  element.animate(
-    [
-      { color: '#e0c060', textShadow: '0 0 10px rgba(224, 192, 96, 0.6)' },
-      { color: 'inherit', textShadow: '0 0 0 transparent' }
-    ],
-    { duration: 1400, easing: 'ease-out' }
-  )
+  if (!element.animate || calm()) return
+  // Un solo cuadro clave: termina en el color que el elemento ya tiene.
+  element.animate([{ color: '#e0c060', textShadow: '0 0 10px rgba(224, 192, 96, 0.6)' }], {
+    duration: 1400,
+    easing: 'ease-out'
+  })
 }
 
 // La pestana del inventario que se ve: el cofre solo existe en el hogar.
@@ -1149,6 +1161,64 @@ function priceOf(runa, id) {
   } catch {
     return 0
   }
+}
+
+// Todo lo que muestra el panel, leido del juego (lib/game.js) sin tocarlo: la
+// mochila y el cofre en su orden, el cursor, lo puesto, los totales de la
+// terminal, la ficha de la pagina (st) y la ultima linea del registro.
+function read(runa, st) {
+  const home = !!runa.inventoryHome
+  const tab = tabOf(runa)
+  const carried = runa.inventoryItems('carried')
+  const stored = home ? runa.inventoryItems('stored') : []
+  const list = tab === 'stored' ? stored : carried
+  const cursor = Math.max(
+    0,
+    Math.min(list.length - 1, Math.floor(Number(runa.inventoryCursor) || 0))
+  )
+  const equipped = runa.player.equipped || {}
+  const worn = {}
+  for (const slot of SLOTS) {
+    const id = equipped[slot]
+    worn[slot] = id
+      ? carried.find((item) => item.id === id) || { id, name: id, slot, kind: 'unknown' }
+      : null
+  }
+  const selected = list[cursor] || null
+  const totals = runa.duelStats()
+  const log = Array.isArray(runa.log) ? runa.log : []
+  return {
+    home,
+    tab,
+    carried,
+    stored,
+    list,
+    cursor,
+    selected,
+    price: selected ? priceOf(runa, selected.id) : 0,
+    worn,
+    wornIds: SLOTS.map((slot) => (worn[slot] ? worn[slot].id : '')),
+    totals: [Number(totals.atk) || 0, Number(totals.defense) || 0, Number(totals.reach) || 0],
+    name: String(st.name || ''),
+    level: st.level,
+    hp: st.hp,
+    maxhp: st.maxhp,
+    gold: st.gold,
+    potions: st.potions,
+    said: log.length ? String(log[log.length - 1]) : '',
+    saidCount: log.length
+  }
+}
+
+const wearing = (v, item) => !!item && v.wornIds.includes(item.id)
+
+// Lo elegido en el juego en este momento, de la misma forma que lo muestra el
+// panel: un doble clic no espera al cuadro siguiente.
+function choiceNow(runa) {
+  const tab = tabOf(runa)
+  const item = runa.inventoryItems(tab)[runa.inventoryCursor] || null
+  const worn = !!item && tab === 'carried' && runa.player.isEquipped(item.id)
+  return { tab, home: !!runa.inventoryHome, item, worn }
 }
 
 // La diferencia con lo que ya tiene puesto en esa ranura: verde si mejora.
@@ -1221,6 +1291,7 @@ export function createInventory(ctx) {
   // suyo, asi un clic no se pierde porque la fila se rearmo debajo del mouse.
   let drawn = {}
   let wornBefore = null
+  let totalsBefore = null
   // Lo ultimo que dijo el juego cuando se abrio el panel: lo que llegue despues
   // va abajo, en la linea de estado.
   let saidAt = null
@@ -1229,54 +1300,6 @@ export function createInventory(ctx) {
   let failure = null
   // El inventario ya se mostro en el panel desde que se abrio.
   let visited = false
-
-  // --- Lo que dice el juego ----------------------------------------------------
-
-  function read(runa, st) {
-    const home = !!runa.inventoryHome
-    const tab = tabOf(runa)
-    const carried = runa.inventoryItems('carried')
-    const stored = home ? runa.inventoryItems('stored') : []
-    const list = tab === 'stored' ? stored : carried
-    const cursor = Math.max(
-      0,
-      Math.min(list.length - 1, Math.floor(Number(runa.inventoryCursor) || 0))
-    )
-    const equipped = runa.player.equipped || {}
-    const worn = {}
-    for (const slot of SLOTS) {
-      const id = equipped[slot]
-      worn[slot] = id
-        ? carried.find((item) => item.id === id) || { id, name: id, slot, kind: 'unknown' }
-        : null
-    }
-    const selected = list[cursor] || null
-    const totals = runa.duelStats()
-    const log = Array.isArray(runa.log) ? runa.log : []
-    return {
-      home,
-      tab,
-      carried,
-      stored,
-      list,
-      cursor,
-      selected,
-      price: selected ? priceOf(runa, selected.id) : 0,
-      worn,
-      wornIds: SLOTS.map((slot) => (worn[slot] ? worn[slot].id : '')),
-      totals: [Number(totals.atk) || 0, Number(totals.defense) || 0, Number(totals.reach) || 0],
-      name: String(st.name || ''),
-      level: st.level,
-      hp: st.hp,
-      maxhp: st.maxhp,
-      gold: st.gold,
-      potions: st.potions,
-      said: log.length ? String(log[log.length - 1]) : '',
-      saidCount: log.length
-    }
-  }
-
-  const wearing = (v, item) => !!item && v.wornIds.includes(item.id)
 
   // --- Dibujo ------------------------------------------------------------------
 
@@ -1326,6 +1349,13 @@ export function createInventory(ctx) {
       `<span class="inv-coin" title="${esc(L('Gold', 'Oro'))}">${icon('coin')}<b>${esc(v.gold)}</b></span>` +
       `<span class="inv-potion" title="${esc(L('Potions', 'Pociones'))}">${icon('potion')}` +
       `<b>${esc(v.potions)}</b></span></div>`
+    // El total que cambio al equipar o quitar brilla un momento.
+    if (totalsBefore) {
+      ui.sheet.querySelectorAll('.inv-total b').forEach((b, index) => {
+        if (v.totals[index] !== totalsBefore[index]) glow(b)
+      })
+    }
+    totalsBefore = v.totals.slice()
   }
 
   function paintTabs(v) {
@@ -1457,23 +1487,30 @@ export function createInventory(ctx) {
   // Los botones del objeto elegido, con la tecla que mandan (lib/game.js
   // inventoryKey): fuera del hogar Enter equipa y X quita; en el hogar Enter
   // pasa al cofre o a la mochila y X equipa o quita.
-  function actionsFor(v) {
-    const item = v.selected
+  function actionsFor({ tab, home, item, worn }) {
     if (!item) return []
-    if (v.tab === 'stored') {
+    if (tab === 'stored') {
       return [{ key: 'enter', text: L('Take to backpack', 'Pasar a la mochila'), main: true }]
     }
     const list = []
-    if (wearing(v, item)) list.push({ key: 'x', text: L('Unequip', 'Quitar'), main: true })
-    else list.push({ key: v.home ? 'x' : 'enter', text: L('Equip', 'Equipar'), main: true })
-    if (v.home) list.push({ key: 'enter', text: L('Store in chest', 'Guardar en el cofre') })
+    if (worn) list.push({ key: 'x', text: L('Unequip', 'Quitar'), main: true })
+    else list.push({ key: home ? 'x' : 'enter', text: L('Equip', 'Equipar'), main: true })
+    if (home) list.push({ key: 'enter', text: L('Store in chest', 'Guardar en el cofre') })
     return list
   }
+
+  // Lo elegido segun lo que muestra el panel (choiceNow lo lee del juego).
+  const choiceOf = (v) => ({
+    tab: v.tab,
+    home: v.home,
+    item: v.selected,
+    worn: v.tab === 'carried' && wearing(v, v.selected)
+  })
 
   const KEY_LABELS = { enter: 'Enter', x: 'X', tab: 'Tab', escape: 'Esc' }
 
   function paintActions(v) {
-    const list = actionsFor(v)
+    const list = actionsFor(choiceOf(v))
     ui.actions.innerHTML = list
       .map(
         (act) =>
@@ -1567,6 +1604,7 @@ export function createInventory(ctx) {
     drawn = {}
     saidAt = null
     wornBefore = null
+    totalsBefore = null
     view = null
     if (turntable) turntable.attach(null, null)
   }
@@ -1594,19 +1632,20 @@ export function createInventory(ctx) {
 
   // La ranura del muneco elige lo que lleva puesto, o lo primero de la mochila
   // que va ahi.
+  // True si ya quedo elegido (desde el cofre hace falta un Tab antes).
   function chooseSlot(slot) {
     const runa = runaOpen()
-    if (!runa) return
+    if (!runa) return false
     const carried = runa.inventoryItems('carried')
     const id = (runa.player.equipped || {})[slot]
     const target = id || (carried.find((item) => item.slot === slot) || {}).id
-    if (!target) return
-    if (tabOf(runa) === 'carried') {
-      choose(carried.findIndex((item) => item.id === target))
-      return
-    }
+    if (!target) return false
+    if (tabOf(runa) === 'carried') return choose(carried.findIndex((item) => item.id === target))
+    // Un doble clic llega aca dos veces: el segundo Tab volveria al cofre.
+    if (want && want.id === target) return false
     want = { tab: 'carried', id: target, until: performance.now() + 1500 }
     press('tab')
+    return false
   }
 
   function settle() {
@@ -1621,7 +1660,8 @@ export function createInventory(ctx) {
 
   // Doble clic: lo principal del objeto (equipar o quitar; en el cofre, retirar).
   function primary() {
-    const main = view ? actionsFor(view).find((act) => act.main) : null
+    const runa = runaOpen()
+    const main = runa ? actionsFor(choiceNow(runa)).find((act) => act.main) : null
     if (main) press(main.key)
   }
 
@@ -1635,9 +1675,14 @@ export function createInventory(ctx) {
     else if (data.slot) chooseSlot(data.slot)
     else if (data.tab && view && data.tab !== view.tab) press('tab')
   })
+  // Doble clic en una fila o en una ranura del muneco: equipar o quitar.
   root.addEventListener('dblclick', (event) => {
-    const row = event.target.closest('[data-index]')
-    if (row && root.contains(row) && choose(Number(row.dataset.index))) primary()
+    const target = event.target.closest('[data-index], [data-slot]')
+    if (!target || !root.contains(target)) return
+    const picked = target.dataset.slot
+      ? chooseSlot(target.dataset.slot)
+      : choose(Number(target.dataset.index))
+    if (picked) primary()
   })
   root.addEventListener('contextmenu', (event) => event.preventDefault())
 
