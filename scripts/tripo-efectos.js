@@ -503,10 +503,12 @@ class QuarterBloomPass extends UnrealBloomPass {
 // la linea hacia el sol, con una caida. Solo alumbra el cielo brillante cerca
 // del sol (el cielo se marca con alfa 0 en el buffer de la escena): donde algo
 // lo tapa (el Coloso, las montanas) la linea queda oscura y por los huecos
-// pasan los haces. El comienzo de cada linea se corre al azar por pixel, asi
-// los pasos no se ven como rayas. Corre a un cuarto de resolucion y lo suma el
-// pase final. shape: x, el radio alrededor del sol que alumbra; y, cuanto del
-// camino hacia el sol se recorre; z, la caida por paso; w, la fuerza.
+// pasan los haces. Con el sol a la vista los haces se vuelven un velo parejo:
+// se mira cuanto del disco se ve y entonces bajan. El comienzo de cada linea se
+// corre al azar por pixel, asi los pasos no se ven como rayas. Corre a un
+// cuarto de resolucion y lo suma el pase final. shape: x, el radio alrededor
+// del sol que alumbra; y, cuanto del camino hacia el sol se recorre; z, la
+// caida por paso; w, la fuerza.
 const SHAFTS = /* glsl */ `
 uniform sampler2D tDiffuse;
 uniform vec2 sun;
@@ -514,6 +516,13 @@ uniform float aspect;
 uniform vec4 shape;
 uniform float threshold;
 varying vec2 vUv;
+float sunOpen() {
+  vec2 r = vec2( 0.03 / aspect, 0.03 );
+  float sky = 5.0 - texture2D( tDiffuse, sun ).a - texture2D( tDiffuse, sun + vec2( r.x, 0.0 ) ).a -
+    texture2D( tDiffuse, sun - vec2( r.x, 0.0 ) ).a - texture2D( tDiffuse, sun + vec2( 0.0, r.y ) ).a -
+    texture2D( tDiffuse, sun - vec2( 0.0, r.y ) ).a;
+  return clamp( sky / 5.0, 0.0, 1.0 );
+}
 void main() {
   vec2 stepUv = ( sun - vUv ) * shape.y / 64.0;
   // Ruido de gradiente intercalado (Jimenez, 2014): se reparte parejo y, con el
@@ -530,7 +539,7 @@ void main() {
     decay *= shape.z;
     uv += stepUv;
   }
-  gl_FragColor = vec4( sum * shape.w / 64.0, 1.0 );
+  gl_FragColor = vec4( sum * shape.w * mix( 1.0, 0.45, sunOpen() ) / 64.0, 1.0 );
 }
 `
 
@@ -548,8 +557,8 @@ class ShaftsPass extends Pass {
       tDiffuse: { value: null },
       sun: { value: new THREE.Vector2(0.5, 0.5) },
       aspect: { value: 1 },
-      shape: { value: new THREE.Vector4(0.24, 1, 0.985, 2.4) },
-      threshold: { value: 0.55 }
+      shape: { value: new THREE.Vector4(0.24, 0.8, 0.98, 3.5) },
+      threshold: { value: 0.7 }
     }
     this.quad = new FullScreenQuad(
       new THREE.ShaderMaterial({
