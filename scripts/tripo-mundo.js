@@ -232,6 +232,7 @@ export function buildWorld(data, extras = {}) {
   const color = new THREE.Color()
   const doors = []
   const flowers = []
+  const grass = []
   for (let y = 0; y < height; y++) {
     const row = rows[y] || ''
     for (let x = 0; x < width; x++) {
@@ -242,18 +243,22 @@ export function buildWorld(data, extras = {}) {
       kinds[y * width + x] = kind
       color.setHex(kind ? UNDER : GROUND[ch] || GROUND['`'])
       if (data.kind === 'boss' && !kind) color.setHex(ch === '=' ? 0x3d3530 : 0x2b211c)
-      const shade = 0.9 + hash(x, y) * 0.2
+      const shade = 0.95 + hash(x, y) * 0.1
       const i = ((height - 1 - y) * width + x) * 4
       pixels[i] = Math.min(255, color.r * 255 * shade)
       pixels[i + 1] = Math.min(255, color.g * 255 * shade)
       pixels[i + 2] = Math.min(255, color.b * 255 * shade)
       pixels[i + 3] = 255
       if (!kind && ch === '*') flowers.push([x, y])
+      if (!kind && ch === '"') grass.push([x, y])
       if (kind === 'door') doors.push({ x, y, ch, name: tile ? tile.name : ch })
     }
   }
+  // Suavizado: el suelo se lee como terreno y no como una grilla de cuadritos.
   const groundTexture = new THREE.DataTexture(pixels, width, height)
-  groundTexture.magFilter = THREE.NearestFilter
+  groundTexture.magFilter = THREE.LinearFilter
+  groundTexture.minFilter = THREE.LinearMipmapLinearFilter
+  groundTexture.generateMipmaps = true
   groundTexture.colorSpace = THREE.SRGBColorSpace
   groundTexture.needsUpdate = true
   const ground = new THREE.Mesh(
@@ -465,6 +470,15 @@ export function buildWorld(data, extras = {}) {
     new THREE.SphereGeometry(0.08, 5, 3).translate(0, 0.08, 0),
     new THREE.MeshStandardMaterial({ color: 0xe86fa3, emissive: 0x6a1f3c, roughness: 0.6 })
   )
+  // Matas en el pasto alto: tres hojas por celda, de pocos poligonos.
+  const blades = mergeGeometries(
+    [-0.12, 0, 0.12].map((dx, k) =>
+      new THREE.ConeGeometry(0.07, 0.5 + k * 0.1, 3)
+        .rotateZ(dx * 1.5)
+        .translate(dx, 0.25, (k - 1) * 0.08)
+    )
+  )
+  scatter(grass, blades, new THREE.MeshStandardMaterial({ color: 0x5d8a3a, roughness: 0.9 }))
 
   // Puertas: una columna de luz y el nombre.
   for (const door of doors) {
@@ -502,13 +516,16 @@ export function buildWorld(data, extras = {}) {
   // Modelos de Tripo como hitos: la estatua de los heroes es el heroe de Tripo,
   // y el Coloso vive en su arena.
   const loads = []
-  const place = (file, center, size) => {
+  // Tripo entrega los modelos mirando hacia +x: yaw los gira hacia donde tienen
+  // que mirar.
+  const place = (file, center, size, yaw = 0) => {
     if (!extras.glb) return
     loads.push(
       extras
         .glb(file)
         .then((object) => {
           if (!object) return
+          object.rotation.y = yaw
           object.updateMatrixWorld(true)
           const box = new THREE.Box3().setFromObject(object)
           object.scale.multiplyScalar(size / box.getSize(new THREE.Vector3()).y)
@@ -539,12 +556,14 @@ export function buildWorld(data, extras = {}) {
     plinth.position.set(center.x, 0.4, center.z)
     plinth.castShadow = true
     group.add(plinth)
-    place('heroe.glb', center.setY(0.8), 3.2)
+    // La estatua mira al sur, hacia la plaza.
+    place('heroe.glb', center.setY(0.8), 3.2, -Math.PI / 2)
     const tag = label(mark.name)
     tag.position.set(center.x, 4.8, center.z)
     group.add(tag)
   }
-  if (data.boss) place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7)
+  // El Coloso mira al oeste, hacia el portal por donde llega el heroe.
+  if (data.boss) place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI)
 
   return {
     group,

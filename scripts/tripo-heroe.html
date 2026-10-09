@@ -481,6 +481,60 @@
       const hero = stickman()
       scene.add(hero.root)
 
+      // En el mundo camina el heroe de Tripo. El stickman con el equipo cambiable
+      // queda para la vitrina: el heroe de Tripo trae espada y escudo en el mismo
+      // modelo. Tripo lo entrega mirando hacia +x y el heroe mira hacia +z.
+      const AVATAR = { file: 'heroe.glb', height: 2.1, yaw: -Math.PI / 2 }
+      const avatar = new THREE.Group()
+      avatar.visible = false
+      hero.root.add(avatar)
+      let avatarLoading = null
+      function loadAvatar() {
+        if (!avatarLoading && models.has(AVATAR.file)) {
+          avatarLoading = loadGlb(AVATAR.file)
+            .then((object) => {
+              object.rotation.y = AVATAR.yaw
+              object.updateMatrixWorld(true)
+              const box = new THREE.Box3().setFromObject(object)
+              object.scale.multiplyScalar(AVATAR.height / box.getSize(new THREE.Vector3()).y)
+              object.updateMatrixWorld(true)
+              const placed = new THREE.Box3().setFromObject(object)
+              const mid = placed.getCenter(new THREE.Vector3())
+              object.position.x -= mid.x
+              object.position.z -= mid.z
+              object.position.y -= placed.min.y
+              object.traverse((child) => {
+                if (child.isMesh) child.castShadow = true
+              })
+              avatar.add(object)
+            })
+            .catch(() => {
+              avatarLoading = null
+            })
+        }
+        return avatarLoading || Promise.resolve()
+      }
+      function useAvatar(on) {
+        const ready = on && avatar.children.length > 0
+        avatar.visible = ready
+        hero.hips.visible = !ready
+      }
+
+      // Cielo de atardecer para el mundo; la vitrina sigue en negro.
+      const skyCanvas = document.createElement('canvas')
+      skyCanvas.width = 2
+      skyCanvas.height = 256
+      const skyPaint = skyCanvas.getContext('2d')
+      const skyGradient = skyPaint.createLinearGradient(0, 0, 0, 256)
+      skyGradient.addColorStop(0, '#0e1626')
+      skyGradient.addColorStop(0.6, '#2b3b52')
+      skyGradient.addColorStop(1, '#55606c')
+      skyPaint.fillStyle = skyGradient
+      skyPaint.fillRect(0, 0, 2, 256)
+      const skyTexture = new THREE.CanvasTexture(skyCanvas)
+      skyTexture.colorSpace = THREE.SRGBColorSpace
+      const night = new THREE.Color(0x0b0b0c)
+
       let chestLayer = null
       function dressChest(id) {
         if (chestLayer) hero.hips.remove(chestLayer)
@@ -688,6 +742,9 @@
       function showcase(on) {
         ground.visible = on
         ring.visible = on
+        scene.background = on ? night : skyTexture
+        scene.fog.color.setHex(on ? 0x0b0b0c : 0x3a4656)
+        useAvatar(!on)
         if (backdrop) backdrop.visible = on
         controls.autoRotate = on
         // En el mapa, vista 2.5D: lente cerrada y desde lejos, casi isometrica.
@@ -764,6 +821,7 @@
         controls.target.copy(heroTarget).setY(1)
         // La camara arranca al sur del heroe, mirando al norte como la terminal.
         camera.position.copy(heroTarget).add(new THREE.Vector3(0, 44, 32))
+        loadAvatar().then(() => useAvatar(!!world))
       }
 
       function exitWorld() {
@@ -857,6 +915,9 @@
         }
         stride = moving ? stride + dt * 11 : 0
         const swing = moving ? Math.sin(stride) * 0.55 : 0
+        // El heroe de Tripo no tiene esqueleto: al caminar se balancea.
+        avatar.position.y = moving ? Math.abs(Math.sin(stride)) * 0.09 : 0
+        avatar.rotation.z = moving ? Math.sin(stride) * 0.05 : 0
         hero.legs[0].rotation.x = swing
         hero.legs[1].rotation.x = -swing
         if (moving) {
