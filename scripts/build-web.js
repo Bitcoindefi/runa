@@ -72,7 +72,8 @@ if (!models.length) {
 async function main() {
   write('index.html', page(viewer.PAGES['/heroe']))
   write('models.html', page(viewer.PAGES['/']))
-  write('mundo.js', fs.readFileSync(viewer.WORLD_JS))
+  // Los modulos de la pagina: el mundo, sus murallas y terreno, titulo y efectos.
+  for (const [name, file] of Object.entries(viewer.MODULES)) write(name, fs.readFileSync(file))
   // El juego: lib/ empaquetado para el navegador, igual que lo sirve el visor.
   const game = await buildGame(path.join(out, 'juego.js'))
   write('models.json', JSON.stringify(models))

@@ -5,6 +5,8 @@
 // mallas para que ande liviano: los edificios de un mapa son una sola.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { buildRamparts } from './murallas.js'
+import { buildTerrain } from './terreno.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { document } = globalThis
@@ -2668,6 +2670,24 @@ export function buildWorld(data, extras = {}) {
     }
   }
 
+  // Las murallas y sus portones, si murallas.js los dibuja: esas celdas ya no
+  // suben como cajas sueltas y esos portones no llevan columna de luz.
+  const ramparts = buildRamparts({
+    data,
+    kinds,
+    inBuilding,
+    doors,
+    toWorld,
+    CX,
+    CZ,
+    palette,
+    letters,
+    group,
+    text
+  })
+  const skip = (ramparts && ramparts.skip) || new Set()
+  const gates = (ramparts && ramparts.gates) || new Set()
+
   // Tercera pasada: lo que sube fuera de los edificios, por tramos de una fila.
   // Las letras y puertas van de a una, porque cada una lleva su glifo.
   const runs = {}
@@ -2676,7 +2696,8 @@ export function buildWorld(data, extras = {}) {
     while (x < width) {
       const i = y * width + x
       const kind = kinds[i]
-      if (!kind || inBuilding[i] || !LOOSE[kind]) {
+      const gate = kind === 'door' && gates.has(x + ',' + y)
+      if (!kind || inBuilding[i] || !LOOSE[kind] || skip.has(kind) || gate) {
         x++
         continue
       }
@@ -2718,23 +2739,42 @@ export function buildWorld(data, extras = {}) {
   // su tamano, giro y color. El agua y la lava llevan una superficie que se mueve.
   for (const mesh of natureMeshes(data, kinds, clock)) group.add(mesh)
 
-  // Puertas: una columna de luz y el nombre.
+  // Lo que terreno.js suma: relieve alrededor del mapa, pasto, agua.
+  const terrain = buildTerrain({
+    data,
+    kinds,
+    inBuilding,
+    toWorld,
+    CX,
+    CZ,
+    palette,
+    ground,
+    clock,
+    group
+  })
+
+  // Puertas: una columna de luz y el nombre. Un porton que dibujo murallas.js
+  // lleva solo el nombre, a la altura que pida.
   for (const door of doors) {
     const p = toWorld(door.x, door.y)
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.12, 3.4, 8, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0xe0c060,
-        transparent: true,
-        opacity: 0.35,
-        depthWrite: false,
-        side: THREE.DoubleSide
-      })
-    )
-    beam.position.set(p.x, 1.7, p.z)
-    group.add(beam)
+    const gate = gates.has(door.x + ',' + door.y)
+    if (!gate) {
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.12, 3.4, 8, 1, true),
+        new THREE.MeshBasicMaterial({
+          color: 0xe0c060,
+          transparent: true,
+          opacity: 0.35,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        })
+      )
+      beam.position.set(p.x, 1.7, p.z)
+      group.add(beam)
+    }
+    const lift = (gate && ramparts.labelHeight && ramparts.labelHeight(door)) || 3.9
     const tag = label(text(door.name))
-    tag.position.set(p.x, 3.9, p.z)
+    tag.position.set(p.x, lift, p.z)
     group.add(tag)
   }
 
@@ -2851,13 +2891,18 @@ export function buildWorld(data, extras = {}) {
     buildings: buildings.length,
     loading: Promise.all(loads),
     // Los NPC respiran: se estiran apenas desde los pies, cada uno a su ritmo.
+    // Las murallas y el terreno pueden moverse solos (antorchas, viento, agua).
     update(time) {
       for (const n of idlers) {
         const k = Math.sin(time * 2.2 + n.phase)
         n.sprite.scale.set(n.w * (1 - k * 0.012), n.h * (1 + k * 0.025), 1)
       }
+      if (ramparts && ramparts.update) ramparts.update(time)
+      if (terrain && terrain.update) terrain.update(time)
     },
     dispose() {
+      if (ramparts && ramparts.dispose) ramparts.dispose()
+      if (terrain && terrain.dispose) terrain.dispose()
       const free = (node) => {
         if (node.userData.shared) return
         // Las instancias tienen sus propios buffers de posiciones y colores.

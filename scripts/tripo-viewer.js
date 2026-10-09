@@ -27,6 +27,15 @@ const PAGES = {
   '/mundo': path.join(__dirname, 'tripo-heroe.html')
 }
 const WORLD_JS = path.join(__dirname, 'tripo-mundo.js')
+// Los modulos de la pagina 2.5D, con el nombre con que los pide el navegador:
+// el mundo y sus partes (murallas, terreno), el titulo y el postproceso.
+const MODULES = {
+  'mundo.js': WORLD_JS,
+  'murallas.js': path.join(__dirname, 'tripo-murallas.js'),
+  'terreno.js': path.join(__dirname, 'tripo-terreno.js'),
+  'titulo.js': path.join(__dirname, 'tripo-titulo.js'),
+  'efectos.js': path.join(__dirname, 'tripo-efectos.js')
+}
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
 // cosa, no se guarda. three.module.min.js importa ./three.core.js, por eso el
 // core minificado se guarda con ese nombre.
@@ -63,6 +72,114 @@ const LIBS = {
   'three/addons/environments/RoomEnvironment.js': [
     THREE + 'examples/jsm/environments/RoomEnvironment.js',
     '55f466192cc84298755a424c5e040345006b2ee1455589b3b54126c2ea4123f4'
+  ],
+  'three/addons/effects/AsciiEffect.js': [
+    THREE + 'examples/jsm/effects/AsciiEffect.js',
+    '192fd3d77b357999730cefa2e7c92b68cef167df0c1e9493d1ddf83b8e82a54a'
+  ],
+  'three/addons/geometries/RoundedBoxGeometry.js': [
+    THREE + 'examples/jsm/geometries/RoundedBoxGeometry.js',
+    'c5feab96123858ed8823c889b238dc8734adab7e760e3cfd21e7f3f2f3e348e3'
+  ],
+  'three/addons/math/ImprovedNoise.js': [
+    THREE + 'examples/jsm/math/ImprovedNoise.js',
+    'd3821241e25bf0c8bfc13cec941924573bbaaf8f599a4fa07d60664b97832b39'
+  ],
+  'three/addons/math/MeshSurfaceSampler.js': [
+    THREE + 'examples/jsm/math/MeshSurfaceSampler.js',
+    'a70ab7a8f28b96cd51f09b7c4d5987167bdc23b91b2a26134766a180751aee43'
+  ],
+  'three/addons/math/SimplexNoise.js': [
+    THREE + 'examples/jsm/math/SimplexNoise.js',
+    '4b1455617135e6b477de76244de07547d95570643379b72f4758e50161b06072'
+  ],
+  'three/addons/objects/Reflector.js': [
+    THREE + 'examples/jsm/objects/Reflector.js',
+    '57836df976f02a474b2dcfbb6609bca8bde0ccc6e77159ad8e418fa11c065d3b'
+  ],
+  'three/addons/objects/Sky.js': [
+    THREE + 'examples/jsm/objects/Sky.js',
+    '34121b60a3bd9adc004a5a637f6135e9d2b72757eeb9e476ae1988fe2db6a9fb'
+  ],
+  'three/addons/objects/Water.js': [
+    THREE + 'examples/jsm/objects/Water.js',
+    '3386670ba86003a32f5efe449041bd108d4cf1e0661849caa814741a2aaf395b'
+  ],
+  'three/addons/postprocessing/EffectComposer.js': [
+    THREE + 'examples/jsm/postprocessing/EffectComposer.js',
+    '4e079a5886152d7e529a59aef644e968ab4d32c6a33ce016b36bf29b2eac26f7'
+  ],
+  'three/addons/postprocessing/GTAOPass.js': [
+    THREE + 'examples/jsm/postprocessing/GTAOPass.js',
+    'a277f848d1035c751c54d9706e579aeb74689126ced25723e53d52ac3f26f445'
+  ],
+  'three/addons/postprocessing/MaskPass.js': [
+    THREE + 'examples/jsm/postprocessing/MaskPass.js',
+    '7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3'
+  ],
+  'three/addons/postprocessing/OutputPass.js': [
+    THREE + 'examples/jsm/postprocessing/OutputPass.js',
+    '02e4a261af34de71338185e9e87f0cbe5cba9115608d984363e1269dec1d2272'
+  ],
+  'three/addons/postprocessing/Pass.js': [
+    THREE + 'examples/jsm/postprocessing/Pass.js',
+    '444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5'
+  ],
+  'three/addons/postprocessing/RenderPass.js': [
+    THREE + 'examples/jsm/postprocessing/RenderPass.js',
+    '817f6c3cdcd0fd41515d112359ea0532568eefb5aabd3b33903957ebca1b8a6a'
+  ],
+  'three/addons/postprocessing/SMAAPass.js': [
+    THREE + 'examples/jsm/postprocessing/SMAAPass.js',
+    '1a96804b8cb33ba76a67f9a8e77f2d5e2bf47b1a5c9a8476901aa75e24acb85c'
+  ],
+  'three/addons/postprocessing/ShaderPass.js': [
+    THREE + 'examples/jsm/postprocessing/ShaderPass.js',
+    'e2500a5913b26bbf5148ceaae644c6edcff06a18b01494ee37bf856353d2ab9d'
+  ],
+  'three/addons/postprocessing/UnrealBloomPass.js': [
+    THREE + 'examples/jsm/postprocessing/UnrealBloomPass.js',
+    'ba8f2fcadfa6588384c9473498f974d81d120f02f0e63a0e59c265202a006b5a'
+  ],
+  'three/addons/shaders/CopyShader.js': [
+    THREE + 'examples/jsm/shaders/CopyShader.js',
+    'a33057d5ac91c43304c186ac0e8816e62bb2ed471d3a00ff3018dfd5c0389718'
+  ],
+  'three/addons/shaders/FXAAShader.js': [
+    THREE + 'examples/jsm/shaders/FXAAShader.js',
+    'b8303d179f9d5d40a052483e8cfb49c29afb6e60396080e472a6950b51700dac'
+  ],
+  'three/addons/shaders/GTAOShader.js': [
+    THREE + 'examples/jsm/shaders/GTAOShader.js',
+    'cdea7be60452f61105375d2c18e4da2e8ce7b39a89246b1bb8fbf79319d58cfd'
+  ],
+  'three/addons/shaders/HorizontalTiltShiftShader.js': [
+    THREE + 'examples/jsm/shaders/HorizontalTiltShiftShader.js',
+    '772f0865e95c4ecd7e6b016191b5d544d23ea4f048ff0efdc33898ee52fb3fa2'
+  ],
+  'three/addons/shaders/LuminosityHighPassShader.js': [
+    THREE + 'examples/jsm/shaders/LuminosityHighPassShader.js',
+    '5044f780b6e6cf863947f64c36fe1587132f7fbe395ada863cd1e5f0388dcf1e'
+  ],
+  'three/addons/shaders/OutputShader.js': [
+    THREE + 'examples/jsm/shaders/OutputShader.js',
+    '353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2'
+  ],
+  'three/addons/shaders/PoissonDenoiseShader.js': [
+    THREE + 'examples/jsm/shaders/PoissonDenoiseShader.js',
+    '61da074a9ad8b2139dd164c96b8b62c299f056ce06c216e1f707c5151d997602'
+  ],
+  'three/addons/shaders/SMAAShader.js': [
+    THREE + 'examples/jsm/shaders/SMAAShader.js',
+    '48ce320a6bf5c33806c4fa13ade7e3ab199f7856838d36b05ae82204db8a1c15'
+  ],
+  'three/addons/shaders/VerticalTiltShiftShader.js': [
+    THREE + 'examples/jsm/shaders/VerticalTiltShiftShader.js',
+    '96bed3fafdea8370d1330dc9854f9d604a6def8554db554368c917ee66403742'
+  ],
+  'three/addons/shaders/VignetteShader.js': [
+    THREE + 'examples/jsm/shaders/VignetteShader.js',
+    '5b122990efab55aa39ac5c72a09bc840e572773f5037b9127acfc8e31ee08b83'
   ]
 }
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4173
@@ -470,7 +587,10 @@ function serve() {
       // pasa al modo navegador y se juega sola.
       if (urlPath === '/state.json') return json(res, { ...hero.state(), listening: listening() })
       if (urlPath === '/key' && req.method === 'POST') return sendKey(req, res, origins)
-      if (urlPath === '/mundo.js') return send(res, WORLD_JS, 'text/javascript; charset=utf-8')
+      const module = urlPath.slice(1)
+      if (Object.hasOwn(MODULES, module)) {
+        return send(res, MODULES[module], 'text/javascript; charset=utf-8')
+      }
       if (urlPath === '/juego.js') {
         gameBundle().then(
           () => send(res, GAME_JS, 'text/javascript; charset=utf-8'),
@@ -519,7 +639,17 @@ function serve() {
 }
 
 // scripts/build-web.js arma el sitio estatico con estas mismas piezas.
-module.exports = { LIBS, VENDOR, MODELS, PAGES, WORLD_JS, WORLD_MAPS, listModels, worldMap }
+module.exports = {
+  LIBS,
+  VENDOR,
+  MODELS,
+  PAGES,
+  WORLD_JS,
+  MODULES,
+  WORLD_MAPS,
+  listModels,
+  worldMap
+}
 
 if (require.main === module) {
   if (process.argv.includes('--fetch-lib')) {

@@ -742,6 +742,8 @@
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
       import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
       import { buildWorld, CX, CZ } from './mundo.js'
+      import { buildTitle } from './titulo.js'
+      import { createEffects } from './efectos.js'
 
       // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
       //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
@@ -861,7 +863,20 @@
           AVATAR.fits[id] = { ...HERO_FIT, ...AVATAR.fits[id], ...values }
           if (worn.head === id) return refitHead(id)
         },
-        head: () => avatarHead.getWorldPosition(new THREE.Vector3()).project(camera)
+        head: () => avatarHead.getWorldPosition(new THREE.Vector3()).project(camera),
+        // Para las capturas: lleva al heroe (solo la figura) a la celda (x, y) del
+        // mapa 3D y pone la camara a `dist` metros, a `height` de alto y girada
+        // `azimuth` grados desde el sur. La camara lo sigue ahi hasta que se mueva.
+        frame(x, y, { dist = 14, height = 8, azimuth = 0 } = {}) {
+          if (!world) return false
+          const at = world.built.toWorld(x, y)
+          heroTarget.copy(at)
+          hero.root.position.copy(at)
+          controls.target.set(at.x, 1, at.z)
+          const turn = THREE.MathUtils.degToRad(azimuth)
+          camera.position.set(at.x + Math.sin(turn) * dist, height, at.z + Math.cos(turn) * dist)
+          return true
+        }
       }
 
       const sky = new THREE.HemisphereLight(0xd8d8d0, 0x1a1408, 1.3)
@@ -1925,6 +1940,11 @@
         if (ash.visible) ash.position.set(pos.x, 0, pos.z)
       }
 
+      // Como llega cada cuadro a la pantalla (efectos.js) y el escenario del menu
+      // de titulo (titulo.js, se arma la primera vez que se muestra el menu).
+      const effects = createEffects({ renderer, scene, camera, settings })
+      let title = null
+
       renderer.setAnimationLoop(() => {
         timer.update()
         const t = timer.getElapsed()
@@ -1963,8 +1983,9 @@
         if (mixer && avatar.visible) mixer.update(dt)
         // El mundo puede tener movimiento propio: viento, agua, NPC.
         if (world && world.built.update) world.built.update(t)
+        if (title && screen === 'menu') title.update(t, dt)
         controls.update()
-        renderer.render(scene, camera)
+        effects.render(dt, screen)
       })
 
       // En el menu de titulo la escena se corre a la derecha (una fraccion del
@@ -1981,6 +2002,7 @@
         const { clientWidth, clientHeight } = renderer.domElement
         if (!clientWidth || !clientHeight) return
         renderer.setSize(clientWidth, clientHeight, false)
+        effects.setSize(clientWidth, clientHeight)
         camera.aspect = clientWidth / clientHeight
         camera.fov = lens()
         shiftView()
@@ -2021,6 +2043,7 @@
       // entera antes de prender la otra.
       function leaveScreen() {
         if (screen === 'play') stopPlay()
+        if (title) title.show(false)
         viewShift = 0
         shiftView()
         camera.updateProjectionMatrix()
@@ -2129,6 +2152,27 @@
           if (screen === 'menu') useAvatar(true)
         })
         useAvatar(true)
+        // El escenario de titulo.js, si arma uno: se arma la primera vez.
+        if (!title) {
+          title = buildTitle({
+            scene,
+            camera,
+            controls,
+            renderer,
+            sun,
+            sky,
+            ember,
+            ground,
+            ring,
+            ash,
+            hero,
+            models: () => models,
+            loadGlb,
+            mapData,
+            buildWorld
+          })
+        }
+        if (title) title.show(true)
       }
 
       function showMenu() {
