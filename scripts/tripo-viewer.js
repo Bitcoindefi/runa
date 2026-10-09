@@ -174,6 +174,16 @@ function keysStalled(inbox) {
   return Date.now() - oldest > 1500
 }
 
+// El juego con --teclas reescribe keys/alive cada segundo: si el latido tiene
+// menos de 3 s, la terminal esta abierta y escuchando.
+function listening() {
+  try {
+    return Date.now() - fs.statSync(path.join(storageDir(), 'keys', 'alive')).mtimeMs < 3000
+  } catch {
+    return false
+  }
+}
+
 // Solo la pagina del visor manda teclas: el header propio obliga a cualquier otra
 // web a un preflight CORS que este server no contesta, y el Origin tiene que ser
 // el del visor. Ctrl+C nunca llega: no es una tecla de la tabla.
@@ -254,7 +264,10 @@ function describe(slot, data) {
     scene: sceneOf(data.location || {}),
     world: worldOf(data.location || {}),
     boss: boss ? { hp: Number(boss.hp) || 0, defeated: !!boss.defeated } : null,
-    equipped
+    equipped,
+    // La mochila y el oro, para el inventario del modo navegador.
+    bag: (Array.isArray(player.items) ? player.items : []).map(item).filter(Boolean),
+    gold: Math.max(0, Math.floor(Number(player.gold) || 0))
   }
 }
 
@@ -265,11 +278,16 @@ function worldMap(id) {
   if (worlds.has(id)) return worlds.get(id)
   let data = null
   try {
-    const { MAPS, TILES } = require('../lib/map.js')
+    const { MAPS, TILES, NPC_SPRITES } = require('../lib/map.js')
     const tiles = {}
     for (const [ch, tile] of Object.entries(TILES)) {
       tiles[ch] = { id: tile.id, name: tile.name, solid: !!tile.solid }
+      // Adonde lleva una puerta o un porton: el modo navegador cruza los portones.
+      if (tile.enter) tiles[ch].enter = { ...tile.enter }
     }
+    // El dibujo de cada NPC es uno de NPC_SPRITES: de ahi sale su tipo.
+    const kindOf = (sprite) =>
+      Object.keys(NPC_SPRITES).find((kind) => NPC_SPRITES[kind] === sprite) || 'villager'
     if (id === 'boss') {
       const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
       data = {
@@ -296,6 +314,10 @@ function worldMap(id) {
         npcs: (map.npcs || []).map((npc) => ({
           id: npc.id,
           name: npc.name,
+          role: npc.role || '',
+          line: npc.line || '',
+          kind: kindOf(npc.sprite),
+          action: npc.action ? npc.action.kind : null,
           x: npc.x,
           y: npc.y,
           color: npc.color
@@ -424,7 +446,9 @@ function serve() {
         return send(res, PAGES[urlPath], 'text/html; charset=utf-8')
       }
       if (urlPath === '/models.json') return json(res, listModels())
-      if (urlPath === '/state.json') return json(res, hero.state())
+      // listening: el juego de la terminal esta leyendo teclas. Si no, la pagina
+      // pasa al modo navegador y se juega sola.
+      if (urlPath === '/state.json') return json(res, { ...hero.state(), listening: listening() })
       if (urlPath === '/key' && req.method === 'POST') return sendKey(req, res, origins)
       if (urlPath === '/mundo.js') return send(res, WORLD_JS, 'text/javascript; charset=utf-8')
       const world = /^\/world\/([a-z]+)\.json$/.exec(urlPath)

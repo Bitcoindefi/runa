@@ -125,7 +125,18 @@ if (cmd.flags.teclas) {
   fs.mkdirSync(inbox, { recursive: true })
   // Las teclas que quedaron de otra sesion no se juegan.
   for (const name of fs.readdirSync(inbox)) fs.unlinkSync(path.join(inbox, name))
+  // Latido: el visor da la terminal por abierta mientras "alive" sea reciente;
+  // si no, la pagina pasa al modo navegador y se juega sola.
+  const alive = path.join(inbox, 'alive')
+  let beat = 0
   const timer = setInterval(() => {
+    if (beat++ % 25 === 0) {
+      try {
+        fs.writeFileSync(alive, String(Date.now()))
+      } catch {
+        // La proxima vuelta lo intenta de nuevo.
+      }
+    }
     let names
     try {
       names = fs
