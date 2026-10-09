@@ -25,12 +25,13 @@
 // con exposicion propia, sol grande, estrellas, luna y un horizonte que se funde
 // con la niebla. El titulo (titulo.js) arma el suyo con la misma funcion.
 //
-// En 'high', donde algo tiene que brillar (la lava, las ventanas de NOX de
-// noche, las runas y brasas del titulo) el cuadro pasa por EffectComposer: la
-// escena con MSAA en un buffer de punto flotante, UnrealBloomPass y OutputPass,
-// que pasa a sRGB y ademas hace el acabado: vineta, tono por mapa y un grano
-// minimo contra las bandas del cielo. De dia no brilla nada: la escena va
-// directo a la pantalla con una vineta encima, y el postproceso no se paga.
+// En 'high' el cuadro pasa por EffectComposer, como en los ejemplos de
+// three.js: RenderPass dibuja la escena en un buffer de punto flotante,
+// UnrealBloomPass hace brillar lo que pasa del umbral (la lava, las ventanas de
+// NOX de noche, las runas y brasas del titulo) y OutputPass pasa a sRGB. Ese
+// ultimo pase hace tambien el antialias (FXAA), la suma del brillo y el
+// acabado (tono por mapa, vineta, grano), asi el cuadro cuesta dos pases a
+// pantalla completa y el brillo, a un cuarto de resolucion, casi nada.
 // renderer.info cuenta el cuadro entero, con todos los pases.
 
 import * as THREE from 'three'
@@ -39,8 +40,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
-import { CopyShader } from 'three/addons/shaders/CopyShader.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { performance } = globalThis
@@ -222,7 +221,7 @@ export function skyDirection(elevation, bearing, target = new THREE.Vector3()) {
 // light  [color, intensidad] de la direccional; env, cuanto reflejan los PBR
 // post   bloom [fuerza, radio, umbral, rodilla]: brilla lo que pasa del umbral
 //        en su canal mas alto; saturacion, contraste y tinte del acabado. Sin
-//        bloom (de dia) el cuadro va directo y solo lleva la vineta.
+//        bloom (de dia) el pase del brillo no corre: quedan FXAA y el acabado.
 const MOODS = {
   // La ciudad de RUNA a la manana: sol bajo al noreste, aire limpio.
   city: {
@@ -345,20 +344,37 @@ void main() {
 `
 
 // UnrealBloomPass arma su cadena desde la mitad de la resolucion; esta, desde
-// un cuarto: el brillo es suave igual y cuesta la cuarta parte.
+// un cuarto: el brillo es suave igual y cuesta la cuarta parte. Tampoco mezcla
+// el brillo sobre la escena (un pase mas a pantalla completa): lo deja en
+// `texture` y lo suma el pase final.
 class QuarterBloomPass extends UnrealBloomPass {
+  constructor() {
+    super(new THREE.Vector2(256, 256), 0.4, 0.4, 0.9)
+    this.blendMaterial.visible = false
+    this.highPassUniforms.sceneTexel = { value: new THREE.Vector2(1, 1) }
+    this.materialHighPassFilter.fragmentShader = HIGH_PASS
+    this.materialHighPassFilter.needsUpdate = true
+  }
+
+  get texture() {
+    return this.renderTargetsHorizontal[0].texture
+  }
+
   setSize(width, height) {
     super.setSize(Math.round(width / 2), Math.round(height / 2))
-    if (this.highPassUniforms.sceneTexel) {
-      this.highPassUniforms.sceneTexel.value.set(1 / width, 1 / height)
-    }
+    this.highPassUniforms.sceneTexel.value.set(1 / width, 1 / height)
   }
 }
 
-// El acabado va al final del shader de OutputPass, despues del paso a sRGB: un
-// pase de pantalla completa menos. Tono, vineta y un grano de medio escalon
-// contra las bandas del cielo.
+// El pase final es OutputPass (el paso a sRGB de three.js) con tres cosas mas
+// en el mismo shader, que en los ejemplos son pases aparte: el antialias FXAA
+// (la escena se dibuja sin MSAA, que en una placa integrada costaba mas que
+// todo el postproceso), la suma del brillo y el acabado: tono por mapa,
+// vineta y un grano de medio escalon contra las bandas del cielo.
 const FINISH_PARS = /* glsl */ `
+uniform sampler2D tBloom;
+uniform float bloomOn;
+uniform vec2 texel;
 uniform vec3 tint;
 uniform float saturation;
 uniform float contrast;
@@ -366,6 +382,39 @@ uniform float vignette;
 uniform float aspect;
 uniform float seed;
 varying vec2 vUv;
+
+// El brillo percibido, para buscar bordes: la escena viene lineal.
+float edgeLuma( vec3 c ) {
+  return sqrt( dot( min( c, vec3( 1.0 ) ), vec3( 0.299, 0.587, 0.114 ) ) );
+}
+
+// FXAA de Timothy Lottes en su forma corta: las cuatro diagonales dicen si hay
+// un borde y hacia donde corre, y cuatro lecturas mas lo suavizan a lo largo.
+// Donde no hay contraste (casi toda la pantalla) sale con una sola lectura.
+vec3 fxaa( vec2 uv ) {
+  vec3 m = texture2D( tDiffuse, uv ).rgb;
+  float lm = edgeLuma( m );
+  float lnw = edgeLuma( texture2D( tDiffuse, uv + vec2( -1.0, -1.0 ) * texel ).rgb );
+  float lne = edgeLuma( texture2D( tDiffuse, uv + vec2( 1.0, -1.0 ) * texel ).rgb );
+  float lsw = edgeLuma( texture2D( tDiffuse, uv + vec2( -1.0, 1.0 ) * texel ).rgb );
+  float lse = edgeLuma( texture2D( tDiffuse, uv + vec2( 1.0, 1.0 ) * texel ).rgb );
+  float lo = min( lm, min( min( lnw, lne ), min( lsw, lse ) ) );
+  float hi = max( lm, max( max( lnw, lne ), max( lsw, lse ) ) );
+  if ( hi - lo < max( 0.04, hi * 0.12 ) ) return m;
+  vec2 dir = vec2( ( lsw + lse ) - ( lnw + lne ), ( lnw + lsw ) - ( lne + lse ) );
+  float reduce = max( ( lnw + lne + lsw + lse ) * 0.03125, 0.0078125 );
+  dir = clamp( dir / ( min( abs( dir.x ), abs( dir.y ) ) + reduce ), -8.0, 8.0 ) * texel;
+  vec3 a = 0.5 * ( texture2D( tDiffuse, uv - dir * 0.1667 ).rgb +
+    texture2D( tDiffuse, uv + dir * 0.1667 ).rgb );
+  vec3 b = a * 0.5 + 0.25 * ( texture2D( tDiffuse, uv - dir * 0.5 ).rgb +
+    texture2D( tDiffuse, uv + dir * 0.5 ).rgb );
+  float lb = edgeLuma( b );
+  return ( lb < lo || lb > hi ) ? a : b;
+}
+`
+
+const FINISH_READ = /* glsl */ `
+  gl_FragColor = vec4( fxaa( vUv ) + texture2D( tBloom, vUv ).rgb * bloomOn, 1.0 );
 `
 
 const FINISH_MAIN = /* glsl */ `
@@ -382,86 +431,29 @@ const FINISH_MAIN = /* glsl */ `
 }
 `
 
-function finishOutput(output) {
-  Object.assign(output.uniforms, {
-    tint: { value: new THREE.Vector3(1, 1, 1) },
-    saturation: { value: 1 },
-    contrast: { value: 1 },
-    vignette: { value: 0.25 },
-    aspect: { value: 1 },
-    seed: { value: 0 }
-  })
-  output.material.fragmentShader = output.material.fragmentShader
-    .replace('varying vec2 vUv;', FINISH_PARS)
-    .replace(/\}\s*$/, FINISH_MAIN)
-  return output
-}
-
-// Donde nada tiene que brillar (los mapas de dia, la vitrina) la escena va
-// directo a la pantalla, como en 'low', y encima solo una vineta: un cuadro
-// negro con transparencia en los bordes. Cuesta casi nada.
-function vignetteQuad() {
-  return new FullScreenQuad(
-    new THREE.ShaderMaterial({
-      uniforms: { vignette: { value: 0.2 }, aspect: { value: 1 } },
-      vertexShader: CopyShader.vertexShader,
-      fragmentShader: /* glsl */ `
-        uniform float vignette;
-        uniform float aspect;
-        varying vec2 vUv;
-        void main() {
-          vec2 d = ( vUv - 0.5 ) * vec2( min( aspect, 1.6 ), 1.0 );
-          gl_FragColor = vec4( 0.0, 0.0, 0.0, vignette * smoothstep( 0.35, 1.05, length( d ) * 1.25 ) );
-        }`,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false
-    })
-  )
-}
-
-// La escena con MSAA en un buffer propio, copiado despues al del composer. Asi
-// solo la escena paga el antialias: los pases que siguen van en buffers simples
-// sin profundidad (con MSAA en todos, el cuadro costaba el doble).
-class SceneMsaaPass extends Pass {
-  constructor(scene, camera, samples) {
+class FinishPass extends OutputPass {
+  constructor(bloom) {
     super()
-    this.needsSwap = false
-    this.scenePass = new RenderPass(scene, camera)
-    // Despues de la escena solo hace falta el color: la profundidad con MSAA no
-    // se resuelve, se descarta.
-    this.target = new THREE.WebGLRenderTarget(1, 1, {
-      type: THREE.HalfFloatType,
-      samples,
-      resolveDepthBuffer: false
+    Object.assign(this.uniforms, {
+      tBloom: { value: bloom.texture },
+      bloomOn: { value: 1 },
+      texel: { value: new THREE.Vector2(1, 1) },
+      tint: { value: new THREE.Vector3(1, 1, 1) },
+      saturation: { value: 1 },
+      contrast: { value: 1 },
+      vignette: { value: 0.25 },
+      aspect: { value: 1 },
+      seed: { value: 0 }
     })
-    this.copy = new FullScreenQuad(
-      new THREE.ShaderMaterial({
-        uniforms: THREE.UniformsUtils.clone(CopyShader.uniforms),
-        vertexShader: CopyShader.vertexShader,
-        fragmentShader: CopyShader.fragmentShader,
-        blending: THREE.NoBlending,
-        depthTest: false,
-        depthWrite: false
-      })
-    )
+    this.material.fragmentShader = this.material.fragmentShader
+      .replace('varying vec2 vUv;', FINISH_PARS)
+      .replace('gl_FragColor = texture2D( tDiffuse, vUv );', FINISH_READ)
+      .replace(/\}\s*$/, FINISH_MAIN)
   }
 
   setSize(width, height) {
-    this.target.setSize(width, height)
-  }
-
-  render(renderer, writeBuffer, readBuffer) {
-    this.scenePass.render(renderer, null, this.target)
-    this.copy.material.uniforms.tDiffuse.value = this.target.texture
-    renderer.setRenderTarget(this.renderToScreen ? null : readBuffer)
-    this.copy.render(renderer)
-  }
-
-  dispose() {
-    this.target.dispose()
-    this.copy.material.dispose()
-    this.copy.dispose()
+    this.uniforms.texel.value.set(1 / width, 1 / height)
+    this.uniforms.aspect.value = width / Math.max(1, height)
   }
 }
 
@@ -474,31 +466,21 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
   let quality = settings.effects === 'low' ? 'low' : 'high'
   let post = null
   let mood = null
-  let shade = null
   const backColor = new THREE.Color(0x0b0b0c)
   const size = new THREE.Vector2()
 
+  // La escena va a un buffer de punto flotante (lo que pasa de 1, la lava o el
+  // sol, llega entero al brillo), sin MSAA y con profundidad: el de EffectComposer.
   function buildPost() {
-    renderer.getSize(size)
-    const ratio = renderer.getPixelRatio()
-    // Punto flotante: lo que pasa de 1 (lava, ventanas, el sol) llega al bloom.
-    const target = new THREE.WebGLRenderTarget(size.x * ratio, size.y * ratio, {
-      type: THREE.HalfFloatType,
-      depthBuffer: false
-    })
-    const composer = new EffectComposer(renderer, target)
-    const bloom = new QuarterBloomPass(size.clone(), 0.4, 0.4, 0.9)
-    bloom.highPassUniforms.sceneTexel = { value: new THREE.Vector2(1, 1) }
-    bloom.materialHighPassFilter.fragmentShader = HIGH_PASS
-    bloom.materialHighPassFilter.needsUpdate = true
-    const finish = finishOutput(new OutputPass())
-    composer.addPass(new SceneMsaaPass(scene, camera, 4))
+    const composer = new EffectComposer(renderer)
+    const bloom = new QuarterBloomPass()
+    const finish = new FinishPass(bloom)
+    composer.addPass(new RenderPass(scene, camera))
     composer.addPass(bloom)
     composer.addPass(finish)
-    // Con un buffer propio el composer mide en px: se lo vuelve a medir en CSS.
-    composer.setPixelRatio(ratio)
+    renderer.getSize(size)
     composer.setSize(size.x, size.y)
-    return { composer, bloom, finish, ratio }
+    return { composer, bloom, finish, ratio: renderer.getPixelRatio() }
   }
 
   function freePost() {
@@ -508,43 +490,34 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     post = null
   }
 
-  // El acabado del cuadro segun el mapa o el titulo.
+  // El acabado del cuadro segun el mapa o el titulo. Sin bloom (los mapas de
+  // dia) el pase del brillo no corre y el final no lo suma.
   function dress(look) {
     const { bloom, finish } = post
-    ;[bloom.strength, bloom.radius, bloom.threshold] = look.bloom
-    bloom.highPassUniforms.smoothWidth.value = look.bloom[3]
+    bloom.enabled = !!look.bloom
+    if (look.bloom) {
+      ;[bloom.strength, bloom.radius, bloom.threshold] = look.bloom
+      bloom.highPassUniforms.smoothWidth.value = look.bloom[3]
+    }
     const u = finish.uniforms
-    u.tint.value.fromArray(look.tint)
-    u.saturation.value = look.saturation
-    u.contrast.value = look.contrast
+    u.bloomOn.value = look.bloom ? 1 : 0
+    u.tint.value.fromArray(look.tint || [1, 1, 1])
+    u.saturation.value = look.saturation || 1
+    u.contrast.value = look.contrast || 1
     u.vignette.value = look.vignette
-    u.aspect.value = size.x / Math.max(1, size.y)
     u.seed.value = (u.seed.value + 17.13) % 1000
   }
 
   function render(dt, screen) {
     renderer.info.reset()
     if (sky.visible) sky.material.uniforms.time.value = performance.now() / 1000
-    const look = screen === 'menu' ? TITLE : (mood || SHOWCASE).post
-    if (quality === 'low' || !look.bloom) {
+    if (quality === 'low') {
       renderer.render(scene, camera)
-      if (quality === 'high') vignette(look)
       return
     }
     if (!post) post = buildPost()
-    dress(look)
+    dress(screen === 'menu' ? TITLE : (mood || SHOWCASE).post)
     post.composer.render(dt)
-  }
-
-  function vignette(look) {
-    if (!shade) shade = vignetteQuad()
-    const u = shade.material.uniforms
-    u.vignette.value = look.vignette
-    u.aspect.value = size.x / Math.max(1, size.y)
-    const clears = renderer.autoClear
-    renderer.autoClear = false
-    shade.render(renderer)
-    renderer.autoClear = clears
   }
 
   function setSize(width, height) {
@@ -589,10 +562,6 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     post: () => post,
     dispose() {
       freePost()
-      if (shade) {
-        shade.material.dispose()
-        shade.dispose()
-      }
       scene.remove(sky)
       sky.geometry.dispose()
       sky.material.dispose()

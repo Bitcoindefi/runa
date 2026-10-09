@@ -746,41 +746,60 @@ function basaltTextures(renderer, keep) {
   }
 }
 
-// Ruido de gradiente en GLSL, como el de las nubes de Sky: los cruces por cero
-// dibujan rios de lava que serpentean por la meseta.
+// Los rios de lava son los cruces por cero de un ruido suave. El ruido se
+// calcula una vez, en una textura de media precision sobre toda la meseta, y el
+// shader solo umbraliza lo que lee: un rio queda nitido aunque cada texel mida
+// un cuarto de metro, porque se interpola el campo y no la linea.
 const LAVA_PARS = /* glsl */ `
 uniform float lavaTime;
+uniform sampler2D lavaRivers;
+uniform vec4 lavaFrame;
 varying vec2 vLava;
 varying vec2 vGround;
-vec2 lavaHash( vec2 p ) {
-  vec3 q = fract( p.xyx * vec3( 0.1031, 0.1030, 0.0973 ) );
-  q += dot( q, q.yzx + 33.33 );
-  return fract( ( q.xx + q.yz ) * q.zy ) * 2.0 - 1.0;
-}
-float lavaNoise( vec2 p ) {
-  vec2 i = floor( p );
-  vec2 f = fract( p );
-  vec2 u = f * f * ( 3.0 - 2.0 * f );
-  float a = dot( lavaHash( i ), f );
-  float b = dot( lavaHash( i + vec2( 1.0, 0.0 ) ), f - vec2( 1.0, 0.0 ) );
-  float c = dot( lavaHash( i + vec2( 0.0, 1.0 ) ), f - vec2( 0.0, 1.0 ) );
-  float d = dot( lavaHash( i + vec2( 1.0, 1.0 ) ), f - vec2( 1.0, 1.0 ) );
-  return mix( mix( a, b, u.x ), mix( c, d, u.x ), u.y );
-}
 `
 
 const LAVA_GLOW = /* glsl */ `
 #include <emissivemap_fragment>
 float flow = 0.8 + 0.2 * sin( lavaTime * 1.5 + vGround.x * 0.55 - vGround.y * 0.4 );
 totalEmissiveRadiance *= vLava.x * flow;
-float riverField = lavaNoise( vGround * 0.075 ) + 0.4 * lavaNoise( vGround * 0.19 + 3.7 );
-float riverWidth = 0.6 + 0.4 * lavaNoise( vGround * 0.5 + 11.0 );
-float riverLive = smoothstep( -0.25, 0.35, lavaNoise( vGround * 0.23 + 5.3 ) ) * vLava.y;
-float river = ( 1.0 - smoothstep( 0.006, 0.03 * riverWidth, abs( riverField ) ) ) * riverLive;
-float riverHalo = ( 1.0 - smoothstep( 0.0, 0.14, abs( riverField ) ) ) * riverLive;
+vec3 rivers = texture2D( lavaRivers, vGround * lavaFrame.xy + lavaFrame.zw ).rgb;
+float riverLive = rivers.b * vLava.y;
+float river = ( 1.0 - smoothstep( 0.006, 0.03 * rivers.g, abs( rivers.r ) ) ) * riverLive;
+float riverHalo = ( 1.0 - smoothstep( 0.0, 0.14, abs( rivers.r ) ) ) * riverLive;
 totalEmissiveRadiance += vec3( 1.0, 0.36, 0.07 ) * ( river * 1.7 * flow + riverHalo * 0.2 );
 diffuseColor.rgb *= 1.0 - river * 0.85;
 `
+
+// El campo de los rios sobre la meseta (span metros de lado, centrada en
+// center): r, el ruido cuyos ceros son los rios; g, su ancho; b, si estan vivos.
+function lavaRivers(noise, span, center, keep) {
+  const size = 256
+  const data = new Uint16Array(size * size * 4)
+  const half = THREE.DataUtils.toHalfFloat
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const x = center.x + ((i + 0.5) / size - 0.5) * span
+      const z = center.y + ((j + 0.5) / size - 0.5) * span
+      const field =
+        noise.noise(x * 0.075, z * 0.075, 0.5) + 0.4 * noise.noise(x * 0.19 + 3.7, z * 0.19, 1.5)
+      const width = 0.6 + 0.4 * noise.noise(x * 0.5 + 11, z * 0.5, 2.5)
+      const live = THREE.MathUtils.smoothstep(
+        noise.noise(x * 0.23 + 5.3, z * 0.23, 3.5),
+        -0.25,
+        0.35
+      )
+      data.set([half(field), half(width), half(live), half(1)], (j * size + i) * 4)
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.HalfFloatType)
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearFilter
+  texture.needsUpdate = true
+  keep(texture)
+  // De metros del mundo a la textura: uv = suelo * escala + corrimiento.
+  const frame = new THREE.Vector4(1 / span, 1 / span, 0.5 - center.x / span, 0.5 - center.y / span)
+  return { texture, frame }
+}
 
 // La meseta: plana donde estan el heroe y el Coloso, con lomas suaves hacia el
 // borde y un acantilado roto que cae al mar de nubes. Cada vertice lleva cuanto
@@ -827,6 +846,7 @@ function volcanicPlateau(noise, rock, lavaTime, keep) {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geometry.computeVertexNormals()
   keep(geometry)
+  const rivers = lavaRivers(noise, span, pivot, keep)
   const material = keep(
     new THREE.MeshStandardMaterial({
       map: rock.color,
@@ -843,6 +863,8 @@ function volcanicPlateau(noise, rock, lavaTime, keep) {
   material.normalScale.set(1.3, 1.3)
   material.onBeforeCompile = (shader) => {
     shader.uniforms.lavaTime = lavaTime
+    shader.uniforms.lavaRivers = { value: rivers.texture }
+    shader.uniforms.lavaFrame = { value: rivers.frame }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -974,7 +996,8 @@ function ruinsAndRocks(noise, keep) {
     geometry,
     keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }))
   )
-  mesh.castShadow = true
+  // La sombra del titulo cubre 20 m alrededor del heroe: las ruinas quedan
+  // afuera y dibujarlas en ella no daria nada. Las piedras cercanas son bajas.
   mesh.receiveShadow = true
   return mesh
 }
