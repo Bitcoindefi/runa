@@ -17,7 +17,13 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 
 ## Actualización para el hackathon de Tripo
 
-[Ver la demo de Tripo en inglés (MP4, 46 segundos)](docs/demo/runa-tripo-focused-en.mp4).
+[Ver la parte 1 con motion design y audio en inglés (MP4, 74 segundos)](docs/demo/runa-tripo-motion-part1-en.mp4).
+Compara los GLB originales con su uso en ASCII, identifica cada modelo de
+Tripo y muestra 30 segundos continuos de combate con el Coloso. La pelea
+usa una partida de demostración de nivel 20, indicada en pantalla, con vida
+y daño calculados por el juego. Incluye narración sintética y sonido de edición.
+
+[Ver la captura base en inglés (MP4, 46 segundos)](docs/demo/runa-tripo-focused-en.mp4).
 Muestra las integraciones de los modelos generados: el Coloso girando,
 el héroe al crear personaje, la compra y el equipamiento del yelmo y una
 pelea con el Coloso. Cada escena contiene un modelo de Tripo; el recorrido
@@ -28,6 +34,8 @@ en un navegador desde una partida de muestra en memoria. El combate está
 encuadrado en una terminal de `80×24`, ampliada para ver completo el modelo
 `43×13`, los ataques y los cambios de vida. La compra consume oro y los
 golpes reducen la vida del jefe. [Cómo se grabó](docs/demo-walkthrough.md).
+
+Tiempos de la captura base:
 
 | Tiempo      | Qué se demuestra                            | Modelo generado |
 | ----------- | ------------------------------------------- | --------------- |

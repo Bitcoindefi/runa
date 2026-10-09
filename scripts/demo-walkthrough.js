@@ -10,6 +10,7 @@ const { BossZone } = require('../lib/boss-zone.js')
 const { ansiToHtml, page } = require('./readme-screens.js')
 
 const game = new Runa({ presence: false, language: 'en' })
+const extended = Bare.argv.includes('--extended')
 game.width = 120
 game.height = 44
 const frames = []
@@ -53,6 +54,12 @@ game.width = 80
 game.height = 24
 game.player.items.add('sword')
 game.player.equip('sword')
+// Advanced combat fixture for the longer edit, with normal level-derived HP.
+// The video labels this jump; no level-up or damage immunity is fabricated.
+if (extended) {
+  game.player.xp = 30000
+  game.player.hp = game.player.maxHp
+}
 game.field = new BossZone({
   seed: 27,
   player: game.player,
@@ -61,11 +68,15 @@ game.field = new BossZone({
   y: 22
 })
 const bossStartHp = game.field.boss.hp
-chapter('Tripo Colossus in combat | Full model, real hits and attack warnings', 10, (i) => {
-  if (i % 15 === 0) press('f')
-  if (i === 30 || i === 60) press('up')
-  if (i === 90 || i === 120) press('down')
-})
+chapter(
+  'Tripo Colossus in combat | Full model, real hits and attack warnings',
+  extended ? 30 : 10,
+  (i) => {
+    if (i % 15 === 0) press('f')
+    if (i % 150 === 30 || i % 150 === 60) press('up')
+    if (i % 150 === 90 || i % 150 === 120) press('down')
+  }
+)
 if (!game.field || game.field.mode !== 'boss' || game.field.boss.hp >= bossStartHp) {
   throw new Error('The demo must show real damage to the Colossus and stay in its arena')
 }
@@ -74,6 +85,21 @@ const directory = path.resolve(Bare.argv[2] || 'output/playwright/demo-tripo-foc
 fs.mkdirSync(directory, { recursive: true })
 fs.writeFileSync(path.join(directory, 'frames.json'), JSON.stringify(frames))
 fs.writeFileSync(path.join(directory, 'chapters.json'), JSON.stringify(chapters, null, 2) + '\n')
+fs.writeFileSync(
+  path.join(directory, 'combat.json'),
+  JSON.stringify(
+    {
+      seconds: extended ? 30 : 10,
+      level: game.player.level,
+      playerHp: game.player.hp,
+      playerMaxHp: game.player.maxHp,
+      bossStartHp,
+      bossEndHp: game.field.boss.hp
+    },
+    null,
+    2
+  ) + '\n'
+)
 const controls = `<script>
 window.demo = { ready: false, done: false, playing: false };
 fetch('frames.json').then(r => r.json()).then(frames => {
