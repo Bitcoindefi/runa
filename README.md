@@ -17,7 +17,7 @@ El mundo corre sobre **Bare**, se dibuja con **bare-tui** y mantiene todo el art
 
 ## Actualización para el hackathon de Tripo
 
-[Ver la demo grabada (MP4, 68 segundos)](docs/demo/runa-tripo-demo-color.mp4).
+[Ver la demo en inglés (MP4, 68 segundos)](docs/demo/runa-tripo-demo-en.mp4).
 Es un recorrido reproducible por el render real del juego, grabado en un
 navegador a partir de entradas y cuadros de Runa. Usa una partida de muestra
 en memoria, sin tocar guardados. [Cómo se grabó](docs/demo-walkthrough.md).
@@ -30,26 +30,33 @@ conexión a Tripo para mostrarlos. Los cuadros ya están incluidos en el repo.
 
 ### Qué cambió y dónde verlo
 
-| Modelo generado con Tripo | Integración en RUNA                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Paisaje del reino         | Gira en el menú. Se combina con el héroe y el Coloso ya generados para componer el enfrentamiento fuera de las murallas. |
-| Coloso de piedra          | Aparece en su arena, reutilizando el modelo generado y conservando la lógica de combate.                                 |
-| Héroe con espada y escudo | Gira al crear un personaje y forma parte de la escena del menú.                                                          |
-| Yelmo de hierro           | Gira al seleccionarlo en la armería o en la mochila, cuando hay espacio en la terminal.                                  |
+| Modelo generado con Tripo | Integración en RUNA                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| Paisaje del reino         | Gira solo en el menú, sin figuras superpuestas, para facilitar la lectura del castillo.  |
+| Coloso de piedra          | Aparece en su arena, reutilizando el modelo generado y conservando la lógica de combate. |
+| Héroe con espada y escudo | Gira al crear un personaje.                                                              |
+| Yelmo de hierro           | Gira al seleccionarlo en la armería o en la mochila, cuando hay espacio en la terminal.  |
 
 Cada modelo tiene **24 vistas separadas por 15 grados**. Una vuelta tarda
-10,8 segundos en el menú; el héroe y el yelmo conservan sus vueltas de tres
-segundos. El reino va en cian, el héroe en amarillo y el Coloso en rojo para
-separar sus siluetas. Los cuadros del menú existen en `88×22`, `60×10` y `32×5` caracteres y se
+14,4 segundos en el menú; el héroe y el yelmo conservan sus vueltas de tres
+segundos. El reino va en cian. Los cuadros del menú existen en `88×22`, `60×10` y `32×5` caracteres y se
 elige el mayor que cabe sin ocultar los controles. Maximizar la terminal
 permite ver más detalle.
 
-**El reino y el enfrentamiento en el menú.** El diorama del reino se completa
-offline con las geometrías originales del héroe y el Coloso. Tripo generó el
-castillo sin los combatientes del prompt; reutilizamos sus modelos para
-completar la escena. Es una composición de figuras enfrentadas, sin rig.
+**El reino en el menú.** La portada utiliza únicamente el paisaje generado
+con Tripo. Quitamos las figuras superpuestas para que las torres y la base
+se distingan mejor, con una vista ligeramente elevada y rotación lenta.
 
-![Paisaje del reino con héroe y Coloso en el menú de RUNA](docs/screens/tripo-paisaje.png)
+![Reino de Tripo girando solo en el menú en inglés de RUNA](docs/screens/tripo-paisaje.png)
+
+**Español e inglés.** En el menú principal, `L` alterna el idioma. También
+podés iniciar con `npm start -- --lang en` o `--lang es`. La elección se
+mantiene durante la sesión; `--lang` permite elegirla en cada lanzamiento.
+El catálogo [en.json](lib/locales/en.json) traduce menús, controles,
+estadísticas, equipo, diálogos de residentes y mensajes principales.
+Los nombres de jugadores, identificadores de objetos, guardados y reglas
+de combate conservan sus valores. La demo nueva usa inglés tanto en el
+juego como en sus subtítulos de recorrido.
 
 **Coloso dentro del mapa.** Su dibujo utiliza ahora el GLB real convertido a
 un lienzo `43×13`. La vida, los ataques, los avisos y las colisiones siguen
@@ -101,7 +108,7 @@ Prompt de texto
    el ASCII conserva la forma y la luz, con el color aplicado por el juego.
 3. [assets/ascii](assets/ascii) contiene las 24 vistas de cada modelo en tres
    tamaños. [render.js](lib/render.js) las muestra y el reloj de
-   [game.js](lib/game.js) avanza las vistas: cada 450 ms en el menú y cada
+   [game.js](lib/game.js) avanza las vistas: cada 600 ms en el menú y cada
    125 ms aproximadamente en las vistas de personaje y yelmo.
    **Durante el juego solo se carga texto; el procesamiento 3D ocurre antes.**
 
@@ -380,8 +387,8 @@ npx bare test/map.smoke.js
 
 Estado revisado de esta versión:
 
-- `142/142` pruebas correctas.
-- `1340/1340` aserciones correctas.
+- `143/143` pruebas correctas.
+- `1360/1360` aserciones correctas.
 - Formato y lint limpios.
 - RUNA, NOX, fronteras, puertas, portón, pradera y dungeon validados por el smoke test.
 - Capturas inspeccionadas y recortadas al borde exacto de la terminal.

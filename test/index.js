@@ -195,7 +195,7 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
     game.update({ type: 'resize', width, height })
     game.animationTick = 0
     const first = style.stripAnsi(game.view())
-    for (let tick = 0; tick < 8; tick++) game.update({ type: 'tick' })
+    for (let tick = 0; tick < 10; tick++) game.update({ type: 'tick' })
     const next = style.stripAnsi(game.view())
     t.is(next.split('\n').length, height)
     t.ok(next.split('\n').every((line) => line.length === width))
@@ -208,10 +208,10 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
   const menu = { page: 'main', slots: [], frame: 0 }
   t.is(
     render.titleScreen(80, 44, '', menu),
-    render.titleScreen(80, 44, '', { ...menu, frame: 87 }),
+    render.titleScreen(80, 44, '', { ...menu, frame: 116 }),
     'the landscape wraps after one rotation'
   )
-  t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('HEROE'))
+  t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('REINO'))
   const slow = new Runa({ presence: false })
   slow.update({ type: 'resize', width: 120, height: 44 })
   const initial = slow.view()
@@ -219,7 +219,62 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
   slow.update({ type: 'tick' })
   t.is(initial, slow.view(), 'the menu holds each angle long enough to read it')
   t.ok(initial.includes('\x1b[36m'), 'the kingdom is colored cyan')
-  t.ok(initial.includes('\x1b[31m'), 'the colossus is colored red')
+  t.absent(initial.includes('\x1b[31m'), 'the kingdom preview contains no superposed colossus')
+})
+
+test('language selection localizes views without changing names, items or other games', (t) => {
+  const key = (name) => ({ type: 'key', is: (...keys) => keys.includes(name) })
+  const english = new Runa({ presence: false, language: 'en', name: 'oro' })
+  const spanish = new Runa({ presence: false })
+  english.width = spanish.width = 120
+  english.height = spanish.height = 44
+  t.ok(style.stripAnsi(english.view()).includes('NEW GAME'))
+  t.ok(style.stripAnsi(spanish.view()).includes('NUEVA PARTIDA'))
+  english.onKey(key('l'))
+  t.is(english.language, 'es')
+  t.ok(style.stripAnsi(english.view()).includes('NUEVA PARTIDA'))
+  english.onKey(key('l'))
+  english.onKey(key('enter'))
+  t.ok(style.stripAnsi(english.view()).includes('HOME KINGDOM'))
+  english.onKey(key('enter'))
+  english.player.xp = 60
+  english.player.gold = 100
+  english.shop = 'armor'
+  english.cursor = 5
+  const before = english.player.gold
+  t.ok(style.stripAnsi(english.view()).includes('IRON HELMET'))
+  english.onKey(key('enter'))
+  t.is(english.player.gold, before - 75)
+  t.is(english.player.equipped.head, 'iron_helmet')
+  english.onKey(key('escape'))
+  english.openInventory()
+  const inventory = style.stripAnsi(english.view())
+  t.ok(inventory.includes('GEAR AND BACKPACK'))
+  t.ok(
+    inventory.includes('oro'),
+    'player names are preserved even when they match a translated word'
+  )
+  t.absent(inventory.includes('YELMO DE HIERRO'))
+  for (const [width, height] of [
+    [64, 16],
+    [80, 24],
+    [120, 44]
+  ]) {
+    english.width = width
+    english.height = height
+    const lines = style.stripAnsi(english.view()).split('\n')
+    t.is(lines.length, height)
+    t.ok(
+      lines.every((line) => line.length === width),
+      'English keeps the terminal frame geometry'
+    )
+  }
+  t.ok(style.stripAnsi(spanish.view()).includes('NUEVA PARTIDA'), 'locale scope is restored')
+  const { withLanguage, mapLabels } = require('../lib/locale.js')
+  const sign = '| mercado del alba |'
+  const translated = withLanguage('en', () => mapLabels(sign))
+  t.is(translated.length, sign.length)
+  t.ok(translated.includes('dawn market'))
 })
 
 test('the controls button opens a complete overlay and returns to the previous state', (t) => {

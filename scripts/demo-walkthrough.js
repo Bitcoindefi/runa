@@ -10,7 +10,7 @@ const { Field } = require('../lib/field.js')
 const { BossZone } = require('../lib/boss-zone.js')
 const { ansiToHtml, page } = require('./readme-screens.js')
 
-const game = new Runa({ presence: false })
+const game = new Runa({ presence: false, language: 'en' })
 game.width = 120
 game.height = 44
 const frames = []
@@ -28,23 +28,23 @@ function chapter(caption, seconds, step = () => {}) {
   }
 }
 
-chapter('RUNA | Tripo: reino, heroe y coloso en una escena ASCII', 8)
+chapter('RUNA | A kingdom generated with Tripo, rendered inside the terminal', 8)
 press('enter')
-chapter('Nueva partida | Heroe generado con Tripo, nombre y reino', 8, (i) => {
+chapter('New game | Tripo hero, player name and home kingdom', 8, (i) => {
   if (i >= 20 && i < 24) type('Ayla'[i - 20])
 })
 press('enter')
-chapter('Exploracion | El mundo y los personajes viven en la terminal', 10, (i) => {
+chapter('Exploration | The world and characters live in the terminal', 10, (i) => {
   if (i % 4 === 0) press(i < 75 ? 'up' : 'right')
 })
 game.walker.placeAt('nox', 160, 103)
-chapter('Recorrido de muestra | NOX, el segundo reino', 6, (i) => {
+chapter('Demo route | NOX, the second kingdom', 6, (i) => {
   if (i % 6 === 0) press('left')
 })
 game.field = new Field({ seed: 17, player: game.player })
 game.field.player.x = 111
 game.field.player.y = 10
-chapter('Pradera | Exploracion y criaturas en movimiento', 8, (i) => {
+chapter('Meadow | Exploration and roaming creatures', 8, (i) => {
   if (i % 5 === 0) press('right')
 })
 game.field = null
@@ -54,13 +54,13 @@ game.player.gold = 100
 game.player.hp = game.player.maxHp
 game.shop = 'armor'
 game.cursor = 5
-chapter('Partida de muestra: nivel 3 y 100 oro | Yelmo Tripo en la armeria', 10, (i) => {
+chapter('Demo fixture: level 3 and 100 gold | Tripo helmet at the armory', 10, (i) => {
   if (i === 95) press('enter')
 })
 press('escape')
 game.openInventory()
 game.inventoryCursor = game.inventoryItems('carried').findIndex((item) => item.id === 'iron_helmet')
-chapter('Yelmo comprado y equipado | ASCII animado, defensa +2', 10)
+chapter('Helmet purchased and equipped | Animated ASCII, defense +2', 10)
 game.inventoryOpen = false
 game.field = new BossZone({
   seed: 27,
@@ -69,7 +69,7 @@ game.field = new BossZone({
   x: 101,
   y: 22
 })
-chapter('Ruinas del Coloso | El mismo modelo Tripo ahora vive en el mapa', 8)
+chapter('Colossus ruins | The same Tripo model now lives on the map', 8)
 
 const directory = path.resolve(Bare.argv[2] || 'output/playwright/demo')
 fs.mkdirSync(directory, { recursive: true })

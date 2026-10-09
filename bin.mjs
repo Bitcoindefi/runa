@@ -17,6 +17,7 @@ const cmd = command(
   flag('--storage <dir>', 'custom storage directory'),
   flag('--no-updates', 'disable OTA updates for this run'),
   flag('--name <name>', 'name other players see in the town'),
+  flag('--lang <language>', 'interface language: es or en (default es)'),
   flag('--solo', 'play without presence, nobody sees you and you see nobody')
 )
 
@@ -84,6 +85,7 @@ const { synchronizeRenderer } = await import('./lib/synchronized-renderer.js')
 // over explicitly rather than left for the game to dig out of Bare.argv.
 runa = new Runa({
   name: cmd.flags.name,
+  language: cmd.flags.lang,
   presence: !cmd.flags.solo,
   saves: new SaveStore(path.join(dir, 'saves'))
 })
