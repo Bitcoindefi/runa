@@ -43,8 +43,8 @@ const { document } = globalThis
 
 // Lo que cubre una textura de piedra, en metros: se repite cada TILE.
 const TILE = 4
-// Las mallas se cortan en trozos de este lado, asi la camara no dibuja todo.
-const CHUNK = 48
+// La piedra se corta en trozos de este lado, asi la camara no dibuja todo.
+const CHUNK = 64
 // Lo que la muralla del borde crece hacia afuera del mapa, en celdas.
 const PAD_X = 5
 const PAD_Z = 2
@@ -89,7 +89,8 @@ const STYLES = {
     accent: 0x5fe8c8,
     flame: [0.45, 1, 0.86],
     veins: true,
-    fence: 'iron'
+    fence: 'iron',
+    canvas: 0x2c6f68
   },
   castle: {
     stone: 0xc3bcae,
@@ -743,16 +744,24 @@ function kit(tile = TILE, state = {}) {
   return { face, box, obox, add, build, count: () => P.length / 3 }
 }
 
-// Los kits de un mapa, uno por material y por trozo: lo que cae en el mismo
-// trozo va en la misma malla.
-function workshop() {
+// Los kits de un mapa, uno por material. La piedra (casi todos los triangulos)
+// va ademas por trozos: lo que cae en el mismo trozo va en la misma malla y la
+// camara no dibuja los que no ve. Lo demas (techos, madera, telas, rejas,
+// venas, colores lisos) pesa poco y va en una sola malla por mapa: cada malla
+// es una llamada de dibujo mas. Lo que cae afuera del mapa (w x d metros) va
+// al trozo del borde.
+const CHUNKED = new Set(['stone'])
+function workshop(w, d) {
   const bins = new Map()
   const tiles = { stone: TILE, roof: 1.6, wood: 1, cloth: 1, fence: 1 }
   // state.clip: un recorte que se aplica a todo lo que se agregue mientras este.
   const state = { clip: null }
+  const piece = (v, size) => Math.floor(clamp(v, 0, size - 0.01) / CHUNK)
   return {
     at(material, x, z) {
-      const key = material + ':' + Math.floor(x / CHUNK) + ':' + Math.floor(z / CHUNK)
+      const key = CHUNKED.has(material)
+        ? material + ':' + piece(x, w) + ':' + piece(z, d)
+        : material
       if (!bins.has(key)) bins.set(key, { material, kit: kit(tiles[material] || 1, state) })
       return bins.get(key).kit
     },
@@ -814,11 +823,14 @@ function survey(world, style) {
 
   // Las murallas: tramos conectados de #, | - + y _. Con varias celdas # es
   // fortificacion; si no, cerco bajo. En las ruinas todo es muralla caida.
+  // Una fila de : (edificio) suelta que sigue a una pared es parte de ese
+  // tramo, como los lados de la plaza; sola la sigue subiendo tripo-mundo.js.
   const mass = new Uint8Array(N)
   const low = new Uint8Array(N)
   const comp = new Int32Array(N).fill(-1)
   const comps = []
   const isWall = (i) => !inBuilding[i] && WALLISH.has(kinds[i])
+  const joins = (i) => isWall(i) || (!inBuilding[i] && kinds[i] === 'building')
   for (let s = 0; s < N; s++) {
     if (comp[s] >= 0 || !isWall(s)) continue
     const id = comps.length
@@ -832,7 +844,7 @@ function survey(world, style) {
       if (kinds[i] === 'rampart') ramparts++
       const x = i % W
       for (const n of [i - W, i + W, x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1]) {
-        if (n >= 0 && n < N && comp[n] < 0 && isWall(n)) {
+        if (n >= 0 && n < N && comp[n] < 0 && joins(n)) {
           comp[n] = id
           stack.push(n)
         }
@@ -973,102 +985,167 @@ function padded(s) {
 
 // --- Portones -------------------------------------------------------------
 
+// Las cuatro direcciones de la grilla.
+const SIDES = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1]
+]
+
 // Un porton es una puerta gate.* en una linea de muralla: entre dos tramos de
-// la misma fila o columna, o pegada a la muralla que la cierra atras (las
+// la misma fila o columna, o pegada a la muralla que la cierra de frente (las
 // fronteras). Las puertas de los edificios no son portones: sus vecinas son
 // parte del edificio, no de la muralla.
 function findGates(world, s, style) {
-  const { data, doors, CX, CZ } = world
-  const { W, H, mass, walk } = s
+  const { data, doors } = world
   const gates = []
-  const isMass = (x, y) => x < 0 || y < 0 || x >= W || y >= H || mass[y * W + x] > 0
-  const isWalk = (x, y) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x] === 1
   for (const door of doors) {
     const tile = data.tiles[door.ch]
     if (!tile || !tile.id.startsWith('gate.')) continue
-    const { x, y } = door
-    // Hasta donde llega lo caminable desde la puerta antes de dar con muralla.
-    const scan = (dx, dy, max) => {
-      for (let k = 1; k <= max; k++) {
-        const cx = x + dx * k
-        const cy = y + dy * k
-        if (cx < 0 || cy < 0 || cx >= W || cy >= H) return null
-        if (mass[cy * W + cx]) return k
-        if (!walk[cy * W + cx]) return null
-      }
-      return null
-    }
-    // Lo ancho del camino que llega a la puerta, en celdas.
-    const road = (cx, cy, dx, dy) => {
-      if (!isWalk(cx, cy)) return 0
-      let a = 0
-      let b = 0
-      while (a < 12 && isWalk(cx - dx * (a + 1), cy - dy * (a + 1))) a++
-      while (b < 12 && isWalk(cx + dx * (b + 1), cy + dy * (b + 1))) b++
-      return a + b + 1
-    }
-    let gate = null
-    const l = scan(-1, 0, 9)
-    const r = scan(1, 0, 9)
-    const u = scan(0, -1, 4)
-    const d = scan(0, 1, 4)
-    if (l && r) {
-      const open = l + r - 1
-      const lanes = Math.max(open, road(x, y - 1, 1, 0), road(x, y + 1, 1, 0))
-      const back = isWalk(x, y - 1) ? (isWalk(x, y + 1) ? 0 : -1) : 1
-      gate = {
-        along: 'x',
-        line: y,
-        at: (x - (l - r) / 2 + 0.5) * CX,
-        lanes: lanes * CX,
-        open: open * CX,
-        face: back
-      }
-    } else if (u && d) {
-      const open = u + d - 1
-      const lanes = Math.max(open, road(x - 1, y, 0, 1), road(x + 1, y, 0, 1))
-      const back = isWalk(x - 1, y) ? (isWalk(x + 1, y) ? 0 : -1) : 1
-      gate = {
-        along: 'z',
-        line: x,
-        at: (y - (u - d) / 2 + 0.5) * CZ,
-        lanes: lanes * CZ,
-        open: open * CZ,
-        face: back
-      }
-    } else {
-      // Pegada a la muralla: la puerta esta delante y la muralla la cierra.
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1]
-      ]) {
-        if (!isMass(x + dx, y + dy) || !isWalk(x - dx, y - dy)) continue
-        const along = dx ? 'z' : 'x'
-        const lanes = dx ? road(x, y, 0, 1) : road(x, y, 1, 0)
-        gate = {
-          along,
-          line: dx ? x + dx : y + dy,
-          at: dx ? (y + 0.5) * CZ : (x + 0.5) * CX,
-          lanes: lanes * (dx ? CZ : CX),
-          open: 0,
-          face: -(dx || dy),
-          front: true
-        }
-        break
-      }
-    }
+    const gate = facingGate(world, s, door) || lineGate(world, s, door)
     if (!gate) continue
     gate.door = door
-    gate.key = x + ',' + y
-    // Hacia que lado de v queda afuera del mapa: ahi da el rastrillo.
-    gate.outer = gate.along === 'x' ? (y > H / 2 ? 1 : -1) : x > W / 2 ? 1 : -1
-    gate.arch = clamp(Math.max(gate.open, Math.min(gate.lanes, 3.6)), 2.4, 4.6)
-    if (gate.open >= 2.4) gate.arch = Math.min(gate.arch, gate.open)
+    gate.key = door.x + ',' + door.y
     if (layoutGate(world, s, gate, style)) gates.push(gate)
   }
   return gates
+}
+
+// Una puerta pegada a una muralla que la cierra de frente: esa es su unica
+// vecina de muralla, y atras y a los costados se camina (la frontera de RUNA y
+// NOX). El porton cruza esa muralla, centrado en el camino que llega a ella; si
+// del otro lado sigue el camino o se acaba el mapa, se ve de los dos lados.
+function facingGate(world, s, door) {
+  const { CX, CZ } = world
+  const { W, H, mass, walk } = s
+  const { x, y } = door
+  const inside = (cx, cy) => cx >= 0 && cy >= 0 && cx < W && cy < H
+  const isMass = (cx, cy) => !inside(cx, cy) || mass[cy * W + cx] > 0
+  const isWalk = (cx, cy) => inside(cx, cy) && walk[cy * W + cx] === 1
+  const walls = SIDES.filter(([dx, dy]) => isMass(x + dx, y + dy))
+  if (walls.length !== 1) return null
+  const [dx, dy] = walls[0]
+  if (!isWalk(x - dx, y - dy) || !isWalk(x + dy, y + dx) || !isWalk(x - dy, y - dx)) return null
+  // El camino que corre pegado a la muralla, a lo largo de ella.
+  const [tx, ty] = [Math.abs(dy), Math.abs(dx)]
+  const hugs = (k) => isWalk(x + tx * k, y + ty * k) && isMass(x + tx * k + dx, y + ty * k + dy)
+  let a = 0
+  while (a < 12 && hugs(-(a + 1))) a++
+  let b = 0
+  while (b < 12 && hugs(b + 1)) b++
+  // Lo grueso de la muralla y lo que hay del otro lado.
+  let depth = 1
+  while (depth < 6 && inside(x + dx * (depth + 1), y + dy * (depth + 1))) {
+    if (!mass[(y + dy * (depth + 1)) * W + x + dx * (depth + 1)]) break
+    depth++
+  }
+  const bx = x + dx * (depth + 1)
+  const by = y + dy * (depth + 1)
+  const edge = !inside(bx, by)
+  const through = edge || walk[by * W + bx] === 1
+  const sign = dx || dy
+  const line = dx ? x + dx : y + dy
+  // En el borde del mapa la muralla sigue hacia afuera (padded): el bloque
+  // la cruza entera.
+  const far = line + sign * (depth - 1 + (edge ? (dx ? PAD_X : PAD_Z) : 0))
+  const cell = dx ? CZ : CX
+  const mid = (dx ? y : x) + (b - a) / 2 + 0.5
+  const lanes = (a + b + 1) * cell
+  return {
+    along: dx ? 'z' : 'x',
+    line,
+    at: mid * cell,
+    lanes,
+    open: 0,
+    face: through ? 0 : -sign,
+    outer: sign,
+    front: true,
+    span: [Math.min(line, far), Math.max(line, far)],
+    arch: clamp(lanes - 1.4, 2.4, 4.6)
+  }
+}
+
+// Una puerta en la linea de una muralla: entre dos tramos de la misma fila (o
+// columna). Si se camina de los dos lados, se cruza; si no, es ciega y solo
+// muestra la cara que da a lo caminable.
+function lineGate(world, s, door) {
+  const { CX, CZ } = world
+  const { W, H, mass, walk } = s
+  const { x, y } = door
+  const isWalk = (cx, cy) => cx >= 0 && cy >= 0 && cx < W && cy < H && walk[cy * W + cx] === 1
+  // Hasta donde llega lo caminable desde la puerta antes de dar con muralla.
+  const scan = (dx, dy, max) => {
+    for (let k = 1; k <= max; k++) {
+      const cx = x + dx * k
+      const cy = y + dy * k
+      if (cx < 0 || cy < 0 || cx >= W || cy >= H) return null
+      if (mass[cy * W + cx]) return k
+      if (!walk[cy * W + cx]) return null
+    }
+    return null
+  }
+  // Lo ancho del camino que llega a la puerta, en celdas.
+  const road = (cx, cy, dx, dy) => {
+    if (!isWalk(cx, cy)) return 0
+    let a = 0
+    let b = 0
+    while (a < 12 && isWalk(cx - dx * (a + 1), cy - dy * (a + 1))) a++
+    while (b < 12 && isWalk(cx + dx * (b + 1), cy + dy * (b + 1))) b++
+    return a + b + 1
+  }
+  let gate = null
+  const l = scan(-1, 0, 9)
+  const r = scan(1, 0, 9)
+  const u = scan(0, -1, 4)
+  const d = scan(0, 1, 4)
+  if (l && r) {
+    const open = l + r - 1
+    const lanes = Math.max(open, road(x, y - 1, 1, 0), road(x, y + 1, 1, 0))
+    const back = isWalk(x, y - 1) ? (isWalk(x, y + 1) ? 0 : -1) : 1
+    gate = {
+      along: 'x',
+      line: y,
+      at: (x - (l - r) / 2 + 0.5) * CX,
+      lanes: lanes * CX,
+      open: open * CX,
+      face: back
+    }
+  } else if (u && d) {
+    const open = u + d - 1
+    const lanes = Math.max(open, road(x - 1, y, 0, 1), road(x + 1, y, 0, 1))
+    const back = isWalk(x - 1, y) ? (isWalk(x + 1, y) ? 0 : -1) : 1
+    gate = {
+      along: 'z',
+      line: x,
+      at: (y - (u - d) / 2 + 0.5) * CZ,
+      lanes: lanes * CZ,
+      open: open * CZ,
+      face: back
+    }
+  }
+  if (!gate) return null
+  // Hacia que lado de v queda afuera del mapa: ahi da el rastrillo.
+  gate.outer = gate.along === 'x' ? (y > H / 2 ? 1 : -1) : x > W / 2 ? 1 : -1
+  // Una puerta ciega cuya muralla de atras llega al borde del mapa es una
+  // salida (la del castillo): el porton cruza hasta afuera y se ve de los dos
+  // lados.
+  if (gate.face) {
+    const sign = -gate.face
+    const [ax, ay] = gate.along === 'x' ? [0, sign] : [sign, 0]
+    const inside = (k) => x + ax * k >= 0 && y + ay * k >= 0 && x + ax * k < W && y + ay * k < H
+    let k = 1
+    while (inside(k) && mass[(y + ay * k) * W + x + ax * k]) k++
+    if (!inside(k)) {
+      const far = gate.line + sign * (k - 1 + (gate.along === 'x' ? PAD_Z : PAD_X))
+      gate.span = [Math.min(gate.line, far), Math.max(gate.line, far)]
+      gate.face = 0
+      gate.outer = sign
+    }
+  }
+  gate.arch = clamp(Math.max(gate.open, Math.min(gate.lanes, 3.6)), 2.4, 4.6)
+  if (gate.open >= 2.4) gate.arch = Math.min(gate.arch, gate.open)
+  return gate
 }
 
 // Donde cabe el bloque del porton: los pilares a los lados del arco tienen que
@@ -1089,19 +1166,20 @@ function layoutGate(world, s, g, style) {
   }
   const half = g.arch / 2
   // Las filas (o columnas) que cruza el bloque: un porton que pasa de lado a
-  // lado se centra en su linea; uno ciego se mete en la muralla hacia atras.
-  const spans = g.face
-    ? g.front
-      ? [[g.line, g.line - 6 * g.face]]
-      : [[g.line, g.line - 3 * g.face]]
-    : [
-        [g.line - 1, g.line + 1],
-        [g.line - 2, g.line],
-        [g.line, g.line + 2],
-        [g.line - 1, g.line],
-        [g.line, g.line + 1],
-        [g.line, g.line]
-      ]
+  // lado se centra en su linea; uno ciego se mete en la muralla hacia atras;
+  // uno de frente cruza la muralla que lo cierra (span).
+  const spans = g.span
+    ? [g.span]
+    : g.face
+      ? [[g.line, g.line - 3 * g.face]]
+      : [
+          [g.line - 1, g.line + 1],
+          [g.line - 2, g.line],
+          [g.line, g.line + 2],
+          [g.line - 1, g.line],
+          [g.line, g.line + 1],
+          [g.line, g.line]
+        ]
   for (const pier of [1.7, 1.3, 1, 0.75, 0.5, 0.3]) {
     const i0 = Math.floor((g.at - half - pier) / cu + 1e-6)
     const i1 = Math.ceil((g.at + half + pier) / cu - 1e-6) - 1
@@ -1201,6 +1279,14 @@ function placeTowers(world, s, grid, gates, style, towers) {
   const outside = (t) => t.x < 0 || t.z < 0 || t.x > s.W * CX || t.z > s.H * CZ
   const blocksExit = (t) =>
     outside(t) && exits.some(([x, z]) => Math.hypot(x - t.x, z - t.z) < t.r + 3)
+  // Lo que se abre desde una celda en una direccion hasta la proxima muralla,
+  // en celdas: en la boca de un paso angosto no va garita, que lo taparia.
+  const gap = (gx, gy, dx, dy) => {
+    let n = 0
+    while (n < 12 && !solid(gx + dx * (n + 1), gy + dy * (n + 1))) n++
+    return n
+  }
+  const narrow = (c) => gap(c.gx, c.gy, c.dx, 0) * CX < 3 || gap(c.gx, c.gy, 0, c.dy) * CZ < 3
   // Esquinas salientes: la celda y sus dos vecinas de un lado no son muralla.
   const corners = []
   for (let gy = 0; gy < GH; gy++) {
@@ -1214,20 +1300,16 @@ function placeTowers(world, s, grid, gates, style, towers) {
       ]) {
         if (solid(gx + dx, gy) || solid(gx, gy + dy) || solid(gx + dx, gy + dy)) continue
         // Que las dos caras sigan al menos 2,5 m.
+        const alongFace = (k) => solid(gx - dx * k, gy) && !solid(gx - dx * k, gy + dy)
+        const downFace = (k) => solid(gx, gy - dy * k) && !solid(gx + dx, gy - dy * k)
         let along = 0
-        while (
-          along < 8 &&
-          solid(gx - dx * (along + 1), gy) &&
-          !solid(gx - dx * (along + 1), gy + dy)
-        )
-          along++
+        while (along < 8 && alongFace(along + 1)) along++
         let down = 0
-        while (down < 4 && solid(gx, gy - dy * (down + 1)) && !solid(gx + dx, gy - dy * (down + 1)))
-          down++
+        while (down < 4 && downFace(down + 1)) down++
         if ((along + 1) * CX < 2.4 || (down + 1) * CZ < 2.4) continue
         const x = X(gx) + (dx > 0 ? CX : 0)
         const z = Z(gy) + (dy > 0 ? CZ : 0)
-        corners.push({ x, z, dx, dy, h: gh[gy * GW + gx] })
+        corners.push({ x, z, dx, dy, gx, gy, h: gh[gy * GW + gx] })
       }
     }
   }
@@ -1242,7 +1324,7 @@ function placeTowers(world, s, grid, gates, style, towers) {
       towers.push({ ...site, h: c.h + 2.6, big: true })
       continue
     }
-    if (c.h < style.curtain - 0.1) continue
+    if (c.h < style.curtain - 0.1 || narrow(c)) continue
     if (turrets.some((t) => Math.hypot(t.x - c.x, t.z - c.z) < 4)) continue
     if (towers.some((t) => Math.hypot(t.x - c.x, t.z - c.z) < t.r + 2)) continue
     turrets.push({ x: c.x + c.dx * 0.15, z: c.z + c.dy * 0.15, r: 0.72, h: c.h })
@@ -1858,6 +1940,33 @@ function tower(shop, t, style, colors, flags) {
     : roundTower(shop, t, style, colors, flags)
 }
 
+// Dos antorchas en la cara v de un porton, a `reach` del centro del arco: un
+// brazo de hierro, la copa y la llama, que tiembla en el shader (flameMesh).
+// out dice hacia que lado de v mira la cara.
+function torches(wood, at, reach, v, out, colors, decor) {
+  for (const side of [-1, 1]) {
+    const u = side * reach
+    const p = at(u - 0.05, 2.15, v)
+    const q = at(u + 0.05, 2.3, v + out * 0.34)
+    wood.box(
+      Math.min(p[0], q[0]),
+      2.15,
+      Math.min(p[2], q[2]),
+      Math.max(p[0], q[0]),
+      2.3,
+      Math.max(p[2], q[2]),
+      colors.iron,
+      { bottom: true, grime: false }
+    )
+    const cup = at(u, 2.3, v + out * 0.34)
+    wood.box(cup[0] - 0.07, 2.3, cup[2] - 0.07, cup[0] + 0.07, 2.55, cup[2] + 0.07, colors.iron, {
+      bottom: true,
+      grime: false
+    })
+    decor.flames.push([cup[0], 2.72, cup[2]])
+  }
+}
+
 // El porton: el bloque con el arco recortado (ExtrudeGeometry de un Shape,
 // como el ejemplo de formas extruidas de three.js), dovelas con su clave,
 // jambas de sillares, las dos hojas de madera abiertas, el rastrillo subido,
@@ -1938,9 +2047,10 @@ function gatehouse(shop, g, style, colors, decor) {
       )
     }
   }
-  // Un portico (una abertura sin porton) termina aca: el arco y sus dovelas,
-  // con una albardilla arriba y sin almenas, asi no tapa lo que hay detras.
-  if (g.plain) {
+  // Un portico (una abertura sin porton) lleva el arco y sus dovelas. En una
+  // muralla alta el adarve sigue por encima con sus almenas; si no, termina
+  // con una albardilla, asi no tapa lo que hay detras.
+  if (g.plain && !g.crown) {
     const a = at(g.u0 - 0.03, H, g.v0 - 0.06)
     const b = at(g.u1 + 0.03, H + 0.1, g.v1 + 0.06)
     k.box(
@@ -1991,6 +2101,10 @@ function gatehouse(shop, g, style, colors, decor) {
         { top: colors.trim, grime: false }
       )
     }
+  }
+  if (g.plain) {
+    if (g.crown) torches(wood, at, half + 0.55, g.outer > 0 ? g.v1 : g.v0, g.outer, colors, decor)
+    return
   }
   // Las caras que se ven: las dos si el porton se cruza; si es ciego, la que
   // da a lo caminable (face dice hacia que lado de v queda).
@@ -2047,28 +2161,7 @@ function gatehouse(shop, g, style, colors, decor) {
         )
       }
     }
-    // Antorchas a los dos lados del arco.
-    for (const side of [-1, 1]) {
-      const u = side * (half + 0.62)
-      const p = at(u - 0.05, 2.15, v)
-      const q = at(u + 0.05, 2.3, v + f.out * 0.34)
-      wood.box(
-        Math.min(p[0], q[0]),
-        2.15,
-        Math.min(p[2], q[2]),
-        Math.max(p[0], q[0]),
-        2.3,
-        Math.max(p[2], q[2]),
-        colors.iron,
-        { bottom: true, grime: false }
-      )
-      const cup = at(u, 2.3, v + f.out * 0.34)
-      wood.box(cup[0] - 0.07, 2.3, cup[2] - 0.07, cup[0] + 0.07, 2.55, cup[2] + 0.07, colors.iron, {
-        bottom: true,
-        grime: false
-      })
-      decor.flames.push([cup[0], 2.72, cup[2]])
-    }
+    torches(wood, at, half + 0.62, v, f.out, colors, decor)
     // Estandartes: cuelgan de la cornisa, sobre los pilares o junto al arco.
     const room = Math.min(-g.u0, g.u1) - half
     const bu = room >= 1.1 ? half + room * 0.55 : half + 0.62
@@ -2171,16 +2264,17 @@ function gatehouse(shop, g, style, colors, decor) {
 // --- Cercos bajos -----------------------------------------------------------
 
 // Los tramos de pared que no son fortificacion: cercos de jardin, bordes de
-// plaza, el borde de una fuente, los postes de un puesto. Van por el eje de
-// las celdas, mas finos que la celda, con pilares en las puntas y esquinas.
+// plaza, el borde de una fuente. Van por el eje de las celdas, mas finos que
+// la celda, con pilares en las puntas y esquinas. Los puestos del mercado ya
+// no estan en `low`: los arma stallGeometry.
 function lowWalls(world, s, shop, style, colors) {
-  const { data, kinds, CX, CZ, inBuilding } = world
+  const { data, kinds, CX, CZ } = world
   const { W, H, low, comps, charAt } = s
   const kindOf = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? null : kinds[y * W + x])
   const isLow = (x, y) => x >= 0 && y >= 0 && x < W && y < H && low[y * W + x] === 1
   // Cada tramo se viste segun lo que tiene alrededor.
   const look = new Uint8Array(W * H)
-  const LOOK = { wall: 1, rim: 2, stall: 3, curb: 4 }
+  const LOOK = { wall: 1, rim: 2, curb: 3 }
   for (const c of comps) {
     if (c.fort) continue
     let water = 0
@@ -2201,46 +2295,10 @@ function lowWalls(world, s, shop, style, colors) {
     else if (masonry > c.cells.length * 0.6) kind = LOOK.curb
     for (const i of c.cells) look[i] = kind
   }
-  // Los puestos del mercado: un dibujo chico (celdas que no se pisan, unidas en
-  // diagonal) con mostrador (_), mercaderia ([] {}) y toldo (/\).
-  const ART = new Set(['wall', 'masonry', 'roof', 'window', 'ornament', 'sign', 'body', 'frame'])
-  const piece = new Uint8Array(W * H)
-  for (let s0 = 0; s0 < W * H; s0++) {
-    if (piece[s0] || !low[s0]) continue
-    const cells = []
-    const stack = [s0]
-    piece[s0] = 1
-    const count = { roof: 0, wares: 0, masonry: 0 }
-    while (stack.length && cells.length < 120) {
-      const i = stack.pop()
-      cells.push(i)
-      const k = kinds[i]
-      if (k === 'roof') count.roof++
-      if (k === 'window' || k === 'ornament') count.wares++
-      if (k === 'masonry') count.masonry++
-      const x = i % W
-      const y = (i - x) / W
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx
-          const ny = y + dy
-          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
-          const n = ny * W + nx
-          if (piece[n] || inBuilding[n] || s.walk[n] || !ART.has(kinds[n])) continue
-          piece[n] = 1
-          stack.push(n)
-        }
-      }
-    }
-    if (cells.length < 120 && count.roof >= 2 && count.wares >= 2 && count.masonry) {
-      for (const i of cells) if (low[i]) look[i] = LOOK.stall
-    }
-  }
   const spec = {
     [LOOK.wall]: { t: 0.42, h: style.fence === 'iron' ? 0.42 : data.id === 'castle' ? 1.15 : 0.82 },
     [LOOK.curb]: { t: 0.5, h: 0.62 },
-    [LOOK.rim]: { t: 0.36, h: 0.5 },
-    [LOOK.stall]: { t: 0.5, h: 0.95 }
+    [LOOK.rim]: { t: 0.36, h: 0.5 }
   }
   const pillars = []
   const fences = []
@@ -2258,13 +2316,14 @@ function lowWalls(world, s, shop, style, colors) {
           continue
         }
         const kind = look[y * W + x]
+        // La celda c de esta linea sigue el tramo: es cerco y del mismo tipo.
+        const follows = (c) => {
+          const cx = rowWise ? c : line
+          const cy = rowWise ? line : c
+          return isLow(cx, cy) && look[cy * W + cx] === kind
+        }
         let b = a
-        while (
-          b + 1 < cells &&
-          isLow(rowWise ? b + 1 : line, rowWise ? line : b + 1) &&
-          look[(rowWise ? line : b + 1) * W + (rowWise ? b + 1 : line)] === kind
-        )
-          b++
+        while (b + 1 < cells && follows(b + 1)) b++
         if (b > a) {
           const { t, h } = spec[kind]
           const c0 = rowWise ? (a + 0.5) * CX : (line + 0.5) * CX
@@ -2275,22 +2334,14 @@ function lowWalls(world, s, shop, style, colors) {
           const x1 = Math.max(c0, c1) + t / 2
           const zz0 = Math.min(z0, z1) - t / 2
           const zz1 = Math.max(z0, z1) + t / 2
-          if (kind === LOOK.stall) {
-            // Mostrador de madera: tabla arriba y frente oscuro.
-            const k = shop.at('wood', (x0 + x1) / 2, (zz0 + zz1) / 2)
-            k.box(x0, 0, zz0, x1, h - 0.08, zz1, colors.wood.clone().multiplyScalar(0.7))
-            k.box(x0 - 0.06, h - 0.08, zz0 - 0.06, x1 + 0.06, h, zz1 + 0.06, colors.wood, {
-              bottom: true
-            })
-          } else {
-            const k = shop.at('stone', (x0 + x1) / 2, (zz0 + zz1) / 2)
-            k.box(x0, 0, zz0, x1, h, zz1, colors.stone)
-            k.box(x0 - 0.05, h, zz0 - 0.05, x1 + 0.05, h + 0.08, zz1 + 0.05, colors.trim, {
-              bottom: true,
-              grime: false
-            })
-            if (kind === LOOK.wall && style.fence === 'iron')
-              fences.push({ rowWise, x0, x1, z0: zz0, z1: zz1, y: h + 0.08 })
+          const k = shop.at('stone', (x0 + x1) / 2, (zz0 + zz1) / 2)
+          k.box(x0, 0, zz0, x1, h, zz1, colors.stone)
+          k.box(x0 - 0.05, h, zz0 - 0.05, x1 + 0.05, h + 0.08, zz1 + 0.05, colors.trim, {
+            bottom: true,
+            grime: false
+          })
+          if (kind === LOOK.wall && style.fence === 'iron') {
+            fences.push({ rowWise, x0, x1, z0: zz0, z1: zz1, y: h + 0.08 })
           }
         }
         a = b + 1
@@ -2298,7 +2349,7 @@ function lowWalls(world, s, shop, style, colors) {
     }
   }
   // Pilares: en las puntas, esquinas, cruces y los + del dibujo; en los cercos
-  // largos, uno cada tanto. En un puesto, postes de madera.
+  // largos, uno cada tanto.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (!isLow(x, y)) continue
@@ -2309,32 +2360,15 @@ function lowWalls(world, s, shop, style, colors) {
       const end = h2 + v2 <= 1
       const corner = h2 > 0 && v2 > 0
       const regular = (h2 === 2 && x % 12 === 0) || (v2 === 2 && y % 6 === 0)
-      if (kind === LOOK.stall) {
-        if (ch === '|' || ch === '+' || h2 + v2 === 0) pillars.push({ x, y, kind, ch })
-        continue
-      }
-      if (end || corner || ch === '+' || (kind === LOOK.wall && regular))
+      if (end || corner || ch === '+' || (kind === LOOK.wall && regular)) {
         pillars.push({ x, y, kind, ch })
+      }
     }
   }
   for (const p of pillars) {
     const cx = (p.x + 0.5) * CX
     const cz = (p.y + 0.5) * CZ
     const { t, h } = spec[p.kind]
-    if (p.kind === LOOK.stall) {
-      shop
-        .at('wood', cx, cz)
-        .box(
-          cx - 0.09,
-          0,
-          cz - 0.09,
-          cx + 0.09,
-          2.25,
-          cz + 0.09,
-          colors.wood.clone().multiplyScalar(0.8)
-        )
-      continue
-    }
     const k = shop.at('stone', cx, cz)
     const w = (p.kind === LOOK.rim ? t + 0.08 : t + 0.2) / 2
     const ph = style.fence === 'iron' && p.kind === LOOK.wall ? 1.6 : h + 0.38
@@ -2398,6 +2432,215 @@ function lowWalls(world, s, shop, style, colors) {
         ]
       )
     }
+  }
+}
+
+// --- Puestos del mercado -----------------------------------------------------
+
+// Lo que puede ser parte del dibujo de un puesto.
+const STALL_ART = new Set([
+  'wall',
+  'masonry',
+  'roof',
+  'window',
+  'ornament',
+  'sign',
+  'body',
+  'frame'
+])
+
+// Los puestos del mercado: un dibujo chico (celdas que no se pisan, unidas en
+// diagonal) con mostrador (_), mercaderia ([] {} ()) y toldo (/\). Devuelve
+// cada uno con sus celdas por clase; sus paredes dejan de ser cerco bajo.
+function findStalls(world, s) {
+  const { kinds, inBuilding } = world
+  const { W, H, low, walk } = s
+  const piece = new Uint8Array(W * H)
+  const stalls = []
+  for (let s0 = 0; s0 < W * H; s0++) {
+    if (piece[s0] || !low[s0]) continue
+    const cells = []
+    const stack = [s0]
+    piece[s0] = 1
+    while (stack.length && cells.length < 120) {
+      const i = stack.pop()
+      cells.push(i)
+      const x = i % W
+      const y = (i - x) / W
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+          const n = ny * W + nx
+          if (piece[n] || inBuilding[n] || walk[n] || !STALL_ART.has(kinds[n])) continue
+          piece[n] = 1
+          stack.push(n)
+        }
+      }
+    }
+    const of = (...list) => cells.filter((i) => list.includes(kinds[i]))
+    const st = {
+      cells,
+      roof: of('roof'),
+      wares: of('window', 'ornament'),
+      counter: of('masonry'),
+      posts: of('wall'),
+      benches: of('frame')
+    }
+    if (cells.length >= 120 || st.roof.length < 2 || st.wares.length < 2 || !st.counter.length) {
+      continue
+    }
+    for (const i of cells) low[i] = 0
+    stalls.push(st)
+  }
+  return stalls
+}
+
+// Lo que se vende, por el caracter del dibujo: pan y canastas en [], frutas
+// en {}, telas y sacos en (). Cada cajon toma uno de su familia.
+const GOODS = {
+  '[': [0xc8964b, 0xe0b46a, 0x9b6a35],
+  ']': [0xc8964b, 0xe0b46a, 0x9b6a35],
+  '{': [0xc0392b, 0x7fb03f, 0xe69138],
+  '}': [0xc0392b, 0x7fb03f, 0xe69138],
+  '(': [0x3d6fb6, 0x8e44ad, 0xeee6d4],
+  ')': [0x3d6fb6, 0x8e44ad, 0xeee6d4]
+}
+
+// Un puesto: el mostrador de madera a lo largo de cada fila que lo tiene, con
+// la mercaderia encima en cajones de colores; postes en los | del dibujo y un
+// toldo a rayas que lo cubre entero, bajando hacia el lado del mostrador.
+function stallGeometry(world, s, shop, st, colors) {
+  const { CX, CZ } = world
+  const { W, charAt } = s
+  const xy = (i) => [i % W, Math.floor(i / W)]
+  const wood = shop.at('wood', 0, 0)
+  const dark = colors.wood.clone().multiplyScalar(0.7)
+  // El mostrador: por fila, los tramos seguidos de mostrador y mercaderia.
+  const counterRows = new Set(st.counter.map((i) => xy(i)[1]))
+  const byRow = new Map()
+  for (const i of [...st.counter, ...st.wares]) {
+    const [x, y] = xy(i)
+    if (!counterRows.has(y)) continue
+    if (!byRow.has(y)) byRow.set(y, [])
+    byRow.get(y).push(x)
+  }
+  for (const [y, xs] of byRow) {
+    xs.sort((a, b) => a - b)
+    let a = 0
+    while (a < xs.length) {
+      let b = a
+      while (b + 1 < xs.length && xs[b + 1] === xs[b] + 1) b++
+      const x0 = xs[a] * CX
+      const x1 = (xs[b] + 1) * CX
+      const z0 = y * CZ + 0.18
+      const z1 = (y + 1) * CZ - 0.18
+      wood.box(x0, 0, z0, x1, 0.84, z1, dark)
+      wood.box(x0 - 0.04, 0.84, z0 - 0.07, x1 + 0.04, 0.92, z1 + 0.07, colors.wood, {
+        bottom: true
+      })
+      a = b + 1
+    }
+  }
+  // La mercaderia: un cajon por celda, sobre el mostrador o en el piso.
+  for (const i of st.wares) {
+    const [x, y] = xy(i)
+    const cx = (x + 0.5) * CX
+    const cz = (y + 0.5) * CZ
+    const base = counterRows.has(y) ? 0.92 : 0
+    const family = GOODS[charAt(x, y)] || GOODS['{']
+    const tint = new THREE.Color(family[Math.floor(hash(x, y) * family.length)])
+    wood.box(cx - 0.21, base, cz - 0.24, cx + 0.21, base + 0.2, cz + 0.24, colors.wood, {
+      bottom: !base
+    })
+    const heap = shop.at('paint', cx, cz)
+    heap.box(cx - 0.17, base + 0.2, cz - 0.2, cx + 0.17, base + 0.31, cz + 0.2, tint, {
+      grime: false
+    })
+  }
+  // Bancos bajos donde el dibujo tiene otra cosa (=).
+  for (const i of st.benches) {
+    const [x, y] = xy(i)
+    wood.box(x * CX + 0.04, 0, y * CZ + 0.2, (x + 1) * CX - 0.04, 0.45, (y + 1) * CZ - 0.2, dark)
+  }
+  // El toldo: cubre todo el dibujo; baja hacia el mostrador (o hacia el sur).
+  let [bx0, bx1, bz0, bz1] = [Infinity, -Infinity, Infinity, -Infinity]
+  for (const i of st.cells) {
+    const [x, y] = xy(i)
+    bx0 = Math.min(bx0, x)
+    bx1 = Math.max(bx1, x)
+    bz0 = Math.min(bz0, y)
+    bz1 = Math.max(bz1, y)
+  }
+  const roofRow = st.roof.reduce((sum, i) => sum + xy(i)[1], 0) / st.roof.length
+  const counterRow = [...counterRows].reduce((sum, y) => sum + y, 0) / counterRows.size
+  const south = counterRow >= roofRow
+  const x0 = bx0 * CX - 0.1
+  const x1 = (bx1 + 1) * CX + 0.1
+  const zBack = south ? bz0 * CZ + 0.1 : (bz1 + 1) * CZ - 0.1
+  const zFront = south ? (bz1 + 1) * CZ + 0.12 : bz0 * CZ - 0.12
+  const yBack = 2.8
+  const yFront = 2.3
+  const cloth = shop.at('cloth', (x0 + x1) / 2, (zBack + zFront) / 2)
+  const stripes = Math.max(2, Math.round((x1 - x0) / 0.5))
+  const tones = [colors.banner, colors.canvas]
+  for (let k = 0; k < stripes; k++) {
+    const a = x0 + ((x1 - x0) * k) / stripes
+    const b = x0 + ((x1 - x0) * (k + 1)) / stripes
+    const tone = tones[k % 2]
+    // El faldon de adelante tiembla un poco (uv.y); el toldo tenso, no.
+    cloth.face(
+      [
+        [a, yBack, zBack],
+        [b, yBack, zBack],
+        [b, yFront, zFront],
+        [a, yFront, zFront]
+      ],
+      tone,
+      [0, 1, 0],
+      false,
+      [
+        [0, 0],
+        [0, 0],
+        [0, 0],
+        [0, 0]
+      ]
+    )
+    cloth.face(
+      [
+        [a, yFront, zFront],
+        [b, yFront, zFront],
+        [b, yFront - 0.24, zFront],
+        [a, yFront - 0.24, zFront]
+      ],
+      tone,
+      [0, 0, south ? 1 : -1],
+      false,
+      [
+        [0, 0],
+        [0, 0],
+        [0, 0.3],
+        [0, 0.3]
+      ]
+    )
+  }
+  // Los postes: en los | del dibujo y en las esquinas del toldo que no caen
+  // donde se camina.
+  const pole = colors.wood.clone().multiplyScalar(0.8)
+  const heightAt = (z) => yBack + ((yFront - yBack) * (z - zBack)) / (zFront - zBack)
+  const spots = st.posts.map((i) => {
+    const [x, y] = xy(i)
+    return [(x + 0.5) * CX, (y + 0.5) * CZ]
+  })
+  for (const zz of [zBack + (south ? 0.06 : -0.06), zFront - (south ? 0.3 : -0.3)]) {
+    for (const xx of [x0 + 0.08, x1 - 0.08]) {
+      const cell = Math.floor(zz / CZ) * W + Math.floor(xx / CX)
+      if (!s.walk[cell]) spots.push([xx, zz])
+    }
+  }
+  for (const [px, pz] of spots) {
+    wood.box(px - 0.07, 0, pz - 0.07, px + 0.07, heightAt(pz), pz + 0.07, pole)
   }
 }
 
@@ -2686,13 +2929,26 @@ function findOpenings(world, s, style) {
     }
     for (const [key, list] of runs) {
       const [i, e] = key.split(':').map(Number)
-      // Lineas seguidas con la misma abertura: un solo portico.
+      // Lo alto de la muralla a los dos lados de la abertura, en la linea j.
+      const sides = (j) => {
+        const [lx, ly] = at(i - 1, j)
+        const [rx, ry] = at(e, j)
+        return [high[ly * W + lx], high[ry * W + rx]]
+      }
+      const tall = (j) => Math.min(...sides(j)) >= 2.4
+      // Lineas seguidas con la misma abertura entre murallas altas: un solo
+      // portico. Un pasillo entre terrazas bajas no lleva arco; si sigue a una
+      // abertura en una muralla alta, el arco va en esa boca.
       let a = 0
       while (a < list.length) {
+        if (!tall(list[a])) {
+          a++
+          continue
+        }
         let b = a
-        while (b + 1 < list.length && list[b + 1] === list[b] + 1) b++
-        const j0 = list[a]
-        const j1 = list[b]
+        while (b + 1 < list.length && list[b + 1] === list[b] + 1 && tall(list[b + 1])) b++
+        let j0 = list[a]
+        let j1 = list[b]
         a = b + 1
         const mid = Math.floor((i + e - 1) / 2)
         if (j1 - j0 > 3 || !pass(...at(mid, j0 - 1)) || !pass(...at(mid, j1 + 1))) continue
@@ -2703,10 +2959,8 @@ function findOpenings(world, s, style) {
             if (door.has(y * W + x)) gated = true
           }
         }
-        const [lx, ly] = at(i - 1, j0)
-        const [rx, ry] = at(e, j0)
-        const wallTop = Math.max(high[ly * W + lx], high[ry * W + rx])
-        if (gated || wallTop < 2.4) continue
+        const wallTop = Math.max(...sides(j0))
+        if (gated) continue
         // Pilares de un metro y medio si la muralla sigue a los lados; si no,
         // de una celda.
         const reach = Math.max(1, Math.round(1.5 / cell))
@@ -2718,9 +2972,23 @@ function findOpenings(world, s, style) {
           if (!ok) break
           pier = p
         }
+        // En el borde del mapa la muralla sigue hacia afuera (padded): el
+        // arco la cruza entera.
+        const pad = along === 'x' ? PAD_Z : PAD_X
+        let outer = 1
+        const edge = j0 === 0 || j1 === lines - 1
+        if (j1 === lines - 1) j1 += pad
+        if (j0 === 0) {
+          j0 -= pad
+          outer = -1
+        }
         const arch = (e - i) * cell
         const top = Math.max(wallTop, 2.2 + arch / 2 + 0.7)
-        const g = { along, plain: true, face: 0, outer: 1, arch, at: ((i + e) / 2) * cell, top }
+        const g = { along, plain: true, face: 0, outer, arch, at: ((i + e) / 2) * cell, top }
+        // En la muralla del borde el adarve sigue sobre el arco, con sus
+        // almenas, y afuera lo alumbran dos antorchas: es una salida de la
+        // ciudad. Adentro el arco termina bajo, asi deja ver lo que sigue.
+        g.crown = edge && wallTop >= style.curtain - 0.1
         Object.assign(g, { i0: i - pier, i1: e + pier - 1, j0, j1, spring: top - 0.7 - arch / 2 })
         g.u0 = (i - pier) * cell - g.at
         g.u1 = (e + pier) * cell - g.at
@@ -3252,17 +3520,17 @@ function amphitheater(shop, plan, style, colors, decor) {
           const z1 = zIn + ((zOut - zIn) * (j + 1)) / steps
           const zm = (z0 + z1) / 2
           const h = heightAt(plan.qOf(x, zm), angleOf(x, zm))
-          if (h > 0)
-            k.face(
-              [
-                [x, 0, z0],
-                [x, 0, z1],
-                [x, h, z1],
-                [x, h, z0]
-              ],
-              colors.stone,
-              [face, 0, 0]
-            )
+          if (h <= 0) continue
+          k.face(
+            [
+              [x, 0, z0],
+              [x, 0, z1],
+              [x, h, z1],
+              [x, h, z0]
+            ],
+            colors.stone,
+            [face, 0, 0]
+          )
         }
       }
       continue
@@ -3309,13 +3577,9 @@ function amphitheater(shop, plan, style, colors, decor) {
   for (let i = 0; i < count; i++) {
     const t = ((i + 0.5) / count) * Math.PI * 2
     const p = E(podium(t) - 0.004, t)
-    if (
-      inside(p[0], p[2]) ||
-      boxes.some(
-        (b) => Math.abs(p[0] - (b.x0 + b.x1) / 2) < 3 && Math.abs(p[2] - (b.z0 + b.z1) / 2) < 3
-      )
-    )
-      continue
+    const near = (b) =>
+      Math.abs(p[0] - (b.x0 + b.x1) / 2) < 3 && Math.abs(p[2] - (b.z0 + b.z1) / 2) < 3
+    if (inside(p[0], p[2]) || boxes.some(near)) continue
     const tx = -Math.sin(t) * ax
     const tz = Math.cos(t) * az
     const l = Math.hypot(tx, tz)
@@ -3367,8 +3631,8 @@ function crowd(world, s, shop, plan) {
       const cz = (y + 0.5) * CZ
       const q = plan.qOf(cx, cz)
       if (q <= qB || q >= qC) continue
-      if (boxes.some((b) => cx > b.x0 - 1 && cx < b.x1 + 1 && cz > b.z0 - 1 && cz < b.z1 + 1))
-        continue
+      const near = (b) => cx > b.x0 - 1 && cx < b.x1 + 1 && cz > b.z0 - 1 && cz < b.z1 + 1
+      if (boxes.some(near)) continue
       const t = Math.min(tiers - 1, Math.floor((q - qB) / stepQ))
       const angle = Math.atan2((cz - Z0) / az, (cx - X0) / ax)
       const qm = qB + stepQ * (t + 0.55)
@@ -3420,7 +3684,9 @@ function colorsFor(style, look) {
     bannerDark: banner.clone().multiplyScalar(0.72),
     accent: c(style.accent),
     vein: c(look.vein || style.accent),
-    white: c(0xffffff)
+    white: c(0xffffff),
+    // La otra raya de los toldos del mercado.
+    canvas: c(style.canvas || 0xefe3c8)
   }
 }
 
@@ -3571,6 +3837,145 @@ function keepNames(world, s) {
   return names
 }
 
+// Lo que fortress() (tripo-mundo.js) arma en el porton de un castillo: el
+// edificio que tiene un lado de 30 m o mas, el hueco de 1,5 m de medio ancho
+// con jambas de 0,42 hundido 0,95 m, el arco que arranca dos pisos arriba y la
+// torre del porton de tres pisos y 3,5 m de medio ancho. Si cambia alla,
+// cambiar aca.
+const CASTLE = { side: 30, half: 1.5, jamb: 0.42, deep: 0.95, block: 3.5, base: 0.8 }
+
+// El porton de un castillo es una puerta del edificio (lo arma fortress()),
+// no de una muralla. Aca se le suma lo que tiene un porton: antorchas a los
+// lados, el rastrillo subido en el hueco del arco y dos estandartes en la
+// torre. Devuelve, por cada uno, su clave 'x,y' y a que altura va el nombre.
+function castleGates(world, s, shop, colors, decor) {
+  const { data, doors, inBuilding, palette, CX, CZ } = world
+  const { W, H } = s
+  const found = []
+  for (const door of doors) {
+    const tile = data.tiles[door.ch]
+    if (!tile || !tile.id.startsWith('gate.')) continue
+    const box = buildingAround(door, inBuilding, W, H)
+    if (!box) continue
+    const rect = {
+      x0: box.x0 * CX + 0.25,
+      x1: (box.x1 + 1) * CX - 0.25,
+      z0: box.y0 * CZ + 0.25,
+      z1: (box.y1 + 1) * CZ - 0.25
+    }
+    if (Math.min(rect.x1 - rect.x0, rect.z1 - rect.z0) < CASTLE.side) continue
+    // De que lado del edificio esta (como doorway() de tripo-mundo.js).
+    const gaps = [
+      (box.y1 - door.y) * CZ,
+      (door.y - box.y0) * CZ,
+      (box.x1 - door.x) * CX,
+      (door.x - box.x0) * CX
+    ]
+    const side = gaps.indexOf(Math.min(...gaps))
+    if (Math.abs(gaps[side]) > 1) continue
+    const cx = (door.x + 0.5) * CX
+    const cz = (door.y + 0.5) * CZ
+    // La fachada: o en el plano, t a lo largo y n hacia afuera.
+    const frames = [
+      { o: [cx, rect.z1], t: [1, 0], n: [0, 1] },
+      { o: [cx, rect.z0], t: [-1, 0], n: [0, -1] },
+      { o: [rect.x1, cz], t: [0, -1], n: [1, 0] },
+      { o: [rect.x0, cz], t: [0, 1], n: [-1, 0] }
+    ]
+    const { o, t, n } = frames[side]
+    const P = (u, y, d) => [o[0] + t[0] * u + n[0] * d, y, o[1] + t[1] * u + n[1] * d]
+    const F = palette.floor || 2.8
+    const { half, jamb, deep, block, base } = CASTLE
+    const spring = base + 2 * F - 0.3 - half - jamb
+    const top = base + 3 * F
+    const wood = shop.at('wood', cx, cz)
+    torches(wood, (u, y, v) => P(u, y, v), half + jamb + 0.45, 0.02, 1, colors, decor)
+    // El rastrillo subido: los barrotes asoman bajo el arco, delante de la hoja.
+    const grille = -Math.min(0.35, deep * 0.4)
+    const low = spring + 0.35
+    for (let u = -half + 0.16; u <= half - 0.16 + 1e-6; u += 0.25) {
+      const crown = spring + Math.sqrt(Math.max(0, half * half - u * u)) - 0.02
+      if (crown - low < 0.1) continue
+      const a = P(u - 0.025, 0, grille - 0.025)
+      const b = P(u + 0.025, 0, grille + 0.025)
+      wood.box(
+        Math.min(a[0], b[0]),
+        low - 0.14,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        crown,
+        Math.max(a[2], b[2]),
+        colors.iron,
+        { bottom: true, grime: false }
+      )
+    }
+    for (const y of [low + 0.12, low + 0.52]) {
+      const reach = Math.sqrt(Math.max(0, half * half - (y - spring) * (y - spring))) - 0.04
+      if (reach <= 0.2) continue
+      const a = P(-reach, 0, grille - 0.035)
+      const b = P(reach, 0, grille + 0.035)
+      wood.box(
+        Math.min(a[0], b[0]),
+        y,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        y + 0.06,
+        Math.max(a[2], b[2]),
+        colors.iron,
+        { bottom: true, grime: false }
+      )
+    }
+    // Los estandartes, colgados bajo el adarve de las murallas a los dos lados
+    // de la torre del porton: la enmarcan.
+    for (const u of [-1, 1]) {
+      const [bx, , bz] = P(u * (block + 1.1), 0, 0.06)
+      decor.banners.push({
+        x: bx,
+        z: bz,
+        y: base + 2 * F - 0.32,
+        along: [t[0], t[1]],
+        size: [1, 3],
+        out: [n[0], n[1]]
+      })
+    }
+    // El nombre va sobre las almenas de la torre: la celda de la puerta queda
+    // detras de la fachada y mas abajo lo taparia la pared.
+    found.push({ key: door.x + ',' + door.y, label: top + 0.9 + 0.75 })
+  }
+  return found
+}
+
+// La caja del edificio pegado a una puerta: las celdas de edificio unidas a
+// sus vecinas (inBuilding de tripo-mundo.js).
+function buildingAround(door, inBuilding, W, H) {
+  const starts = SIDES.map(([dx, dy]) => [door.x + dx, door.y + dy]).filter(
+    ([x, y]) => x >= 0 && y >= 0 && x < W && y < H && inBuilding[y * W + x]
+  )
+  if (!starts.length) return null
+  const seen = new Uint8Array(W * H)
+  const stack = starts.map(([x, y]) => y * W + x)
+  for (const i of stack) seen[i] = 1
+  const box = { x0: W, y0: H, x1: 0, y1: 0 }
+  while (stack.length) {
+    const i = stack.pop()
+    const x = i % W
+    const y = (i - x) / W
+    box.x0 = Math.min(box.x0, x)
+    box.x1 = Math.max(box.x1, x)
+    box.y0 = Math.min(box.y0, y)
+    box.y1 = Math.max(box.y1, y)
+    for (const [dx, dy] of SIDES) {
+      const nx = x + dx
+      const ny = y + dy
+      const j = ny * W + nx
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H || seen[j] || !inBuilding[j]) continue
+      seen[j] = 1
+      stack.push(j)
+    }
+  }
+  return box
+}
+
 // Las torres a los lados de cada porton, si entran; no si ya hay una torre
 // cerrada pegada (las de las fronteras).
 function flankTowers(world, s, gates, style, towers) {
@@ -3596,11 +4001,15 @@ function flankTowers(world, s, gates, style, towers) {
       const u = g.face ? (side > 0 ? g.u1 + 0.5 : g.u0 - 0.5) : side * (g.arch / 2 + 2.7)
       const [x, , z] = at(u, 0, mid)
       if (keepNear(x, z, 3.2)) continue
+      // Si no entra en su lugar, prueba correrse hacia afuera del porton o
+      // hacia su frente.
       const [ax, , az] = at(u + side, 0, mid)
       const [bx, , bz] = at(u, 0, mid + out)
-      let site = towerSite(world, s, towers, x, z, 2, g.face ? [ax - x, az - z] : [bx - x, bz - z])
-      if (!site)
-        site = towerSite(world, s, towers, x, z, 2, g.face ? [bx - x, bz - z] : [ax - x, az - z])
+      const aside = [ax - x, az - z]
+      const ahead = [bx - x, bz - z]
+      const [first, then] = g.face ? [aside, ahead] : [ahead, aside]
+      const site =
+        towerSite(world, s, towers, x, z, 2, first) || towerSite(world, s, towers, x, z, 2, then)
       if (site) towers.push({ ...site, h: g.top + 1.8, gate: g })
     }
   }
@@ -3638,7 +4047,10 @@ export function buildRamparts(world) {
       s.low[i] = 0
     }
   }
-  if (!s.mass.some((v) => v) && !s.low.some((v) => v) && !monument && !plan) return null
+  // Los puestos del mercado salen de los cercos bajos: los arma stallGeometry.
+  const stalls = findStalls(world, s)
+  const empty = !s.mass.some((v) => v) && !s.low.some((v) => v)
+  if (empty && !monument && !plan && !stalls.length) return null
   const grid = padded(s)
   const gates = findGates(world, s, style)
   const porches = findOpenings(world, s, style)
@@ -3652,7 +4064,7 @@ export function buildRamparts(world) {
 
   const clock = { value: 0 }
   const colors = colorsFor(style, look)
-  const shop = workshop()
+  const shop = workshop(data.width * world.CX, data.height * world.CZ)
   massGeometry(world, grid, shop, style, colors, blocked)
   const roofs = keepRoofs(world, s, shop, style, colors)
   const flags = []
@@ -3665,7 +4077,9 @@ export function buildRamparts(world) {
   }
   const decor = { flames: [], banners: [] }
   for (const g of [...gates, ...porches]) gatehouse(shop, g, style, colors, decor)
+  const castles = castleGates(world, s, shop, colors, decor)
   lowWalls(world, s, shop, style, colors)
+  for (const st of stalls) stallGeometry(world, s, shop, st, colors)
   if (monument) {
     // Piedra clara y pulida: el pedestal del heroe.
     const marble = { ...colors, stone: colors.trim, walk: colors.trim.clone().multiplyScalar(0.92) }
@@ -3685,6 +4099,7 @@ export function buildRamparts(world) {
   for (const { material, kit: k } of shop.bins.values()) {
     if (!k.count()) continue
     const mesh = new THREE.Mesh(k.build(), materials[material])
+    mesh.name = 'murallas:' + material
     mesh.castShadow = material !== 'glow' && material !== 'fence'
     mesh.receiveShadow = material !== 'glow'
     root.add(mesh)
@@ -3707,15 +4122,21 @@ export function buildRamparts(world) {
     const art = (monument && monument.cells[i]) || (plan && plan.ring[i])
     cells[i] = s.mass[i] || s.low[i] || art ? 1 : 0
   }
-  const byKey = new Map(gates.map((g) => [g.key, g]))
+  // Del puesto se toma todo menos las letras del cartel, que siguen siendo
+  // las de tripo-mundo.js.
+  for (const st of stalls) for (const i of st.cells) if (world.kinds[i] !== 'sign') cells[i] = 1
+  // A que altura va el nombre de cada porton: sobre su bloque y sus torres;
+  // en el de un castillo, sobre las almenas.
+  const lift = new Map(castles.map((c) => [c.key, c.label]))
+  for (const g of gates) {
+    lift.set(g.key, Math.max(g.top + BREAST + MERLON_H + 1.3, (g.peak || 0) + 0.9))
+  }
   return {
     skip: new Set(['rampart', 'wall', 'masonry']),
     cells,
-    gates: new Set(byKey.keys()),
+    gates: new Set(lift.keys()),
     labelHeight(door) {
-      const g = byKey.get(door.x + ',' + door.y)
-      if (!g) return null
-      return Math.max(g.top + BREAST + MERLON_H + 1.3, (g.peak || 0) + 0.9)
+      return lift.get(door.x + ',' + door.y) || null
     },
     update(time) {
       clock.value = time
