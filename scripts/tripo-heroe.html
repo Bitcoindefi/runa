@@ -3311,10 +3311,15 @@
         {
           map: null,
           short: ['Showcase', 'Vitrina'],
-          name: [
-            'Showcase: the stickman and the Tripo kingdom',
-            'Vitrina: el stickman y el reino de Tripo'
-          ]
+          name: vitrina
+            ? [
+                'Showcase: the Tripo models, each on its pedestal',
+                'Vitrina: los modelos de Tripo, cada uno en su pedestal'
+              ]
+            : [
+                'Showcase: the stickman and the Tripo kingdom',
+                'Vitrina: el stickman y el reino de Tripo'
+              ]
         }
       ]
       // La mochila del recorrido: lo que se puede probar puesto.
