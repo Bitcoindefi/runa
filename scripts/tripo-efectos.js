@@ -341,7 +341,8 @@ export function skyDirection(elevation, bearing, target = new THREE.Vector3()) {
 // light  [color, intensidad] de la direccional; env, cuanto reflejan los PBR
 // post   bloom [fuerza, radio, umbral, rodilla]: brilla lo que pasa del umbral
 //        en su canal mas alto; saturacion, contraste y tinte del acabado. Sin
-//        bloom (de dia) el pase del brillo no corre: quedan FXAA y el acabado.
+//        bloom (de dia) el pase del brillo no corre. msaa, las muestras de la
+//        escena (4 si no se dice; con 0 el antialias es FXAA).
 const MOODS = {
   // La ciudad de RUNA a la manana: sol bajo al noreste, aire limpio y nubes
   // altas que todavia toman el dorado del amanecer.
@@ -415,8 +416,8 @@ const MOODS = {
     paint: [0xa8401e, 0x6a2414, 0x34110c, 0x0e0508, [0.25, 0.8, 1.5, 0.9]],
     clouds: [0.85, 0.45, 0.28, 0xc4532a, 0x241010],
     fog: [0x45261c, 52, 135],
-    hemi: [0xa47c6c, 0x3a1810, 1.1],
-    light: [0xffb88a, 2.3],
+    hemi: [0x8e7c74, 0x2c1a14, 1.05],
+    light: [0xffc6a2, 2.4],
     env: 0.35,
     post: {
       bloom: [0.75, 0.55, 1.0, 0.5],
@@ -437,8 +438,10 @@ const SHOWCASE = {
   post: { bloom: null, vignette: 0.25 }
 }
 
-// El titulo: un alba con lava; brilla mas que los mapas.
+// El titulo: un alba con lava; brilla mas que los mapas. Sin MSAA: alcanza el
+// FXAA (ver antialias en createEffects).
 const TITLE = {
+  msaa: 0,
   bloom: [0.5, 0.5, 0.95, 0.6],
   vignette: 0.26,
   saturation: 1.08,
@@ -601,6 +604,7 @@ uniform sampler2D tShafts;
 uniform float shaftsOn;
 uniform vec2 shaftsTexel;
 uniform vec2 texel;
+uniform float fxaaOn;
 uniform vec3 tint;
 uniform float saturation;
 uniform float contrast;
@@ -614,28 +618,52 @@ float edgeLuma( vec3 c ) {
   return sqrt( dot( min( c, vec3( 1.0 ) ), vec3( 0.299, 0.587, 0.114 ) ) );
 }
 
-// FXAA de Timothy Lottes en su forma corta: las cuatro diagonales dicen si hay
-// un borde y hacia donde corre, y cuatro lecturas mas lo suavizan a lo largo.
-// Donde no hay contraste (casi toda la pantalla) sale con una sola lectura.
+// FXAA de Timothy Lottes, con la forma de su version 3.11: la cruz de vecinos
+// dice si hay contraste (donde no, casi toda la pantalla, sale con cinco
+// lecturas); las diagonales dicen hacia donde corre el borde y cuatro lecturas
+// mas lo suavizan a lo largo. Ademas, lo que mide un pixel (la juntura entre
+// dos cajas de un cartel, un punto) se acerca al promedio de sus vecinos, como
+// haria el MSAA: el borde comun casi no se toca.
 vec3 fxaa( vec2 uv ) {
+  vec2 tx = vec2( texel.x, 0.0 );
+  vec2 ty = vec2( 0.0, texel.y );
   vec3 m = texture2D( tDiffuse, uv ).rgb;
+  vec3 n = texture2D( tDiffuse, uv + ty ).rgb;
+  vec3 s = texture2D( tDiffuse, uv - ty ).rgb;
+  vec3 e = texture2D( tDiffuse, uv + tx ).rgb;
+  vec3 w = texture2D( tDiffuse, uv - tx ).rgb;
   float lm = edgeLuma( m );
-  float lnw = edgeLuma( texture2D( tDiffuse, uv + vec2( -1.0, -1.0 ) * texel ).rgb );
-  float lne = edgeLuma( texture2D( tDiffuse, uv + vec2( 1.0, -1.0 ) * texel ).rgb );
-  float lsw = edgeLuma( texture2D( tDiffuse, uv + vec2( -1.0, 1.0 ) * texel ).rgb );
-  float lse = edgeLuma( texture2D( tDiffuse, uv + vec2( 1.0, 1.0 ) * texel ).rgb );
-  float lo = min( lm, min( min( lnw, lne ), min( lsw, lse ) ) );
-  float hi = max( lm, max( max( lnw, lne ), max( lsw, lse ) ) );
-  if ( hi - lo < max( 0.04, hi * 0.12 ) ) return m;
-  vec2 dir = vec2( ( lsw + lse ) - ( lnw + lne ), ( lnw + lsw ) - ( lne + lse ) );
-  float reduce = max( ( lnw + lne + lsw + lse ) * 0.03125, 0.0078125 );
+  float ln = edgeLuma( n );
+  float ls = edgeLuma( s );
+  float le = edgeLuma( e );
+  float lw = edgeLuma( w );
+  float lo = min( lm, min( min( ln, ls ), min( le, lw ) ) );
+  float hi = max( lm, max( max( ln, ls ), max( le, lw ) ) );
+  float range = hi - lo;
+  if ( range < max( 0.04, hi * 0.12 ) ) return m;
+  vec3 ca = texture2D( tDiffuse, uv - tx - ty ).rgb;
+  vec3 cb = texture2D( tDiffuse, uv + tx - ty ).rgb;
+  vec3 cc = texture2D( tDiffuse, uv - tx + ty ).rgb;
+  vec3 cd = texture2D( tDiffuse, uv + tx + ty ).rgb;
+  float la = edgeLuma( ca );
+  float lb = edgeLuma( cb );
+  float lc = edgeLuma( cc );
+  float ld = edgeLuma( cd );
+  lo = min( lo, min( min( la, lb ), min( lc, ld ) ) );
+  hi = max( hi, max( max( la, lb ), max( lc, ld ) ) );
+  vec2 dir = vec2( ( lc + ld ) - ( la + lb ), ( la + lc ) - ( lb + ld ) );
+  float reduce = max( ( la + lb + lc + ld ) * 0.03125, 0.0078125 );
   dir = clamp( dir / ( min( abs( dir.x ), abs( dir.y ) ) + reduce ), -8.0, 8.0 ) * texel;
-  vec3 a = 0.5 * ( texture2D( tDiffuse, uv - dir * 0.1667 ).rgb +
+  vec3 near = 0.5 * ( texture2D( tDiffuse, uv - dir * 0.1667 ).rgb +
     texture2D( tDiffuse, uv + dir * 0.1667 ).rgb );
-  vec3 b = a * 0.5 + 0.25 * ( texture2D( tDiffuse, uv - dir * 0.5 ).rgb +
+  vec3 wide = near * 0.5 + 0.25 * ( texture2D( tDiffuse, uv - dir * 0.5 ).rgb +
     texture2D( tDiffuse, uv + dir * 0.5 ).rgb );
-  float lb = edgeLuma( b );
-  return ( lb < lo || lb > hi ) ? a : b;
+  float lwide = edgeLuma( wide );
+  vec3 edge = ( lwide < lo || lwide > hi ) ? near : wide;
+  float around = ( 2.0 * ( ln + ls + le + lw ) + la + lb + lc + ld ) / 12.0;
+  float subpix = smoothstep( 0.0, 1.0, abs( around - lm ) / range );
+  vec3 average = ( 2.0 * ( n + s + e + w ) + ca + cb + cc + cd ) / 12.0;
+  return mix( edge, average, subpix * subpix * 0.5 );
 }
 
 // Los rayos, suavizados con cuatro lecturas en diagonal: se lleva el ruido con
@@ -652,7 +680,8 @@ vec3 shaftsAt( vec2 uv ) {
 `
 
 const FINISH_READ = /* glsl */ `
-  vec3 light = fxaa( vUv ) + texture2D( tBloom, vUv ).rgb * bloomOn;
+  vec3 light = fxaaOn > 0.5 ? fxaa( vUv ) : texture2D( tDiffuse, vUv ).rgb;
+  light += texture2D( tBloom, vUv ).rgb * bloomOn;
   if ( shaftsOn > 0.0 ) light += shaftsAt( vUv ) * shaftsOn;
   gl_FragColor = vec4( light, 1.0 );
 `
@@ -681,6 +710,7 @@ class FinishPass extends OutputPass {
       shaftsOn: { value: 0 },
       shaftsTexel: { value: shafts.texel },
       texel: { value: new THREE.Vector2(1, 1) },
+      fxaaOn: { value: 1 },
       tint: { value: new THREE.Vector3(1, 1, 1) },
       saturation: { value: 1 },
       contrast: { value: 1 },
@@ -718,9 +748,10 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
   const forward = new THREE.Vector3()
 
   // La escena va a un buffer de punto flotante (lo que pasa de 1, la lava o el
-  // sol, llega entero al brillo), sin MSAA y con profundidad: el de EffectComposer.
+  // sol, llega entero al brillo), con profundidad: el de EffectComposer.
   function buildPost() {
-    const composer = new EffectComposer(renderer)
+    const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType })
+    const composer = new EffectComposer(renderer, target)
     const bloom = new QuarterBloomPass()
     const rays = new ShaftsPass()
     const finish = new FinishPass(bloom, rays)
@@ -753,10 +784,25 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     post = null
   }
 
+  // El antialias de la escena: en los mapas, MSAA en el buffer (las junturas
+  // de un pixel entre las cajas de los carteles y las murallas solo las
+  // resuelve el muestreo); en el titulo, que no las tiene y es lo mas caro,
+  // alcanza con el FXAA del pase final.
+  function antialias(samples) {
+    const { composer, finish } = post
+    finish.uniforms.fxaaOn.value = samples ? 0 : 1
+    for (const target of [composer.renderTarget1, composer.renderTarget2]) {
+      if (target.samples === samples) continue
+      target.samples = samples
+      target.dispose()
+    }
+  }
+
   // El acabado del cuadro segun el mapa o el titulo. Sin bloom (los mapas de
   // dia) el pase del brillo no corre y el final no lo suma.
   function dress(look) {
     const { bloom, finish } = post
+    antialias('msaa' in look ? look.msaa : 4)
     bloom.enabled = !!look.bloom
     if (look.bloom) {
       ;[bloom.strength, bloom.radius, bloom.threshold] = look.bloom
