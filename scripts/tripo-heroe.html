@@ -158,6 +158,11 @@
         font-size: 20px;
         padding: 0;
       }
+      /* Las diagonales, en las esquinas: un poco mas discretas. */
+      #pad .diag {
+        font-size: 18px;
+        color: var(--dim);
+      }
       #talk {
         position: fixed;
         left: 50%;
@@ -730,15 +735,15 @@
     <div id="pause" hidden><div class="sheet"></div></div>
 
     <div id="pad" hidden>
-      <span></span>
+      <button class="diag" data-dir="up-left" aria-label="up left">&#8598;</button>
       <button data-dir="up" aria-label="up">&#9650;</button>
-      <span></span>
+      <button class="diag" data-dir="up-right" aria-label="up right">&#8599;</button>
       <button data-dir="left" aria-label="left">&#9664;</button>
       <span></span>
       <button data-dir="right" aria-label="right">&#9654;</button>
-      <span></span>
+      <button class="diag" data-dir="down-left" aria-label="down left">&#8601;</button>
       <button data-dir="down" aria-label="down">&#9660;</button>
-      <span></span>
+      <button class="diag" data-dir="down-right" aria-label="down right">&#8600;</button>
     </div>
     <script type="module">
       import * as THREE from 'three'
@@ -2926,7 +2931,17 @@
         blockedX: 0,
         blockedY: 0
       }
-      const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
+      // Las cuatro flechas del teclado y, en la cruceta, tambien las diagonales.
+      const DIRS = {
+        up: [0, -1],
+        down: [0, 1],
+        left: [-1, 0],
+        right: [1, 0],
+        'up-left': [-1, -1],
+        'up-right': [1, -1],
+        'down-left': [-1, 1],
+        'down-right': [1, 1]
+      }
       const MOVES = {
         ArrowUp: 'up',
         w: 'up',
@@ -3893,7 +3908,8 @@
         event.preventDefault()
         const dir = under(event)
         if (screen === 'play' && session && !exploring(live)) {
-          if (!dir) return
+          // En una pantalla del juego (una tienda) solo valen las cuatro flechas.
+          if (!dir || dir.includes('-')) return
           session.press(dir)
           clearInterval(padRepeat)
           padRepeat = setInterval(() => session && session.press(dir), 140)
