@@ -999,6 +999,11 @@
         const key = KEYMAP[event.key] || (event.key.length === 1 ? event.key : null)
         if (!key) return
         event.preventDefault()
+        // Q cierra el juego: desde aca no se manda.
+        if (key === 'q' || key === 'Q') {
+          keysLine.textContent = 'Q cierra el juego: para salir usa la terminal.'
+          return
+        }
         // En fila, para que el juego reciba las teclas en el orden apretado.
         keyChain = keyChain.then(async () => {
           try {
@@ -1009,7 +1014,7 @@
             })
             keysLine.textContent =
               response.status === 409
-                ? 'Para jugar desde aca, arranca el juego con: npm.cmd start -- --teclas'
+                ? 'El juego no esta leyendo teclas: abrilo con npm.cmd start -- --teclas'
                 : 'WASD o flechas: caminar. E: hablar. I: inventario.'
           } catch {
             keysLine.textContent = 'el visor no responde'

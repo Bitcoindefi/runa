@@ -153,7 +153,24 @@ let keySerial = 0
 function keyBytes(key) {
   if (typeof key !== 'string') return null
   if (Object.hasOwn(KEY_BYTES, key)) return KEY_BYTES[key]
+  // Q cierra el juego, en el menu y en la partida (game.js onKey): desde el
+  // navegador nunca se manda; para salir esta la terminal.
+  if (key === 'q' || key === 'Q') return null
   return key.length === 1 && key >= ' ' && key <= '~' ? key : null
+}
+
+// Si las teclas se juntan sin que nadie las lea, el juego no esta corriendo con
+// --teclas (o se cerro): mejor decirlo que tragarlas en silencio.
+function keysStalled(inbox) {
+  let names
+  try {
+    names = fs.readdirSync(inbox).filter((name) => name.endsWith('.key'))
+  } catch {
+    return false
+  }
+  if (names.length < 12) return false
+  const oldest = Number(names.sort()[0].split('-')[0])
+  return Date.now() - oldest > 1500
 }
 
 // Solo la pagina del visor manda teclas: el header propio obliga a cualquier otra
@@ -178,9 +195,9 @@ function sendKey(req, res, origins) {
     }
     if (bytes === null) return res.writeHead(400).end()
     const inbox = path.join(storageDir(), 'keys')
-    if (!fs.existsSync(inbox)) {
+    if (!fs.existsSync(inbox) || keysStalled(inbox)) {
       res.writeHead(409, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'el juego no escucha teclas: npm start -- --teclas' }))
+      res.end(JSON.stringify({ error: 'el juego no esta leyendo teclas' }))
       return
     }
     const name = `${Date.now()}-${String(keySerial++ % 1e6).padStart(6, '0')}.key`
