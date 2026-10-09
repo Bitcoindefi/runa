@@ -2671,7 +2671,9 @@ export function buildWorld(data, extras = {}) {
   }
 
   // Las murallas y sus portones, si murallas.js los dibuja: esas celdas ya no
-  // suben como cajas sueltas y esos portones no llevan columna de luz.
+  // suben como cajas sueltas y esos portones no llevan columna de luz. Ademas
+  // de clases enteras (skip) puede tomar celdas sueltas (cells): el relleno de
+  // un porton o de una torre, sea de la clase que sea.
   const ramparts = buildRamparts({
     data,
     kinds,
@@ -2683,9 +2685,11 @@ export function buildWorld(data, extras = {}) {
     palette,
     letters,
     group,
-    text
+    text,
+    label
   })
   const skip = (ramparts && ramparts.skip) || new Set()
+  const taken = (ramparts && ramparts.cells) || new Uint8Array(width * height)
   const gates = (ramparts && ramparts.gates) || new Set()
 
   // Tercera pasada: lo que sube fuera de los edificios, por tramos de una fila.
@@ -2697,13 +2701,14 @@ export function buildWorld(data, extras = {}) {
       const i = y * width + x
       const kind = kinds[i]
       const gate = kind === 'door' && gates.has(x + ',' + y)
-      if (!kind || inBuilding[i] || !LOOSE[kind] || skip.has(kind) || gate) {
+      if (!kind || inBuilding[i] || !LOOSE[kind] || skip.has(kind) || gate || taken[i]) {
         x++
         continue
       }
       let end = x + 1
       if (!LOOSE[kind].glyph) {
-        while (end < width && kinds[y * width + end] === kind && !inBuilding[y * width + end]) end++
+        const free = (j) => kinds[j] === kind && !inBuilding[j] && !taken[j]
+        while (end < width && free(y * width + end)) end++
       }
       if (!runs[kind]) runs[kind] = []
       runs[kind].push([x, end - x, y, (letters[y] || '')[x] || ' '])
