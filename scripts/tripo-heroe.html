@@ -100,6 +100,7 @@
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+      import { buildWorld } from '/mundo.js'
 
       // El stickman del juego en 3D, hecho con formas simples: no gasta creditos y
       // su mano sirve de enganche para cualquier arma. Lee /state.json, que el
@@ -217,9 +218,9 @@
       }
 
       // Un hueso que cuelga hacia abajo desde su pivote.
-      function bone(length, radius) {
+      function bone(length, radius, skin = chalk) {
         const pivot = new THREE.Group()
-        pivot.add(part(new THREE.CapsuleGeometry(radius, length, 6, 12), chalk, 0, -length / 2))
+        pivot.add(part(new THREE.CapsuleGeometry(radius, length, 6, 12), skin, 0, -length / 2))
         const end = new THREE.Group()
         end.position.y = -length - radius
         pivot.add(end)
@@ -227,14 +228,14 @@
       }
 
       // El stickman: +y arriba y la cara hacia +z. Su izquierda queda en +x.
-      function stickman() {
+      function stickman(skin = chalk) {
         const root = new THREE.Group()
         const hips = new THREE.Group()
         hips.position.y = 0.95
         root.add(hips)
-        const torso = part(new THREE.CapsuleGeometry(0.15, 0.4, 8, 16), chalk, 0, 0.32)
+        const torso = part(new THREE.CapsuleGeometry(0.15, 0.4, 8, 16), skin, 0, 0.32)
         hips.add(torso)
-        const head = part(new THREE.SphereGeometry(0.16, 24, 16), chalk, 0, 0.86)
+        const head = part(new THREE.SphereGeometry(0.16, 24, 16), skin, 0, 0.86)
         hips.add(head)
         const headSocket = new THREE.Group()
         headSocket.position.y = 0.86
@@ -245,15 +246,15 @@
           ['left_hand', 1],
           ['right_hand', -1]
         ]) {
-          const upper = bone(0.27, 0.05)
+          const upper = bone(0.27, 0.05, skin)
           upper.pivot.position.set(0.23 * side, 0.56, 0)
           upper.pivot.rotation.z = 0.18 * side
           hips.add(upper.pivot)
-          const lower = bone(0.25, 0.045)
+          const lower = bone(0.25, 0.045, skin)
           // El antebrazo apunta hacia adelante, como en guardia.
           lower.pivot.rotation.x = -1.15
           upper.end.add(lower.pivot)
-          lower.end.add(part(new THREE.SphereGeometry(0.055, 16, 12), chalk))
+          lower.end.add(part(new THREE.SphereGeometry(0.055, 16, 12), skin))
           // El enchufe deshace la pose del brazo: lo que se cuelga ahi queda con
           // +y hacia arriba y +z hacia adelante.
           const socket = new THREE.Group()
@@ -263,20 +264,41 @@
         }
 
         const feet = []
+        const legs = []
         for (const side of [1, -1]) {
-          const thigh = bone(0.4, 0.06)
+          const thigh = bone(0.4, 0.06, skin)
           thigh.pivot.position.set(0.1 * side, 0.02, 0)
           hips.add(thigh.pivot)
-          const shin = bone(0.38, 0.05)
+          legs.push(thigh.pivot)
+          const shin = bone(0.38, 0.05, skin)
           thigh.end.add(shin.pivot)
           // El tobillo queda a 8 cm del suelo: el pie baja 5 para apoyarse.
           const foot = new THREE.Group()
           foot.position.y = -0.05
           shin.end.add(foot)
-          foot.add(part(new THREE.BoxGeometry(0.1, 0.06, 0.18), chalk, 0, 0, 0.04))
+          foot.add(part(new THREE.BoxGeometry(0.1, 0.06, 0.18), skin, 0, 0, 0.04))
           feet.push(foot)
         }
-        return { root, hips, torso, headSocket, arms, feet }
+        return { root, hips, torso, headSocket, arms, feet, legs }
+      }
+
+      // Los NPC del mapa: un stickman del color que usa la terminal.
+      const TERMINAL = {
+        cyan: 0x6fd3e0,
+        green: 0x7fd36f,
+        yellow: 0xe8d36f,
+        magenta: 0xd97fd9,
+        red: 0xe07a6a,
+        blue: 0x7a9be0,
+        white: 0xd8d8d0,
+        gray: 0x9a9a92
+      }
+      function figure(color) {
+        const skin = new THREE.MeshStandardMaterial({
+          color: TERMINAL[color] || 0xbdb8aa,
+          roughness: 0.7
+        })
+        return stickman(skin).root
       }
 
       // Armas y piezas con formas simples, en el marco del enchufe.
@@ -578,7 +600,7 @@
         if (!spec || !models.has(spec.file)) return
         try {
           const object = await loadGlb(spec.file)
-          if (sceneName !== name) return
+          if (sceneName !== name || world) return
           object.updateMatrixWorld(true)
           const box = new THREE.Box3().setFromObject(object)
           const dims = box.getSize(new THREE.Vector3())
@@ -620,8 +642,85 @@
       ash.visible = false
       scene.add(ash)
 
+      // Mundo: en un mapa fijo el heroe camina por la version 3D del mapa ASCII,
+      // hacia la celda que el juego guardo. En el resto queda la vitrina.
+      const heroTarget = new THREE.Vector3()
+      let world = null
+      let worldToken = 0
+      scene.add(sun.target)
+
+      function showcase(on) {
+        ground.visible = on
+        ring.visible = on
+        if (backdrop) backdrop.visible = on
+        controls.autoRotate = on
+        controls.minDistance = on ? 2.4 : 4
+        controls.maxDistance = on ? 11 : 45
+        scene.fog.near = on ? 11 : 28
+        scene.fog.far = on ? 30 : 75
+        const reach = on ? 6 : 24
+        Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach })
+        sun.shadow.camera.far = on ? 30 : 80
+        sun.shadow.camera.updateProjectionMatrix()
+        camera.far = on ? 100 : 160
+        camera.updateProjectionMatrix()
+      }
+
+      function leaveWorld() {
+        if (!world) return
+        scene.remove(world.built.group)
+        world.built.dispose()
+        world = null
+      }
+
+      async function enterWorld(at) {
+        if (world && world.map === at.map) {
+          heroTarget.copy(world.built.toWorld(at.x, at.y))
+          return
+        }
+        const token = ++worldToken
+        let data
+        try {
+          data = await (await fetch('/world/' + at.map + '.json', { cache: 'no-store' })).json()
+        } catch {
+          return
+        }
+        if (token !== worldToken) return
+        leaveWorld()
+        const built = buildWorld(data, {
+          figure,
+          glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null))
+        })
+        scene.add(built.group)
+        world = { map: at.map, built }
+        showcase(false)
+        ash.visible = data.kind === 'boss'
+        ember.color.setHex(data.kind === 'boss' ? 0xff6a20 : 0xe0c060)
+        // La vitrina se vuelve a armar al salir del mapa.
+        sceneName = null
+        heroTarget.copy(built.toWorld(at.x, at.y))
+        hero.root.position.copy(heroTarget)
+        controls.target.copy(heroTarget).setY(1)
+        // La camara arranca al sur del heroe, mirando al norte como la terminal.
+        camera.position.copy(heroTarget).add(new THREE.Vector3(0, 11, 13))
+      }
+
+      function exitWorld() {
+        worldToken++
+        if (!world) return
+        leaveWorld()
+        showcase(true)
+        hero.root.position.set(0, 0, 0)
+        hero.root.rotation.y = 0
+        heroTarget.set(0, 0, 0)
+        controls.target.set(0, 1, 0)
+        camera.position.set(0, 1.55, 4.8)
+        ash.position.set(0, 0, 0)
+      }
+
       // Estado de la partida
       let first = true
+      let shownGear = ''
       async function poll() {
         try {
           const state = await (await fetch('/state.json', { cache: 'no-store' })).json()
@@ -633,19 +732,29 @@
           }
           who.textContent =
             state.name + ', nivel ' + state.level + ', ' + (state.place || 'en camino')
-          gear.replaceChildren()
+          const gearKey = JSON.stringify(state.equipped)
+          if (gearKey !== shownGear) {
+            shownGear = gearKey
+            gear.replaceChildren()
+            for (const slot of SLOTS) {
+              const dt = document.createElement('dt')
+              dt.textContent = LABELS[slot]
+              const dd = document.createElement('dd')
+              dd.textContent = state.equipped[slot] ? state.equipped[slot].name : '-'
+              gear.append(dt, dd)
+            }
+          }
           for (const slot of SLOTS) {
-            const dt = document.createElement('dt')
-            dt.textContent = LABELS[slot]
-            const dd = document.createElement('dd')
-            dd.textContent = state.equipped[slot] ? state.equipped[slot].name : '-'
-            gear.append(dt, dd)
             const id = state.equipped[slot] ? state.equipped[slot].id : null
             if (worn[slot] === id && !first) continue
             worn[slot] = id
             wear(slot, state.equipped[slot], !first)
           }
-          setScene(state.scene)
+          if (state.world) enterWorld(state.world)
+          else {
+            exitWorld()
+            setScene(state.scene)
+          }
           first = false
         } catch {
           who.textContent = 'el visor no responde'
@@ -663,10 +772,45 @@
 
       // Animacion
       let hop = 0
+      let stride = 0
       const timer = new THREE.Timer()
+      const step = new THREE.Vector3()
+      const follow = new THREE.Vector3()
+      const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle))
+
+      // En el mundo: el heroe camina hacia la celda guardada, mira hacia donde va y
+      // la camara lo sigue sin perder el angulo que eligio quien mira.
+      function walk(dt) {
+        const pos = hero.root.position
+        step.subVectors(heroTarget, pos).setY(0)
+        const dist = step.length()
+        const moving = dist > 0.01 && dist <= 6
+        if (dist > 6) pos.set(heroTarget.x, pos.y, heroTarget.z)
+        else if (moving) {
+          pos.addScaledVector(step.normalize(), Math.min(dist, 7 * dt))
+          const yaw = Math.atan2(step.x, step.z)
+          hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 12)
+        }
+        stride = moving ? stride + dt * 11 : 0
+        const swing = moving ? Math.sin(stride) * 0.55 : 0
+        hero.legs[0].rotation.x = swing
+        hero.legs[1].rotation.x = -swing
+        if (moving) {
+          hero.arms.left_hand.shoulder.rotation.x = -swing * 0.4
+          hero.arms.right_hand.shoulder.rotation.x = swing * 0.4
+        }
+        follow.set(pos.x, 1, pos.z)
+        camera.position.add(step.subVectors(follow, controls.target))
+        controls.target.copy(follow)
+        sun.position.set(pos.x + 12, 22, pos.z + 10)
+        sun.target.position.set(pos.x, 0, pos.z)
+        if (ash.visible) ash.position.set(pos.x, 0, pos.z)
+      }
+
       renderer.setAnimationLoop(() => {
         timer.update()
         const t = timer.getElapsed()
+        const dt = Math.min(0.1, timer.getDelta())
         const now = performance.now()
         hero.hips.position.y = 0.95 + Math.sin(t * 2) * 0.008
         hero.torso.scale.y = 1 + Math.sin(t * 2) * 0.015
@@ -694,6 +838,7 @@
           }
           ashGeo.attributes.position.needsUpdate = true
         }
+        if (world) walk(dt)
         controls.update()
         renderer.render(scene, camera)
       })
@@ -711,7 +856,9 @@
 
       await refreshModels()
       await poll()
-      setInterval(poll, 600)
+      // El estado sale de la memoria del visor: consultarlo seguido es barato y deja
+      // que el heroe siga los pasos de la terminal.
+      setInterval(poll, 200)
       setInterval(refreshModels, 5000)
     </script>
   </body>

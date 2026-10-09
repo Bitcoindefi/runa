@@ -29,11 +29,12 @@ carpeta que usa `bin.mjs`. En Linux es `~/.local/share/runa/saves` y en macOS
 `~/Library/Application Support/runa/saves` (sin probar). Si el juego corre con
 `--storage <dir>`, arrancá el visor con `RUNA_STORAGE=<dir>`.
 
-`/state.json` devuelve el nombre, el nivel, el lugar, la escena y el equipo por
-hueco. El visor lee la ranura solo cuando cambia y despues de 250 ms sin
-cambios. En Windows, leerla justo cuando el juego la reemplaza puede hacer
-fallar ese guardado: el juego avisa una vez en el log y guarda en la tecla
-siguiente. Esa espera hace que casi no pase.
+`/state.json` devuelve el nombre, el nivel, el lugar, la escena, la celda del
+mapa y el equipo por hueco. El visor lee la ranura cuando cambia, tras 40 ms que
+juntan las rafagas: al caminar el juego guarda unas 15 veces por segundo. Leerla
+no traba el guardado del juego: medido en Windows, un escritor con bare-fs
+(`.tmp` y `renameSync` cada 66 ms, como `SaveStore`) contra lecturas de Node
+cada 1 ms no fallo ningun rename en 127 guardados.
 
 Con el guardado llegan el equipo y el mapa. Los golpes, la vida durante una
 pelea y el jefe en tiempo real no: eso necesita el puente `--live` que propone
@@ -62,9 +63,38 @@ llegan mirando hacia +x y el heroe mira hacia +z: el yelmo se gira 90 grados.
 Para otro ajuste, la tabla `SKINS` de `scripts/tripo-heroe.html` recibe tamano,
 giro y altura por item.
 
+## El mundo en 3D
+
+En la ciudad, NOX, el castillo, el Coliseo y la arena del Coloso, la pagina arma
+ese mapa en 3D con el mismo arte ASCII y la tabla `TILES` del juego
+(`scripts/tripo-mundo.js`, servido en `/mundo.js`; los mapas salen de
+`/world/<id>.json`):
+
+- Cada caracter sube como un bloque con la altura y el color de lo que es:
+  paredes, tejados, mamposteria y ventanas encendidas. El interior de un
+  edificio se rellena como volumen.
+- Las letras que el arte pinta en los edificios y carteles quedan como bloques
+  con su letra, asi que "mercado del alba" se lee en 3D. Una `o` o una `t`
+  pegada a otras letras es letra, no piedra ni arbol.
+- El suelo caminable lleva el color de su caracter: calle, pasto, adoquines,
+  grava. Hay arboles, piedras, flores, agua y, en la arena, rios de lava.
+- Cada puerta tiene una columna de luz y su nombre. Los NPC son stickmen del
+  color que usa la terminal, con su nombre.
+- La estatua de los heroes de la plaza es el heroe de Tripo (`heroe.glb`) y el
+  Coloso de Tripo (`coloso.glb`) espera en su arena.
+
+El heroe camina hacia la celda del guardado, con las piernas en movimiento, y la
+camara lo sigue desde el sur, mirando al norte como la terminal. Con el mouse se
+gira y se acerca. Una columna mide 0,5 y una fila 1: la celda de terminal es el
+doble de alta que de ancha.
+
+La pradera, los campamentos y la cripta todavia muestran la vitrina: el terreno
+de la pradera sale de la semilla del dia, que el guardado no trae.
+
 ## Prueba
 
 El 8 de octubre se probo en Chrome headless (SwiftShader) con la partida real y
 con una partida de prueba, manejando una sola pagina abierta por CDP mientras
-cambiaba el guardado: cambio de arma, casco, pecho y escudo con su aviso, y paso
-de la ciudad a las ruinas. La consola no mostro errores.
+cambiaba el guardado: cambio de arma, casco, pecho y escudo con su aviso; la
+plaza de RUNA, doce pasos al este, la arena del Coloso, el salon del trono y la
+vuelta a la pradera. La consola no mostro errores.

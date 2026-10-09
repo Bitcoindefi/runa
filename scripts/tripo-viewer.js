@@ -20,8 +20,10 @@ const MODELS = path.join(root, 'assets/tripo')
 const VENDOR = path.join(root, 'vendor')
 const PAGES = {
   '/': path.join(__dirname, 'tripo-viewer.html'),
-  '/heroe': path.join(__dirname, 'tripo-heroe.html')
+  '/heroe': path.join(__dirname, 'tripo-heroe.html'),
+  '/mundo': path.join(__dirname, 'tripo-heroe.html')
 }
+const WORLD_JS = path.join(__dirname, 'tripo-mundo.js')
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
 // cosa, no se guarda. three.module.min.js importa ./three.core.js, por eso el
 // core minificado se guarda con ese nombre.
@@ -67,11 +69,13 @@ const GLB = /^[\w-]+\.glb$/
 const skipped = new Set()
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
-// El juego reescribe la ranura en cada tecla (game.js saveCurrent). En Windows,
-// leerla justo cuando el juego la reemplaza puede hacer fallar ese guardado: el
-// juego lo avisa en el log y guarda en la tecla siguiente. Para que casi no pase,
-// se lee solo cuando cambio y despues de este rato sin cambios.
-const QUIET_MS = 250
+// El juego reescribe la ranura en cada tecla (game.js saveCurrent), unas 15 veces
+// por segundo al caminar. Se lee cuando cambio y tras esta pausa, que junta las
+// rafagas. Medido en Windows: un escritor bare-fs (.tmp + renameSync cada 66 ms)
+// contra lecturas de Node cada 1 ms no fallo ningun rename en 127 guardados.
+const QUIET_MS = 40
+// Los mapas fijos del juego que el visor arma en 3D.
+const WORLD_MAPS = ['city', 'nox', 'castle', 'coliseum']
 
 async function fetchLibs() {
   for (const [name, [url, sha256]] of Object.entries(LIBS)) {
@@ -143,6 +147,16 @@ function sceneOf(location) {
   return 'reino'
 }
 
+// Donde esta el heroe en un mapa que el visor sabe armar en 3D.
+function worldOf(location) {
+  const at = { x: Math.floor(Number(location.x) || 0), y: Math.floor(Number(location.y) || 0) }
+  if (location.kind === 'boss') return { map: 'boss', ...at }
+  if (location.kind === 'map' && WORLD_MAPS.includes(location.mapId)) {
+    return { map: location.mapId, ...at }
+  }
+  return null
+}
+
 function describe(slot, data) {
   const player = data.player || {}
   const worn = player.equipped || {}
@@ -157,9 +171,66 @@ function describe(slot, data) {
     level: Math.max(1, Math.floor(Number(summary.level) || 1)),
     place: String(summary.place || ''),
     scene: sceneOf(data.location || {}),
+    world: worldOf(data.location || {}),
     boss: boss ? { hp: Number(boss.hp) || 0, defeated: !!boss.defeated } : null,
     equipped
   }
+}
+
+// El mapa tal como lo dibuja la terminal, con la tabla TILES del juego. Se carga
+// al pedirlo: si un cambio en lib/ lo rompe, el resto del visor sigue andando.
+const worlds = new Map()
+function worldMap(id) {
+  if (worlds.has(id)) return worlds.get(id)
+  let data = null
+  try {
+    const { MAPS, TILES } = require('../lib/map.js')
+    const tiles = {}
+    for (const [ch, tile] of Object.entries(TILES)) {
+      tiles[ch] = { id: tile.id, name: tile.name, solid: !!tile.solid }
+    }
+    if (id === 'boss') {
+      const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
+      data = {
+        id,
+        kind: 'boss',
+        name: 'ruinas volcanicas',
+        width: BOSS_ZONE.width,
+        height: BOSS_ZONE.height,
+        rows: volcanicRows().rows,
+        tiles,
+        // Donde BossZone pone al Coloso al entrar.
+        boss: { x: BOSS_ZONE.width - 24, y: Math.floor(BOSS_ZONE.height / 2) }
+      }
+    } else if (WORLD_MAPS.includes(id) && MAPS[id]) {
+      const map = MAPS[id]
+      data = {
+        id,
+        kind: 'map',
+        name: map.name,
+        width: map.width,
+        height: map.height,
+        rows: map.rows,
+        tiles,
+        npcs: (map.npcs || []).map((npc) => ({
+          id: npc.id,
+          name: npc.name,
+          x: npc.x,
+          y: npc.y,
+          color: npc.color
+        })),
+        landmarks: (map.landmarks || []).map((mark) => ({
+          id: mark.id,
+          name: mark.name,
+          bounds: mark.bounds
+        }))
+      }
+    }
+  } catch (error) {
+    console.warn(`No pude armar el mapa ${id}: ${error.message}`)
+  }
+  if (data) worlds.set(id, data)
+  return data
 }
 
 function heroWatcher() {
@@ -272,6 +343,12 @@ function serve() {
       }
       if (urlPath === '/models.json') return json(res, listModels())
       if (urlPath === '/state.json') return json(res, hero.state())
+      if (urlPath === '/mundo.js') return send(res, WORLD_JS, 'text/javascript; charset=utf-8')
+      const world = /^\/world\/([a-z]+)\.json$/.exec(urlPath)
+      if (world) {
+        const data = worldMap(world[1])
+        if (data) return json(res, data)
+      }
       // La pagina de modelos pide model-viewer en la raiz; el resto va bajo /vendor/.
       const lib = urlPath === '/model-viewer.min.js' ? 'model-viewer.min.js' : urlPath.slice(8)
       const vendored = urlPath === '/model-viewer.min.js' || urlPath.startsWith('/vendor/')
