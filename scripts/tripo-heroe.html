@@ -1493,12 +1493,16 @@
       const lang = (en, sp) => (spanish ? sp : en)
       const pick = (pair) => pair[spanish ? 1 : 0]
       // En las ruinas se arranca a 10 m del Coloso, para que se vea apenas se llega.
+      // En la ciudad, en el pasto a la derecha de Elian (160,132): se ven los dos,
+      // los nombres no se pisan y ya aparece la ayuda para hablarle. Al norte lo
+      // tapaba el cartel del mercado. En el castillo, cerca del rey, para que su
+      // nombre no quede bajo los botones.
       const PLACES = [
         {
           map: 'city',
           short: ['City', 'Ciudad'],
           name: ['The city of RUNA', 'La ciudad de RUNA'],
-          at: [160, 130]
+          at: [164, 132]
         },
         {
           map: 'nox',
@@ -1510,7 +1514,7 @@
           map: 'castle',
           short: ['Castle', 'Castillo'],
           name: ['The castle', 'El castillo'],
-          at: [56, 20]
+          at: [56, 17]
         },
         {
           map: 'coliseum',

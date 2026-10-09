@@ -2849,6 +2849,8 @@ export function buildWorld(data, extras = {}) {
     dispose() {
       const free = (node) => {
         if (node.userData.shared) return
+        // Las instancias tienen sus propios buffers de posiciones y colores.
+        if (node.isInstancedMesh) node.dispose()
         if (node.geometry) node.geometry.dispose()
         for (const mat of node.material ? [node.material].flat() : []) {
           if (mat.map && mat.map !== atlas) mat.map.dispose()
