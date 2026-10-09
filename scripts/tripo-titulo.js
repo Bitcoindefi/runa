@@ -11,8 +11,9 @@
 // Recibe `ctx`: scene, camera, controls, renderer, sun, sky (la luz de
 // hemisferio), ember (la luz calida), ground y ring (el piso de la vitrina),
 // ash (la ceniza), hero (el stickman y el heroe de Tripo), models() (los GLB que
-// hay, Map nombre -> version), loadGlb(file), mapData(id), buildWorld y
-// backdrop() (el Coloso que la pagina pone de fondo, o null).
+// hay, Map nombre -> version), loadGlb(file), mapData(id), buildWorld,
+// backdrop() (el Coloso que la pagina pone de fondo, o null) y effects (el
+// postproceso de efectos.js, para los rayos de sol; puede faltar).
 //
 // Devuelve { show(on), update(time, dt), dispose() }. show(true) guarda lo que
 // el titulo cambia de la escena (niebla, luces, camara, ambiente) y show(false)
@@ -27,7 +28,15 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
-import { createSky, skyDirection } from './efectos.js'
+import {
+  createSky,
+  dressSky,
+  skyDirection,
+  skyNoise,
+  tileNoise,
+  random,
+  smooth
+} from './efectos.js'
 
 // Lo lejano se ubica respecto de la camara: -z es hacia donde mira y +x su
 // derecha; los angulos son grados hacia la derecha del centro de la vista.
@@ -43,7 +52,7 @@ const KINGDOM = { angle: -13, distance: 190, width: 40, base: 2, hill: 1.05 }
 const EYE = 2.5
 const MIST = -7
 
-// Los colores del alba (sRGB). Los del cielo los da el modelo de Preetham.
+// Los colores del alba (sRGB).
 const DAWN = {
   fog: 0xcf9f9b,
   mistLit: 0xf2b9a2,
@@ -52,11 +61,10 @@ const DAWN = {
   mistSun: 0xffc994,
   mistAway: 0xb593b4,
   lava: 0xff5a1e,
-  // De la cordillera del fondo a la mas cercana: lejos mas clara.
-  ridges: [0x6a5a86, 0x40355c, 0x241f38],
-  hazeSun: 0xf3b08f,
-  hazeAway: 0xa98bb2,
-  snow: 0xf4d8dc,
+  hazeSun: 0xd99482,
+  hazeAway: 0xb895b8,
+  snow: 0xf6dfe2,
+  alpenglow: 0xf0a2a6,
   crest: 0xffb37a,
   basalt: [0x221d1d, 0x3b302b],
   scorch: 0x55261a,
@@ -67,6 +75,51 @@ const DAWN = {
   hemiGround: 0x5c2412,
   ember: 0xff6420
 }
+
+// El cielo del alba, con la forma de los climas de efectos.js: el sol bajo
+// detras del Coloso, el horizonte dorado hacia el y rosa del otro lado, violeta
+// a media altura y el azul hondo arriba, con las ultimas estrellas, y vetas de
+// nubes que toman la luz del sol desde abajo.
+const DAWN_SKY = {
+  sun: [SUN.elevation, SUN.angle],
+  air: [4.5, 3, 0.0045, 0.82],
+  sky: [0.46, [0.98, 0.96, 1.08]],
+  paint: [0xffa040, 0xd9788c, 0x7a5ca8, 0x0f1d52, [0.085, 0.3, 2.5, 0.9]],
+  clouds: [0.8, 0.56, 0.18, 0xffb07a, 0x5e4c7e],
+  stars: 1.5,
+  disc: [0xffd9a8, 2.1, 1.1, 0.12],
+  fog: [DAWN.mistAway]
+}
+
+// Los cordones de montanas, del fondo hacia adelante, como capas de papel
+// recortado: radio en metros, la cresta entre low y high grados sobre el
+// horizonte, columnas, color y cuanta bruma del alba lleva cada uno. El del
+// fondo tiene nieve; el de adelante, la loma que tapa la base del reino.
+const RANGES = [
+  {
+    radius: 980,
+    low: 3,
+    high: 8.5,
+    seed: 3,
+    columns: 260,
+    color: 0xa77e98,
+    haze: 0.15,
+    peaks: true,
+    snow: true
+  },
+  {
+    radius: 640,
+    low: 1.6,
+    high: 5.5,
+    seed: 17,
+    columns: 220,
+    color: 0x7a5a83,
+    haze: 0.1,
+    peaks: true
+  },
+  { radius: 380, low: 1.2, high: 3.2, seed: 29, columns: 200, color: 0x4d3a5e, haze: 0.05 },
+  { radius: 170, low: 0.3, high: 1.6, seed: 41, columns: 180, color: 0x2a2034, haze: 0.02 }
+]
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
 
@@ -99,7 +152,7 @@ export function buildTitle(ctx) {
   const fill = new THREE.DirectionalLight(DAWN.fill, 0.72)
   root.add(fill, fill.target)
 
-  const dawn = dawnSky(sunLocal)
+  const dawn = dawnSky()
   keep(dawn.geometry)
   keep(dawn.material)
   root.add(dawn)
@@ -107,7 +160,7 @@ export function buildTitle(ctx) {
   const mist = cloudSea(keep)
   stage.add(mist)
 
-  const ridges = mountains(noise, sunLocal, keep)
+  const ridges = mountains(noise, keep)
   backdrop.add(ridges)
 
   const rock = basaltTextures(renderer, keep)
@@ -121,7 +174,7 @@ export function buildTitle(ctx) {
   const sparks = embers(keep)
   stage.add(sparks)
 
-  const reflection = dawnEnvironment(renderer, sunLocal)
+  const reflection = dawnEnvironment(renderer)
   const environment = reflection.texture
 
   // El reino de Tripo llega cuando baja su GLB.
@@ -271,7 +324,10 @@ export function buildTitle(ctx) {
     local.copy(fillLocal).applyAxisAngle(Y_AXIS, theta)
     fill.position.copy(target).addScaledVector(local, 30)
     fill.target.position.set(target.x, 1.2, target.z)
-    mist.material.uniforms.uSun.value.copy(sunLocal).applyAxisAngle(Y_AXIS, theta)
+    const sunWorld = mist.material.uniforms.uSun.value
+    sunWorld.copy(sunLocal).applyAxisAngle(Y_AXIS, theta)
+    // Los rayos de sol del postproceso salen de ahi.
+    if (ctx.effects) ctx.effects.shafts(sunWorld)
     scene.environmentRotation.set(0, theta, 0)
   }
 
@@ -291,6 +347,7 @@ export function buildTitle(ctx) {
       } else {
         dimColossus()
         restore()
+        if (ctx.effects) ctx.effects.shafts(null)
       }
     },
     update(time) {
@@ -329,42 +386,25 @@ export function buildTitle(ctx) {
 
 // --- El cielo y el ambiente -----------------------------------------------
 
-function dawnSky(sunLocal) {
+function dawnSky() {
   const sky = createSky()
   const u = sky.material.uniforms
-  u.turbidity.value = 4.5
-  u.rayleigh.value = 3
-  u.mieCoefficient.value = 0.0045
-  u.mieDirectionalG.value = 0.82
-  // Sin las nubes de Sky: casi no se ven y son lo mas caro del shader.
-  u.cloudCoverage.value = 0
-  u.sunPosition.value.copy(sunLocal)
-  u.skyExposure.value = 0.46
-  u.skyTint.value.setRGB(0.98, 0.96, 1.08)
-  // El azul hondo arriba y la franja rosa del alba sobre el horizonte.
-  u.zenithTint.value.setRGB(0.55, 0.7, 1.4)
-  u.beltColor.value.setRGB(0.15, 0.05, 0.09)
-  u.nightHorizon.value.setRGB(0, 0, 0)
-  u.nightZenith.value.setHex(0x0d1a40)
-  u.horizonColor.value.setHex(DAWN.mistAway)
-  u.horizonBand.value.set(-0.14, -0.01, 0.85)
-  u.discColor.value.setRGB(1, 0.74, 0.46)
+  dressSky(u, DAWN_SKY)
+  // Un sol un poco mas grande que el de los mapas, y la bruma del horizonte
+  // empieza mas abajo: lo de abajo del horizonte lo tapa el mar de nubes.
   u.sunSize.value = 0.02
-  u.sunBoost.value = 2.6
-  u.sunHalo.value = 0.38
-  u.starAmount.value = 1.5
+  u.horizonBand.value.set(-0.14, -0.01, 0.85)
   return sky
 }
 
-// El reflejo de los PBR de Tripo: el mismo alba, sin estrellas, con el suelo
-// oscuro y tibio de la meseta. Se arma una vez con PMREMGenerator.
-function dawnEnvironment(renderer, sunLocal) {
-  const sky = dawnSky(sunLocal)
+// El reflejo de los PBR de Tripo: el mismo alba, sin estrellas ni nubes, con el
+// suelo oscuro y tibio de la meseta. Se arma una vez con PMREMGenerator.
+function dawnEnvironment(renderer) {
+  const sky = dawnSky()
   const u = sky.material.uniforms
   u.starAmount.value = 0
-  u.sunBoost.value = 1
-  u.sunHalo.value = 0.3
-  u.cloudCoverage.value = 0
+  u.cloudShape.value.x = 0
+  u.sunGlow.value.set(1, 0.3, 0.3, 0.2)
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(40, 32).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0x2a1410 })
@@ -384,76 +424,15 @@ function dawnEnvironment(renderer, sunLocal) {
 
 // --- El mar de nubes ----------------------------------------------------------
 
-// Ruido de valor suave y periodico: una grilla de `period` celdas que se repite
-// en `size` pixeles. Sirve para texturas que se repiten sin costura.
-function tileNoise(size, period, seed) {
-  const rand = random(seed)
-  const lattice = new Float32Array(period * period)
-  for (let i = 0; i < lattice.length; i++) lattice[i] = rand()
-  const out = new Float32Array(size * size)
-  for (let y = 0; y < size; y++) {
-    const fy = (y / size) * period
-    const y0 = Math.floor(fy)
-    const ty = smooth(fy - y0)
-    const r0 = (y0 % period) * period
-    const r1 = ((y0 + 1) % period) * period
-    for (let x = 0; x < size; x++) {
-      const fx = (x / size) * period
-      const x0 = Math.floor(fx)
-      const tx = smooth(fx - x0)
-      const c0 = x0 % period
-      const c1 = (x0 + 1) % period
-      const top = lattice[r0 + c0] + (lattice[r0 + c1] - lattice[r0 + c0]) * tx
-      const bottom = lattice[r1 + c0] + (lattice[r1 + c1] - lattice[r1 + c0]) * tx
-      out[y * size + x] = top + (bottom - top) * ty
-    }
-  }
-  return out
-}
-
-function noiseTexture(size, octaves, seed) {
-  const sum = new Float32Array(size * size)
-  let total = 0
-  octaves.forEach(([period, weight], i) => {
-    const layer = tileNoise(size, period, seed + i * 101)
-    for (let k = 0; k < sum.length; k++) sum[k] += layer[k] * weight
-    total += weight
-  })
-  const data = new Uint8Array(size * size * 4)
-  for (let k = 0; k < sum.length; k++) {
-    const v = Math.round((sum[k] / total) * 255)
-    data.set([v, v, v, 255], k * 4)
-  }
-  const texture = new THREE.DataTexture(data, size, size)
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-  texture.magFilter = THREE.LinearFilter
-  texture.minFilter = THREE.LinearMipmapLinearFilter
-  texture.generateMipmaps = true
-  texture.needsUpdate = true
-  return texture
-}
-
 // Un plano enorme bajo la meseta: nubes que se mueven despacio, claras donde
 // miran al sol, y lejos se funden con el horizonte. Debajo, en algunos lugares,
-// la lava las tine de naranja.
+// la lava las tine de naranja. El ruido es el de las nubes del cielo.
 function cloudSea(keep) {
-  const texture = keep(
-    noiseTexture(
-      256,
-      [
-        [4, 0.5],
-        [8, 0.3],
-        [16, 0.14],
-        [32, 0.06]
-      ],
-      5
-    )
-  )
   const color = (hex) => ({ value: new THREE.Color(hex) })
   const material = keep(
     new THREE.ShaderMaterial({
       uniforms: {
-        uNoise: { value: texture },
+        uNoise: { value: skyNoise() },
         uTime: { value: 0 },
         uSun: { value: new THREE.Vector3(0, 0, -1) },
         cLit: color(DAWN.mistLit),
@@ -515,89 +494,52 @@ function cloudSea(keep) {
 
 // --- Las montanas ---------------------------------------------------------------
 
-// Tres cordones de montanas en anillo, de pocos poligonos, con la luz del alba
-// horneada en el color de cada cara: lo de cara al sol es una silueta con la
-// cresta encendida, lo de los costados toma el rosa del alba, y cuanto mas lejos
-// y mas abajo mas se funde con la bruma. Como giran con la camara, la luz no
-// cambia y no hace falta calcularla en cada cuadro. El cordon de adelante son
-// lomas bajas; una de ellas tapa la base del reino de Tripo, que asoma detras.
-function mountains(noise, sunLocal, keep) {
-  const LAYERS = [
-    { radius: 760, low: 2.2, high: 6.8, seed: 3, columns: 150, haze: 0.34 },
-    { radius: 430, low: 1.2, high: 4.2, seed: 17, columns: 140, haze: 0.18 },
-    { radius: 150, low: 0.25, high: 1.7, seed: 29, columns: 120, haze: 0.05 }
-  ]
-  const ROWS = [0, 0.38, 0.66, 0.86, 1]
-  // La base queda apenas bajo el mar de nubes, que la tapa.
-  const base = MIST - 6
-  const sunBearing = Math.atan2(sunLocal.x, -sunLocal.z)
+// Los cordones de RANGES en anillo, como capas de papel recortado. El color va
+// por vertice y se interpola, sin facetas: cada cordon con el suyo, mas claro
+// cuanto mas lejos (la bruma del alba), fundido abajo con el mar de nubes y con
+// la cresta encendida del lado del sol. Del lado contrario el sol bajo tine de
+// rosa las cumbres altas (el arrebol), y en las del fondo hay nieve. Como giran
+// con la camara, la luz no cambia y no hace falta calcularla en cada cuadro.
+// La base queda apenas bajo el mar de nubes, que la tapa.
+function mountains(noise, keep) {
+  const sunBearing = THREE.MathUtils.degToRad(SUN.angle)
   const kingdomBearing = THREE.MathUtils.degToRad(KINGDOM.angle)
-  const parts = []
-  LAYERS.forEach((layer, index) => {
-    const rand = random(layer.seed)
-    // La cresta de cada columna: elevacion en grados vista desde la camara.
-    const crest = []
-    for (let i = 0; i <= layer.columns; i++) {
-      const a = (i / layer.columns) * Math.PI * 2
-      const ring = (k, s) => noise.noise(Math.cos(a) * k + s, Math.sin(a) * k + s, layer.seed)
-      let n = ring(2.2, 0.3) * 0.6 + ring(5.5, 7.1) * 0.3 + ring(13, 3.3) * 0.12
-      n = Math.pow(Math.min(1, Math.max(0, n * 0.9 + 0.5)), 1.5)
-      let elevation = layer.low + (layer.high - layer.low) * n
-      // Un valle donde sale el sol.
-      elevation *= 1 - 0.7 * Math.exp(-((wrapAngle(a - sunBearing) / 0.2) ** 2))
-      // La loma de adelante sube bajo el reino, con la cima casi plana.
-      if (index === 2) {
-        const off = Math.abs(wrapAngle(a - kingdomBearing))
-        const hill = 1 - THREE.MathUtils.smoothstep(off, 0.1, 0.17)
-        elevation = Math.max(elevation, KINGDOM.hill * hill + (ring(30, 1.1) * 0.08 + 0.04))
-      }
-      crest.push(Math.max(0.15, elevation))
-    }
-    const points = []
-    for (let i = 0; i <= layer.columns; i++) {
-      const a = (i / layer.columns) * Math.PI * 2
-      const top = EYE + layer.radius * Math.tan(THREE.MathUtils.degToRad(crest[i]))
-      const column = []
-      for (const t of ROWS) {
-        const jitter = t > 0 && t < 1 && i % layer.columns !== 0
-        const r = layer.radius * (1 + (jitter ? (rand() - 0.5) * 0.05 : 0))
-        const shift = jitter ? (rand() - 0.5) * (Math.PI / layer.columns) * 0.8 : 0
-        const y = base + (top - base) * (t === 1 ? 1 : t * 0.94 + rand() * 0.06)
-        column.push(new THREE.Vector3(Math.sin(a + shift) * r, y, -Math.cos(a + shift) * r))
-      }
-      points.push(column)
-    }
+  const base = MIST - 6
+  // Cada columna: la base, dos alturas intermedias y la cresta.
+  const ROWS = [0, 0.5, 0.82, 0.95, 1]
+  const parts = RANGES.map((range, index) => {
+    const crest = ridgeLine(noise, range, index === RANGES.length - 1, sunBearing, kingdomBearing)
     const positions = []
     const colors = []
     const color = new THREE.Color()
-    const face = (p, q, s, top) => {
-      const normal = new THREE.Vector3()
-        .subVectors(q, p)
-        .cross(new THREE.Vector3().subVectors(s, p))
-      normal.normalize()
-      ridgeColor(color, normal, p, q, s, top, layer, index, sunLocal, sunBearing)
-      for (const v of [p, q, s]) {
-        positions.push(v.x, v.y, v.z)
+    for (let i = 0; i <= range.columns; i++) {
+      const a = (i / range.columns) * Math.PI * 2
+      const top = EYE + range.radius * Math.tan(THREE.MathUtils.degToRad(crest[i]))
+      // Que tan alta es esta cumbre dentro de su cordon (0 a 1): la nieve.
+      const peak = (crest[i] - range.low) / (range.high - range.low)
+      const toSun = (Math.cos(wrapAngle(a - sunBearing)) + 1) / 2
+      for (const t of ROWS) {
+        const y = base + (top - base) * t
+        positions.push(Math.sin(a) * range.radius, y, -Math.cos(a) * range.radius)
+        ridgeColor(color, range, t, peak, toSun)
         colors.push(color.r, color.g, color.b)
       }
     }
-    for (let i = 0; i < layer.columns; i++) {
-      const top =
-        EYE + layer.radius * Math.tan(THREE.MathUtils.degToRad(Math.max(crest[i], crest[i + 1])))
-      for (let j = 0; j < ROWS.length - 1; j++) {
-        const a = points[i][j]
-        const b = points[i + 1][j]
-        const c = points[i + 1][j + 1]
-        const d = points[i][j + 1]
+    const index_ = []
+    const rows = ROWS.length
+    for (let i = 0; i < range.columns; i++) {
+      for (let j = 0; j < rows - 1; j++) {
+        const a = i * rows + j
+        const b = (i + 1) * rows + j
         // Las caras miran hacia el centro, donde esta la camara.
-        face(a, b, d, top)
-        face(b, c, d, top)
+        index_.push(a, b, a + 1, b, b + 1, a + 1)
       }
     }
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
-    parts.push(geometry)
+    geometry.setIndex(index_)
+    return geometry
   })
   const geometry = keep(mergeGeometries(parts))
   for (const part of parts) part.dispose()
@@ -609,27 +551,65 @@ function mountains(noise, sunLocal, keep) {
   return mesh
 }
 
+// La cresta de un cordon, en grados sobre el horizonte, columna por columna:
+// ruido en un circulo (cierra sin costura), un valle donde sale el sol y, en el
+// cordon de adelante, la loma casi plana que tapa la base del reino.
+function ridgeLine(noise, range, front, sunBearing, kingdomBearing) {
+  const crest = []
+  for (let i = 0; i <= range.columns; i++) {
+    const a = (i / range.columns) * Math.PI * 2
+    const ring = (k, s) => noise.noise(Math.cos(a) * k + s, Math.sin(a) * k + s, range.seed)
+    // Las cordilleras llevan ruido "de crestas" (1 - |ruido|): picos filosos y
+    // valles redondos. Las lomas de adelante, ruido comun: ondulan.
+    const ridge = (k, s) => (1 - Math.abs(ring(k, s))) ** 2
+    let n = range.peaks
+      ? (ridge(3, 0.3) * 0.5 +
+          ridge(7, 7.1) * 0.3 +
+          ridge(17, 3.3) * 0.15 +
+          ridge(41, 5.7) * 0.05 -
+          0.45) /
+        0.5
+      : ring(2.2, 0.3) * 0.6 + ring(5.5, 7.1) * 0.3 + ring(13, 3.3) * 0.12 + ring(31, 5.7) * 0.05
+    if (!range.peaks) n = n * 0.9 + 0.5
+    n = Math.pow(THREE.MathUtils.clamp(n, 0, 1), 1.5)
+    let elevation = range.low + (range.high - range.low) * n
+    elevation *= 1 - 0.7 * Math.exp(-((wrapAngle(a - sunBearing) / 0.2) ** 2))
+    if (front) {
+      const off = Math.abs(wrapAngle(a - kingdomBearing))
+      const hill = 1 - THREE.MathUtils.smoothstep(off, 0.1, 0.17)
+      elevation = Math.max(elevation, KINGDOM.hill * hill + (ring(30, 1.1) * 0.08 + 0.04))
+    }
+    crest.push(Math.max(0.15, elevation))
+  }
+  return crest
+}
+
 const tmpColor = new THREE.Color()
 const hazeSun = new THREE.Color(DAWN.hazeSun)
-function ridgeColor(out, normal, p, q, s, top, layer, index, sunLocal, sunBearing) {
-  const cx = (p.x + q.x + s.x) / 3
-  const cy = (p.y + q.y + s.y) / 3
-  const cz = (p.z + q.z + s.z) / 3
-  const bearing = Math.atan2(cx, -cz)
-  // 1 de cara al sol (detras de la cordillera), 0 del lado contrario.
-  const toSun = (Math.cos(wrapAngle(bearing - sunBearing)) + 1) / 2
-  const height = THREE.MathUtils.clamp((cy - MIST) / Math.max(1, top - MIST), 0, 1)
-  out.setHex(DAWN.ridges[index])
-  // La cara que mira al sol toma el rosa del alba; de contraluz queda oscura.
-  const lit = Math.max(0, normal.dot(sunLocal) * 0.8 + normal.y * 0.35)
-  out.lerp(tmpColor.setHex(DAWN.crest), Math.min(0.55, lit * (1 - toSun * 0.85) * 0.9))
-  // Nieve en las cumbres de la cordillera del fondo.
-  if (index === 0 && height > 0.8) out.lerp(tmpColor.setHex(DAWN.snow), (height - 0.8) * 2.6)
-  // La cresta de cara al sol se enciende un poco.
-  out.lerp(tmpColor.setHex(DAWN.crest), Math.pow(height, 6) * Math.pow(toSun, 3) * 0.5)
-  // Bruma: lejos y abajo se funde con el horizonte.
-  const haze = Math.min(1, layer.haze + Math.pow(1 - height, 2) * 0.55)
-  tmpColor.setHex(DAWN.hazeAway).lerp(hazeSun, Math.pow(toSun, 2.2))
+// El color de un vertice de montana: t es la altura en la columna (0 la base,
+// 1 la cresta), peak cuan alta es esa cumbre en su cordon y toSun 1 de cara al
+// sol (de contraluz) y 0 del lado contrario (de frente al sol bajo).
+function ridgeColor(out, range, t, peak, toSun) {
+  // El color de cada cordon es el de contraluz, el que se ve detras del Coloso;
+  // del lado contrario el sol bajo lo aclara.
+  out.setHex(range.color)
+  out.multiplyScalar(1 + 0.35 * (1 - toSun))
+  // El arrebol: del lado contrario al sol, las cumbres altas se tinen de rosa.
+  const high = THREE.MathUtils.smoothstep(t, 0.45, 1)
+  out.lerp(tmpColor.setHex(DAWN.alpenglow), high * (1 - toSun) ** 1.5 * 0.4)
+  // La nieve de las cumbres del fondo: rosada de frente al sol, apagada de
+  // contraluz.
+  if (range.snow && t > 0.6) {
+    const snow =
+      THREE.MathUtils.smoothstep(peak, 0.45, 0.85) * THREE.MathUtils.smoothstep(t, 0.7, 1)
+    tmpColor.setHex(DAWN.snow).lerp(hazeSun, toSun * 0.5)
+    out.lerp(tmpColor, snow * (0.85 - toSun * 0.55))
+  }
+  // La cresta de cara al sol se enciende.
+  if (t === 1) out.lerp(tmpColor.setHex(DAWN.crest), toSun ** 4 * 0.55)
+  // Bruma: la de cada cordon y, abajo, la del mar de nubes.
+  const haze = Math.min(1, range.haze + (1 - t) ** 2 * 0.6)
+  tmpColor.setHex(DAWN.hazeAway).lerp(hazeSun, toSun ** 2.2)
   out.lerp(tmpColor, haze)
   return out
 }
@@ -1146,25 +1126,10 @@ function voronoi(size, cells, seed, warpX, warpY, warp) {
   return { crack, center, plate }
 }
 
-function random(seed) {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
 function hash(x, y) {
   let h = (x * 374761393 + y * 668265263) | 0
   h = Math.imul(h ^ (h >>> 13), 1274126177)
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295
-}
-
-function smooth(t) {
-  return t * t * (3 - 2 * t)
 }
 
 function wrapAngle(angle) {
