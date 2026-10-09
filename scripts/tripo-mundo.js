@@ -1373,8 +1373,9 @@ function shoreDistance(width, height, wet, reach) {
   const rz = Math.ceil(reach / CZ)
   for (let z = 0; z <= height; z++) {
     for (let x = 0; x <= width; x++) {
-      const around = [wet(x - 1, z - 1), wet(x, z - 1), wet(x - 1, z), wet(x, z)]
-      if (!around.includes(true) || !around.includes(false)) continue
+      // Cuantas de las cuatro celdas alrededor de la esquina son liquido.
+      const wets = wet(x - 1, z - 1) + wet(x, z - 1) + wet(x - 1, z) + wet(x, z)
+      if (wets === 0 || wets === 4) continue
       // Una esquina de la orilla acerca a la orilla a las que la rodean.
       for (let dz = -rz; dz <= rz; dz++) {
         for (let dx = -rx; dx <= rx; dx++) {
