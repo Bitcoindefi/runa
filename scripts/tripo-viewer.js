@@ -20,6 +20,7 @@ const MODELS = path.join(root, 'assets/tripo')
 const VENDOR = path.join(root, 'vendor')
 const PAGES = {
   '/': path.join(__dirname, 'tripo-viewer.html'),
+  '/models.html': path.join(__dirname, 'tripo-viewer.html'),
   '/heroe': path.join(__dirname, 'tripo-heroe.html'),
   '/mundo': path.join(__dirname, 'tripo-heroe.html')
 }
@@ -66,6 +67,9 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4173
 const PREFIX = '/assets/tripo/'
 // El nombre tambien protege las rutas: solo se sirve lo que cumple esto.
 const GLB = /^[\w-]+\.glb$/
+// Los NPC pintados de la vista 2.5D: un PNG por tipo, con el mismo cuidado.
+const NPC_PREFIX = '/assets/npcs/'
+const NPC_PNG = /^[a-z]+\.png$/
 const skipped = new Set()
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
@@ -173,6 +177,16 @@ function keysStalled(inbox) {
   return Date.now() - oldest > 1500
 }
 
+// El juego con --teclas reescribe keys/alive cada segundo: si el latido tiene
+// menos de 3 s, la terminal esta abierta y escuchando.
+function listening() {
+  try {
+    return Date.now() - fs.statSync(path.join(storageDir(), 'keys', 'alive')).mtimeMs < 3000
+  } catch {
+    return false
+  }
+}
+
 // Solo la pagina del visor manda teclas: el header propio obliga a cualquier otra
 // web a un preflight CORS que este server no contesta, y el Origin tiene que ser
 // el del visor. Ctrl+C nunca llega: no es una tecla de la tabla.
@@ -215,7 +229,9 @@ function sendKey(req, res, origins) {
 function item(id) {
   if (typeof id !== 'string' || !id) return null
   const known = items[id]
-  return known ? { id, name: known.name, kind: known.kind } : { id, name: id, kind: 'unknown' }
+  return known
+    ? { id, name: known.name, kind: known.kind, slot: known.slot || null }
+    : { id, name: id, kind: 'unknown', slot: null }
 }
 
 // Una escena por zona: el Coloso en sus ruinas, el reino en las ciudades y un
@@ -253,7 +269,10 @@ function describe(slot, data) {
     scene: sceneOf(data.location || {}),
     world: worldOf(data.location || {}),
     boss: boss ? { hp: Number(boss.hp) || 0, defeated: !!boss.defeated } : null,
-    equipped
+    equipped,
+    // La mochila y el oro, para el inventario del modo navegador.
+    bag: (Array.isArray(player.items) ? player.items : []).map(item).filter(Boolean),
+    gold: Math.max(0, Math.floor(Number(player.gold) || 0))
   }
 }
 
@@ -264,11 +283,16 @@ function worldMap(id) {
   if (worlds.has(id)) return worlds.get(id)
   let data = null
   try {
-    const { MAPS, TILES } = require('../lib/map.js')
+    const { MAPS, TILES, NPC_SPRITES } = require('../lib/map.js')
     const tiles = {}
     for (const [ch, tile] of Object.entries(TILES)) {
       tiles[ch] = { id: tile.id, name: tile.name, solid: !!tile.solid }
+      // Adonde lleva una puerta o un porton: el modo navegador cruza los portones.
+      if (tile.enter) tiles[ch].enter = { ...tile.enter }
     }
+    // El dibujo de cada NPC es uno de NPC_SPRITES: de ahi sale su tipo.
+    const kindOf = (sprite) =>
+      Object.keys(NPC_SPRITES).find((kind) => NPC_SPRITES[kind] === sprite) || 'villager'
     if (id === 'boss') {
       const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
       data = {
@@ -295,6 +319,10 @@ function worldMap(id) {
         npcs: (map.npcs || []).map((npc) => ({
           id: npc.id,
           name: npc.name,
+          role: npc.role || '',
+          line: npc.line || '',
+          kind: kindOf(npc.sprite),
+          action: npc.action ? npc.action.kind : null,
           x: npc.x,
           y: npc.y,
           color: npc.color
@@ -423,7 +451,9 @@ function serve() {
         return send(res, PAGES[urlPath], 'text/html; charset=utf-8')
       }
       if (urlPath === '/models.json') return json(res, listModels())
-      if (urlPath === '/state.json') return json(res, hero.state())
+      // listening: el juego de la terminal esta leyendo teclas. Si no, la pagina
+      // pasa al modo navegador y se juega sola.
+      if (urlPath === '/state.json') return json(res, { ...hero.state(), listening: listening() })
       if (urlPath === '/key' && req.method === 'POST') return sendKey(req, res, origins)
       if (urlPath === '/mundo.js') return send(res, WORLD_JS, 'text/javascript; charset=utf-8')
       const world = /^\/world\/([a-z]+)\.json$/.exec(urlPath)
@@ -439,6 +469,8 @@ function serve() {
       }
       const name = urlPath.startsWith(PREFIX) ? urlPath.slice(PREFIX.length) : ''
       if (GLB.test(name)) return send(res, path.join(MODELS, name), 'model/gltf-binary')
+      const art = urlPath.startsWith(NPC_PREFIX) ? urlPath.slice(NPC_PREFIX.length) : ''
+      if (NPC_PNG.test(art)) return send(res, path.join(root, 'assets/npcs', art), 'image/png')
       res.writeHead(404).end()
     })
     .on('error', (error) => {
@@ -455,11 +487,16 @@ function serve() {
     })
 }
 
-if (process.argv.includes('--fetch-lib')) {
-  fetchLibs().catch((error) => {
-    console.error(error.message)
-    process.exitCode = 1
-  })
-} else {
-  serve()
+// scripts/build-web.js arma el sitio estatico con estas mismas piezas.
+module.exports = { LIBS, VENDOR, MODELS, PAGES, WORLD_JS, WORLD_MAPS, listModels, worldMap }
+
+if (require.main === module) {
+  if (process.argv.includes('--fetch-lib')) {
+    fetchLibs().catch((error) => {
+      console.error(error.message)
+      process.exitCode = 1
+    })
+  } else {
+    serve()
+  }
 }
