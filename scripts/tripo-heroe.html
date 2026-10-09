@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Runa / Heroe</title>
+    <link rel="icon" href="data:," />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three/three.module.min.js",
+          "three/addons/": "/vendor/three/addons/"
+        }
+      }
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0c;
+        --fg: #d8d8d0;
+        --dim: #7a7a72;
+        --accent: #e0c060;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          14px/1.5 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+      #hud {
+        position: fixed;
+        inset: 16px 16px auto 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        pointer-events: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0.1em;
+        color: var(--accent);
+      }
+      #who {
+        color: var(--dim);
+      }
+      #mode {
+        color: var(--accent);
+      }
+      #keys {
+        color: var(--dim);
+      }
+      #gear {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 0 12px;
+        margin: 0;
+        text-align: right;
+      }
+      #gear dt {
+        color: var(--dim);
+      }
+      #gear dd {
+        margin: 0;
+        text-align: left;
+      }
+      #toast {
+        position: fixed;
+        left: 50%;
+        bottom: 32px;
+        transform: translateX(-50%);
+        color: var(--accent);
+        font-size: 16px;
+        letter-spacing: 0.05em;
+        opacity: 0;
+        transition: opacity 0.4s;
+      }
+      #toast.show {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <header id="hud">
+      <div>
+        <h1>[ RUNA / HEROE ]</h1>
+        <div id="who">buscando la partida...</div>
+        <div id="mode"></div>
+        <div id="keys">WASD o flechas: caminar. E: hablar. I: inventario.</div>
+      </div>
+      <dl id="gear"></dl>
+    </header>
+    <div id="toast"></div>
+    <script type="module">
+      import * as THREE from 'three'
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+      import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+      import { buildWorld } from '/mundo.js'
+
+      // El stickman del juego en 3D, hecho con formas simples: no gasta creditos y
+      // su mano sirve de enganche para cualquier arma. Lee /state.json, que el
+      // visor arma con la ultima partida guardada, y viste al heroe con ese equipo.
+
+      const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
+      // Las etiquetas del inventario del juego.
+      const LABELS = {
+        left_hand: 'izq',
+        right_hand: 'der',
+        chest: 'pecho',
+        head: 'casco',
+        boots: 'botas'
+      }
+      // Items con modelo de Tripo. Un GLB llamado como el id del item
+      // (assets/tripo/spear.glb) se usa solo; aca van los alias y sus ajustes.
+      const SKINS = {
+        // Tripo entrega los modelos mirando hacia +x; el heroe mira hacia +z.
+        iron_helmet: { file: 'yelmo.glb', size: 0.46, yaw: -Math.PI / 2, lift: 0.03 }
+      }
+      // Fondos por zona, con modelos de Tripo que ya existen.
+      const SCENERY = {
+        // Al costado y mirando al heroe, para que el heroe no lo tape.
+        ruinas: { file: 'coloso.glb', size: 3.4, at: [-3, 0, -9], yaw: 0.32 },
+        reino: { file: 'paisaje.glb', size: 2.6, at: [0, 0, -6], yaw: 0 }
+      }
+      const GROUND = {
+        reino: 0x16140f,
+        pradera: 0x101a10,
+        ruinas: 0x1c0e08,
+        cripta: 0x0d0d13
+      }
+
+      const who = document.getElementById('who')
+      const mode = document.getElementById('mode')
+      const gear = document.getElementById('gear')
+      const toast = document.getElementById('toast')
+
+      // Escena
+      const renderer = new THREE.WebGLRenderer({ antialias: true })
+      // Con 1,5 alcanza para que se vea nitido y no se trabe en pantallas densas.
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+      renderer.shadowMap.enabled = true
+      document.body.prepend(renderer.domElement)
+      // Para medir desde la consola cuanto cuesta cada cuadro.
+      window.runaInfo = () => ({
+        ...renderer.info.render,
+        geometries: renderer.info.memory.geometries
+      })
+
+      const scene = new THREE.Scene()
+      scene.background = new THREE.Color(0x0b0b0c)
+      scene.fog = new THREE.Fog(0x0b0b0c, 11, 30)
+      // Un cuarto neutro para que el metal y los PBR de Tripo tengan que reflejar.
+      scene.environment = new THREE.PMREMGenerator(renderer).fromScene(
+        new RoomEnvironment(),
+        0.04
+      ).texture
+      scene.environmentIntensity = 0.45
+
+      const camera = new THREE.PerspectiveCamera(
+        38,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      )
+      camera.position.set(0, 1.55, 4.8)
+      const controls = new OrbitControls(camera, renderer.domElement)
+      controls.target.set(0, 1, 0)
+      controls.enableDamping = true
+      controls.enablePan = false
+      controls.autoRotate = true
+      controls.autoRotateSpeed = 0.9
+      controls.minDistance = 2.4
+      controls.maxDistance = 11
+      controls.maxPolarAngle = Math.PI * 0.49
+
+      const sky = new THREE.HemisphereLight(0xd8d8d0, 0x1a1408, 1.3)
+      scene.add(sky)
+      const sun = new THREE.DirectionalLight(0xfff1d6, 2.4)
+      sun.position.set(3, 6, 4)
+      sun.castShadow = true
+      sun.shadow.mapSize.set(1024, 1024)
+      scene.add(sun)
+      const ember = new THREE.PointLight(0xe0c060, 5, 9)
+      ember.position.set(-2, 2.2, -1.5)
+      scene.add(ember)
+
+      const groundMat = new THREE.MeshStandardMaterial({ color: GROUND.reino, roughness: 1 })
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(9, 64), groundMat)
+      ground.rotation.x = -Math.PI / 2
+      ground.receiveShadow = true
+      scene.add(ground)
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xe0c060,
+        transparent: true,
+        opacity: 0.5
+      })
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.66, 64), ringMat)
+      ring.rotation.x = -Math.PI / 2
+      ring.position.y = 0.003
+      scene.add(ring)
+
+      // Materiales
+      const chalk = new THREE.MeshStandardMaterial({ color: 0xd8d8d0, roughness: 0.65 })
+      const metal = (color = 0xb8bec8) =>
+        new THREE.MeshStandardMaterial({ color, metalness: 0.85, roughness: 0.3 })
+      const wood = () => new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.8 })
+      const hide = () => new THREE.MeshStandardMaterial({ color: 0x7a4a26, roughness: 0.9 })
+      const rune = () =>
+        new THREE.MeshStandardMaterial({
+          color: 0xe0c060,
+          emissive: 0xe0a030,
+          emissiveIntensity: 0.7
+        })
+
+      function part(geometry, material, x = 0, y = 0, z = 0) {
+        const mesh = new THREE.Mesh(geometry, material)
+        mesh.position.set(x, y, z)
+        mesh.castShadow = true
+        return mesh
+      }
+
+      // Un hueso que cuelga hacia abajo desde su pivote.
+      function bone(length, radius, skin = chalk) {
+        const pivot = new THREE.Group()
+        pivot.add(part(new THREE.CapsuleGeometry(radius, length, 6, 12), skin, 0, -length / 2))
+        const end = new THREE.Group()
+        end.position.y = -length - radius
+        pivot.add(end)
+        return { pivot, end }
+      }
+
+      // El stickman: +y arriba y la cara hacia +z. Su izquierda queda en +x.
+      function stickman(skin = chalk) {
+        const root = new THREE.Group()
+        const hips = new THREE.Group()
+        hips.position.y = 0.95
+        root.add(hips)
+        const torso = part(new THREE.CapsuleGeometry(0.15, 0.4, 8, 16), skin, 0, 0.32)
+        hips.add(torso)
+        const head = part(new THREE.SphereGeometry(0.16, 24, 16), skin, 0, 0.86)
+        hips.add(head)
+        const headSocket = new THREE.Group()
+        headSocket.position.y = 0.86
+        hips.add(headSocket)
+
+        const arms = {}
+        for (const [slot, side] of [
+          ['left_hand', 1],
+          ['right_hand', -1]
+        ]) {
+          const upper = bone(0.27, 0.05, skin)
+          upper.pivot.position.set(0.23 * side, 0.56, 0)
+          upper.pivot.rotation.z = 0.18 * side
+          hips.add(upper.pivot)
+          const lower = bone(0.25, 0.045, skin)
+          // El antebrazo apunta hacia adelante, como en guardia.
+          lower.pivot.rotation.x = -1.15
+          upper.end.add(lower.pivot)
+          lower.end.add(part(new THREE.SphereGeometry(0.055, 16, 12), skin))
+          // El enchufe deshace la pose del brazo: lo que se cuelga ahi queda con
+          // +y hacia arriba y +z hacia adelante.
+          const socket = new THREE.Group()
+          socket.rotation.set(1.15, 0, -0.18 * side)
+          lower.end.add(socket)
+          arms[slot] = { shoulder: upper.pivot, socket }
+        }
+
+        const feet = []
+        const legs = []
+        for (const side of [1, -1]) {
+          const thigh = bone(0.4, 0.06, skin)
+          thigh.pivot.position.set(0.1 * side, 0.02, 0)
+          hips.add(thigh.pivot)
+          legs.push(thigh.pivot)
+          const shin = bone(0.38, 0.05, skin)
+          thigh.end.add(shin.pivot)
+          // El tobillo queda a 8 cm del suelo: el pie baja 5 para apoyarse.
+          const foot = new THREE.Group()
+          foot.position.y = -0.05
+          shin.end.add(foot)
+          foot.add(part(new THREE.BoxGeometry(0.1, 0.06, 0.18), skin, 0, 0, 0.04))
+          feet.push(foot)
+        }
+        return { root, hips, torso, headSocket, arms, feet, legs }
+      }
+
+      // Los NPC del mapa: un stickman del color que usa la terminal.
+      const TERMINAL = {
+        cyan: 0x6fd3e0,
+        green: 0x7fd36f,
+        yellow: 0xe8d36f,
+        magenta: 0xd97fd9,
+        red: 0xe07a6a,
+        blue: 0x7a9be0,
+        white: 0xd8d8d0,
+        gray: 0x9a9a92
+      }
+      // Una figura liviana: tres mallas que comparten geometria y material, sin
+      // sombra. En la ciudad hay 17 NPC y tienen que costar poco.
+      const NPC = {
+        body: new THREE.CapsuleGeometry(0.17, 0.62, 2, 6),
+        head: new THREE.SphereGeometry(0.16, 8, 6),
+        legs: new THREE.BoxGeometry(0.26, 0.8, 0.12)
+      }
+      const npcSkins = {}
+      function figure(color) {
+        if (!npcSkins[color]) {
+          npcSkins[color] = new THREE.MeshStandardMaterial({
+            color: TERMINAL[color] || 0xbdb8aa,
+            roughness: 0.7
+          })
+        }
+        const skin = npcSkins[color]
+        const body = new THREE.Group()
+        const torso = new THREE.Mesh(NPC.body, skin)
+        torso.position.y = 1.25
+        const head = new THREE.Mesh(NPC.head, skin)
+        head.position.y = 1.86
+        const legs = new THREE.Mesh(NPC.legs, skin)
+        legs.position.y = 0.4
+        body.add(torso, head, legs)
+        // Comparte geometria y material con los demas NPC: el mapa no los libera.
+        body.userData.shared = true
+        return body
+      }
+
+      // Armas y piezas con formas simples, en el marco del enchufe.
+      function blade(length, width, guard) {
+        const g = new THREE.Group()
+        g.add(part(new THREE.CylinderGeometry(0.022, 0.022, 0.15, 8), hide()))
+        g.add(part(new THREE.BoxGeometry(guard, 0.03, 0.05), metal(0x8a6d2c), 0, 0.09))
+        g.add(part(new THREE.BoxGeometry(width, length, 0.014), metal(), 0, 0.1 + length / 2))
+        g.add(
+          part(
+            new THREE.ConeGeometry(width * 0.72, width * 1.8, 4),
+            metal(),
+            0,
+            0.1 + length + width * 0.9
+          )
+        )
+        return g
+      }
+
+      function spear() {
+        const g = new THREE.Group()
+        g.add(part(new THREE.CylinderGeometry(0.02, 0.02, 1.9, 8), wood(), 0, 0.35))
+        g.add(part(new THREE.ConeGeometry(0.05, 0.22, 6), metal(), 0, 1.41))
+        g.add(part(new THREE.TorusGeometry(0.03, 0.01, 6, 16), rune(), 0, 1.28))
+        return g
+      }
+
+      function hammer() {
+        const g = new THREE.Group()
+        g.add(part(new THREE.CylinderGeometry(0.025, 0.025, 0.8, 8), wood(), 0, 0.22))
+        g.add(part(new THREE.BoxGeometry(0.32, 0.16, 0.16), metal(0x8d939b), 0, 0.66))
+        g.add(part(new THREE.BoxGeometry(0.33, 0.03, 0.17), rune(), 0, 0.66))
+        return g
+      }
+
+      function curve(points, radius, material) {
+        const path = new THREE.CatmullRomCurve3(
+          points.map(([x, y, z]) => new THREE.Vector3(x, y, z))
+        )
+        return part(new THREE.TubeGeometry(path, 32, radius, 6), material)
+      }
+
+      function string(a, b) {
+        const geometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(...a),
+          new THREE.Vector3(...b)
+        ])
+        return new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xd8d8d0 }))
+      }
+
+      function longbow() {
+        const g = new THREE.Group()
+        // La curva abre hacia afuera (+x), para que de frente se lea como arco.
+        const arc = [
+          [-0.16, -0.7, 0],
+          [0.02, -0.35, 0],
+          [0.06, 0, 0],
+          [0.02, 0.35, 0],
+          [-0.16, 0.7, 0]
+        ]
+        g.add(curve(arc, 0.018, wood()))
+        g.add(string([-0.16, -0.7, 0], [-0.16, 0.7, 0]))
+        return g
+      }
+
+      function crossbow() {
+        const g = new THREE.Group()
+        g.add(part(new THREE.BoxGeometry(0.06, 0.07, 0.62), wood(), 0, 0.02, 0.18))
+        g.add(
+          curve(
+            [
+              [-0.32, 0.04, 0.38],
+              [0, 0.04, 0.5],
+              [0.32, 0.04, 0.38]
+            ],
+            0.016,
+            metal()
+          )
+        )
+        g.add(string([-0.32, 0.04, 0.38], [0.32, 0.04, 0.38]))
+        return g
+      }
+
+      function shield() {
+        const g = new THREE.Group()
+        const face = part(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 32), wood(), 0, 0.05, 0.07)
+        face.rotation.x = Math.PI / 2
+        g.add(face)
+        const rim = part(new THREE.TorusGeometry(0.3, 0.02, 8, 32), metal(), 0, 0.05, 0.07)
+        g.add(rim)
+        g.add(part(new THREE.SphereGeometry(0.06, 16, 12), metal(), 0, 0.05, 0.1))
+        g.add(part(new THREE.TorusGeometry(0.16, 0.008, 6, 32), rune(), 0, 0.05, 0.095))
+        return g
+      }
+
+      function cap() {
+        const g = new THREE.Group()
+        g.add(
+          part(
+            new THREE.SphereGeometry(0.175, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+            hide(),
+            0,
+            0.01
+          )
+        )
+        return g
+      }
+
+      function helmet() {
+        const g = new THREE.Group()
+        g.add(
+          part(
+            new THREE.SphereGeometry(0.185, 24, 12, 0, Math.PI * 2, 0, Math.PI / 1.8),
+            metal(),
+            0,
+            0
+          )
+        )
+        g.add(part(new THREE.BoxGeometry(0.03, 0.14, 0.03), metal(), 0, -0.03, 0.18))
+        g.add(part(new THREE.SphereGeometry(0.02, 8, 8), rune(), 0, 0.09, 0.16))
+        return g
+      }
+
+      const BUILD = {
+        dagger: () => blade(0.26, 0.04, 0.1),
+        sword: () => blade(0.72, 0.05, 0.2),
+        spear,
+        warhammer: hammer,
+        longbow,
+        crossbow,
+        shield,
+        leather_cap: cap,
+        iron_helmet: helmet
+      }
+
+      // Lo que va sobre el cuerpo: el pecho y las botas se visten, no se cuelgan.
+      const ARMOR = {
+        leather: () => new THREE.MeshStandardMaterial({ color: 0x7a4a26, roughness: 0.9 }),
+        chainmail: () =>
+          new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.7, roughness: 0.55 }),
+        plate: () => metal(0xc8ccd2)
+      }
+
+      const hero = stickman()
+      scene.add(hero.root)
+
+      // En el mundo camina el heroe de Tripo. El stickman con el equipo cambiable
+      // queda para la vitrina: el heroe de Tripo trae espada y escudo en el mismo
+      // modelo. Tripo lo entrega mirando hacia +x y el heroe mira hacia +z.
+      const AVATAR = { file: 'heroe.glb', height: 2.1, yaw: -Math.PI / 2 }
+      const avatar = new THREE.Group()
+      avatar.visible = false
+      hero.root.add(avatar)
+      let avatarLoading = null
+      function loadAvatar() {
+        if (!avatarLoading && models.has(AVATAR.file)) {
+          avatarLoading = loadGlb(AVATAR.file)
+            .then((object) => {
+              object.rotation.y = AVATAR.yaw
+              object.updateMatrixWorld(true)
+              const box = new THREE.Box3().setFromObject(object)
+              object.scale.multiplyScalar(AVATAR.height / box.getSize(new THREE.Vector3()).y)
+              object.updateMatrixWorld(true)
+              const placed = new THREE.Box3().setFromObject(object)
+              const mid = placed.getCenter(new THREE.Vector3())
+              object.position.x -= mid.x
+              object.position.z -= mid.z
+              object.position.y -= placed.min.y
+              object.traverse((child) => {
+                if (child.isMesh) child.castShadow = true
+              })
+              avatar.add(object)
+            })
+            .catch(() => {
+              avatarLoading = null
+            })
+        }
+        return avatarLoading || Promise.resolve()
+      }
+      function useAvatar(on) {
+        const ready = on && avatar.children.length > 0
+        avatar.visible = ready
+        hero.hips.visible = !ready
+      }
+
+      // Cielo de atardecer para el mundo; la vitrina sigue en negro.
+      const skyCanvas = document.createElement('canvas')
+      skyCanvas.width = 2
+      skyCanvas.height = 256
+      const skyPaint = skyCanvas.getContext('2d')
+      const skyGradient = skyPaint.createLinearGradient(0, 0, 0, 256)
+      skyGradient.addColorStop(0, '#0e1626')
+      skyGradient.addColorStop(0.6, '#2b3b52')
+      skyGradient.addColorStop(1, '#55606c')
+      skyPaint.fillStyle = skyGradient
+      skyPaint.fillRect(0, 0, 2, 256)
+      const skyTexture = new THREE.CanvasTexture(skyCanvas)
+      skyTexture.colorSpace = THREE.SRGBColorSpace
+      const night = new THREE.Color(0x0b0b0c)
+
+      let chestLayer = null
+      function dressChest(id) {
+        if (chestLayer) hero.hips.remove(chestLayer)
+        chestLayer = null
+        if (!id) return
+        const material = (ARMOR[id] || ARMOR.leather)()
+        chestLayer = new THREE.Group()
+        chestLayer.add(part(new THREE.CapsuleGeometry(0.168, 0.4, 8, 16), material, 0, 0.32))
+        if (id === 'plate') {
+          for (const side of [1, -1]) {
+            chestLayer.add(
+              part(new THREE.SphereGeometry(0.085, 16, 12), material, 0.21 * side, 0.6)
+            )
+          }
+        }
+        hero.hips.add(chestLayer)
+        return chestLayer
+      }
+
+      let bootLayers = []
+      function dressBoots(id) {
+        for (const layer of bootLayers) layer.parent.remove(layer)
+        bootLayers = []
+        if (!id) return
+        for (const foot of hero.feet) {
+          const boot = part(new THREE.BoxGeometry(0.12, 0.16, 0.21), hide(), 0, 0.05, 0.04)
+          foot.add(boot)
+          bootLayers.push(boot)
+        }
+        return bootLayers
+      }
+
+      // Modelos de Tripo
+      const loader = new GLTFLoader()
+      const loaded = new Map()
+      let models = new Map()
+
+      function loadGlb(file) {
+        const key = file + ':' + models.get(file)
+        if (!loaded.has(key)) {
+          const url = '/assets/tripo/' + encodeURIComponent(file) + '?v=' + models.get(file)
+          loaded.set(
+            key,
+            loader.loadAsync(url).catch((error) => {
+              loaded.delete(key)
+              throw error
+            })
+          )
+        }
+        return loaded.get(key).then((gltf) => gltf.scene.clone(true))
+      }
+
+      // Lleva un GLB al tamano pedido. Las armas se paran sobre su eje mas largo y
+      // se agarran a un tercio de la base; el resto queda centrado.
+      function fit(object, size, slot) {
+        object.updateMatrixWorld(true)
+        const box = new THREE.Box3().setFromObject(object)
+        const dims = box.getSize(new THREE.Vector3())
+        const weapon = slot === 'left_hand'
+        if (weapon && dims.x > dims.y && dims.x >= dims.z) object.rotation.z = Math.PI / 2
+        if (weapon && dims.z > dims.y && dims.z > dims.x) object.rotation.x = Math.PI / 2
+        object.updateMatrixWorld(true)
+        const turned = new THREE.Box3().setFromObject(object)
+        const longest = Math.max(...turned.getSize(new THREE.Vector3()).toArray())
+        const holder = new THREE.Group()
+        holder.add(object)
+        object.scale.multiplyScalar(size / longest)
+        object.updateMatrixWorld(true)
+        const final = new THREE.Box3().setFromObject(object)
+        const center = final.getCenter(new THREE.Vector3())
+        object.position.sub(center)
+        if (weapon) object.position.y += (final.max.y - final.min.y) * 0.2
+        object.traverse((child) => {
+          if (child.isMesh) child.castShadow = true
+        })
+        return holder
+      }
+
+      async function tripoPiece(id, slot) {
+        const spec = SKINS[id] || { file: id + '.glb' }
+        if (!models.has(spec.file)) return null
+        const size = spec.size || { left_hand: 1, right_hand: 0.62, head: 0.46 }[slot] || 0.5
+        const piece = fit(await loadGlb(spec.file), size, slot)
+        piece.rotation.y = spec.yaw || 0
+        piece.position.y += spec.lift || 0
+        return piece
+      }
+
+      // Equipar
+      const worn = {}
+      const tokens = {}
+      const pops = []
+
+      function pop(shown) {
+        for (const object of [shown].flat()) {
+          if (!object) continue
+          object.scale.setScalar(0.01)
+          pops.push({ object, start: performance.now() })
+        }
+      }
+
+      async function piece(id, slot) {
+        try {
+          const skinned = await tripoPiece(id, slot)
+          if (skinned) return skinned
+        } catch (error) {
+          console.warn('sin modelo de Tripo para', id, error)
+        }
+        return BUILD[id] ? BUILD[id]() : part(new THREE.BoxGeometry(0.1, 0.1, 0.1), rune())
+      }
+
+      async function wear(slot, entry, announce) {
+        const id = entry ? entry.id : null
+        const token = (tokens[slot] = (tokens[slot] || 0) + 1)
+        let shown = null
+        if (slot === 'chest') shown = dressChest(id)
+        else if (slot === 'boots') shown = dressBoots(id)
+        else {
+          const socket = slot === 'head' ? hero.headSocket : hero.arms[slot].socket
+          const next = id ? await piece(id, slot) : null
+          if (token !== tokens[slot]) return
+          socket.clear()
+          if (next) socket.add(next)
+          shown = next
+        }
+        if (announce && id) {
+          pop(shown)
+          say('equipaste ' + entry.name)
+          hop = performance.now()
+        }
+      }
+
+      let toastTimer = 0
+      function say(text) {
+        toast.textContent = text
+        toast.classList.add('show')
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2600)
+      }
+
+      // Fondo por zona
+      let sceneName = null
+      let backdrop = null
+      async function setScene(name) {
+        if (name === sceneName) return
+        sceneName = name
+        groundMat.color.setHex(GROUND[name] || GROUND.reino)
+        ash.visible = name === 'ruinas'
+        ember.color.setHex(name === 'ruinas' ? 0xff6a20 : 0xe0c060)
+        if (backdrop) scene.remove(backdrop)
+        backdrop = null
+        const spec = SCENERY[name]
+        if (!spec || !models.has(spec.file)) return
+        try {
+          const object = await loadGlb(spec.file)
+          if (sceneName !== name || world) return
+          object.updateMatrixWorld(true)
+          const box = new THREE.Box3().setFromObject(object)
+          const dims = box.getSize(new THREE.Vector3())
+          object.scale.multiplyScalar(spec.size / dims.y)
+          object.updateMatrixWorld(true)
+          const placed = new THREE.Box3().setFromObject(object)
+          const center = placed.getCenter(new THREE.Vector3())
+          object.position.x -= center.x
+          object.position.z -= center.z
+          object.position.y -= placed.min.y
+          const holder = new THREE.Group()
+          holder.add(object)
+          holder.position.set(...spec.at)
+          holder.rotation.y = spec.yaw
+          object.traverse((child) => {
+            if (child.isMesh) child.castShadow = true
+          })
+          backdrop = holder
+          scene.add(holder)
+        } catch (error) {
+          console.warn('sin fondo', name, error)
+        }
+      }
+
+      // Ceniza de las ruinas
+      const ASH = 600
+      const ashGeo = new THREE.BufferGeometry()
+      const ashPos = new Float32Array(ASH * 3)
+      for (let i = 0; i < ASH; i++) {
+        ashPos[i * 3] = (Math.random() - 0.5) * 10
+        ashPos[i * 3 + 1] = Math.random() * 6
+        ashPos[i * 3 + 2] = (Math.random() - 0.5) * 10
+      }
+      ashGeo.setAttribute('position', new THREE.BufferAttribute(ashPos, 3))
+      const ash = new THREE.Points(
+        ashGeo,
+        new THREE.PointsMaterial({ color: 0xb09080, size: 0.035, transparent: true, opacity: 0.8 })
+      )
+      ash.visible = false
+      scene.add(ash)
+
+      // Mundo: en un mapa fijo el heroe camina por la version 3D del mapa ASCII,
+      // hacia la celda que el juego guardo. En el resto queda la vitrina.
+      const heroTarget = new THREE.Vector3()
+      let world = null
+      let worldToken = 0
+      scene.add(sun.target)
+
+      function showcase(on) {
+        ground.visible = on
+        ring.visible = on
+        scene.background = on ? night : skyTexture
+        scene.fog.color.setHex(on ? 0x0b0b0c : 0x3a4656)
+        useAvatar(!on)
+        if (backdrop) backdrop.visible = on
+        controls.autoRotate = on
+        // En el mapa, vista 2.5D: lente cerrada y desde lejos, casi isometrica.
+        camera.fov = on ? 38 : 24
+        controls.minDistance = on ? 2.4 : 14
+        controls.maxDistance = on ? 11 : 110
+        scene.fog.near = on ? 11 : 60
+        scene.fog.far = on ? 30 : 150
+        const reach = on ? 6 : 24
+        Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach })
+        sun.shadow.camera.far = on ? 30 : 80
+        sun.shadow.camera.updateProjectionMatrix()
+        camera.far = on ? 100 : 220
+        camera.updateProjectionMatrix()
+      }
+
+      function leaveWorld() {
+        if (!world) return
+        scene.remove(world.built.group)
+        world.built.dispose()
+        world = null
+      }
+
+      // La consulta llega cada 200 ms y armar la ciudad puede tardar mas: mientras
+      // un mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
+      let loadingMap = null
+      let lastAt = null
+      async function enterWorld(at) {
+        lastAt = at
+        if (world && world.map === at.map) {
+          heroTarget.copy(world.built.toWorld(at.x, at.y))
+          return
+        }
+        if (loadingMap === at.map) return
+        loadingMap = at.map
+        mode.textContent = 'armando el mapa 3D...'
+        const token = ++worldToken
+        let data
+        try {
+          const response = await fetch('/world/' + at.map + '.json', { cache: 'no-store' })
+          if (!response.ok) throw new Error('el visor respondio ' + response.status)
+          data = await response.json()
+        } catch (error) {
+          if (token === worldToken) loadingMap = null
+          mode.textContent = 'no pude traer el mapa ' + at.map + ': ' + error.message
+          return
+        }
+        if (token !== worldToken) return
+        loadingMap = null
+        leaveWorld()
+        let built
+        try {
+          built = buildWorld(data, {
+            figure,
+            glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null))
+          })
+        } catch (error) {
+          mode.textContent = 'no pude armar el mapa ' + at.map + ': ' + error.message
+          console.error(error)
+          return
+        }
+        // Mientras se armaba el heroe pudo moverse: se usa la ultima celda.
+        if (lastAt && lastAt.map === at.map) at = lastAt
+        mode.textContent = 'mapa 3D: ' + data.name + '. Te moves desde la terminal del juego.'
+        scene.add(built.group)
+        world = { map: at.map, built }
+        showcase(false)
+        ash.visible = data.kind === 'boss'
+        ember.color.setHex(data.kind === 'boss' ? 0xff6a20 : 0xe0c060)
+        // La vitrina se vuelve a armar al salir del mapa.
+        sceneName = null
+        heroTarget.copy(built.toWorld(at.x, at.y))
+        hero.root.position.copy(heroTarget)
+        controls.target.copy(heroTarget).setY(1)
+        // La camara arranca al sur del heroe, mirando al norte como la terminal.
+        camera.position.copy(heroTarget).add(new THREE.Vector3(0, 44, 32))
+        loadAvatar().then(() => useAvatar(!!world))
+      }
+
+      function exitWorld() {
+        worldToken++
+        loadingMap = null
+        if (!world) return
+        leaveWorld()
+        showcase(true)
+        hero.root.position.set(0, 0, 0)
+        hero.root.rotation.y = 0
+        heroTarget.set(0, 0, 0)
+        controls.target.set(0, 1, 0)
+        camera.position.set(0, 1.55, 4.8)
+        ash.position.set(0, 0, 0)
+      }
+
+      // Estado de la partida
+      let first = true
+      let shownGear = ''
+      async function poll() {
+        try {
+          const state = await (await fetch('/state.json', { cache: 'no-store' })).json()
+          if (state.empty) {
+            who.textContent = state.busy
+              ? 'leyendo la partida...'
+              : 'no hay partidas en ' + state.dir + ': abri el juego y entra a una'
+            return
+          }
+          who.textContent =
+            state.name + ', nivel ' + state.level + ', ' + (state.place || 'en camino')
+          const gearKey = JSON.stringify(state.equipped)
+          if (gearKey !== shownGear) {
+            shownGear = gearKey
+            gear.replaceChildren()
+            for (const slot of SLOTS) {
+              const dt = document.createElement('dt')
+              dt.textContent = LABELS[slot]
+              const dd = document.createElement('dd')
+              dd.textContent = state.equipped[slot] ? state.equipped[slot].name : '-'
+              gear.append(dt, dd)
+            }
+          }
+          for (const slot of SLOTS) {
+            const id = state.equipped[slot] ? state.equipped[slot].id : null
+            if (worn[slot] === id && !first) continue
+            worn[slot] = id
+            wear(slot, state.equipped[slot], !first)
+          }
+          if (state.world) enterWorld(state.world)
+          else {
+            exitWorld()
+            setScene(state.scene)
+            mode.textContent =
+              'vitrina: ' + (state.place || 'esta zona') + ' todavia no tiene mapa 3D'
+          }
+          first = false
+        } catch {
+          who.textContent = 'el visor no responde'
+        }
+      }
+
+      async function refreshModels() {
+        try {
+          const list = await (await fetch('/models.json', { cache: 'no-store' })).json()
+          models = new Map(list.map((model) => [model.name, model.mtime]))
+        } catch {
+          // Sin lista no hay modelos de Tripo: quedan las formas simples.
+        }
+      }
+
+      // Animacion
+      let hop = 0
+      let stride = 0
+      const timer = new THREE.Timer()
+      const step = new THREE.Vector3()
+      const follow = new THREE.Vector3()
+      const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle))
+
+      // En el mundo: el heroe camina hacia la celda guardada, mira hacia donde va y
+      // la camara lo sigue sin perder el angulo que eligio quien mira.
+      function walk(dt) {
+        const pos = hero.root.position
+        step.subVectors(heroTarget, pos).setY(0)
+        const dist = step.length()
+        const moving = dist > 0.01 && dist <= 6
+        if (dist > 6) pos.set(heroTarget.x, pos.y, heroTarget.z)
+        else if (moving) {
+          pos.addScaledVector(step.normalize(), Math.min(dist, 7 * dt))
+          const yaw = Math.atan2(step.x, step.z)
+          hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 12)
+        }
+        stride = moving ? stride + dt * 11 : 0
+        const swing = moving ? Math.sin(stride) * 0.55 : 0
+        // El heroe de Tripo no tiene esqueleto: al caminar se balancea.
+        avatar.position.y = moving ? Math.abs(Math.sin(stride)) * 0.09 : 0
+        avatar.rotation.z = moving ? Math.sin(stride) * 0.05 : 0
+        hero.legs[0].rotation.x = swing
+        hero.legs[1].rotation.x = -swing
+        if (moving) {
+          hero.arms.left_hand.shoulder.rotation.x = -swing * 0.4
+          hero.arms.right_hand.shoulder.rotation.x = swing * 0.4
+        }
+        follow.set(pos.x, 1, pos.z)
+        camera.position.add(step.subVectors(follow, controls.target))
+        controls.target.copy(follow)
+        sun.position.set(pos.x + 12, 22, pos.z + 10)
+        sun.target.position.set(pos.x, 0, pos.z)
+        if (ash.visible) ash.position.set(pos.x, 0, pos.z)
+      }
+
+      renderer.setAnimationLoop(() => {
+        timer.update()
+        const t = timer.getElapsed()
+        const dt = Math.min(0.1, timer.getDelta())
+        const now = performance.now()
+        hero.hips.position.y = 0.95 + Math.sin(t * 2) * 0.008
+        hero.torso.scale.y = 1 + Math.sin(t * 2) * 0.015
+        hero.arms.left_hand.shoulder.rotation.x = Math.sin(t * 1.3) * 0.05
+        hero.arms.right_hand.shoulder.rotation.x = -Math.sin(t * 1.3) * 0.05
+        const since = (now - hop) / 1000
+        hero.root.position.y = since < 0.45 ? Math.sin((since / 0.45) * Math.PI) * 0.18 : 0
+        ringMat.opacity = since < 1 ? 0.5 + (1 - since) * 0.5 : 0.5
+        ring.scale.setScalar(since < 1 ? 1 + (1 - since) * 0.25 : 1)
+        for (let i = pops.length - 1; i >= 0; i--) {
+          const k = Math.min(1, (now - pops[i].start) / 450)
+          const overshoot = 1 + Math.sin(k * Math.PI) * 0.18
+          pops[i].object.scale.setScalar(Math.max(0.01, k * overshoot))
+          if (k === 1) {
+            pops[i].object.scale.setScalar(1)
+            pops.splice(i, 1)
+          }
+        }
+        if (ash.visible) {
+          for (let i = 0; i < ASH; i++) {
+            const y = i * 3 + 1
+            ashPos[y] -= 0.006 + (i % 7) * 0.0008
+            ashPos[i * 3] += Math.sin(t + i) * 0.0015
+            if (ashPos[y] < 0) ashPos[y] = 6
+          }
+          ashGeo.attributes.position.needsUpdate = true
+        }
+        if (world) walk(dt)
+        controls.update()
+        renderer.render(scene, camera)
+      })
+
+      // El CSS fija el tamano del lienzo; el buffer lo sigue cuando cambia.
+      function fitView() {
+        const { clientWidth, clientHeight } = renderer.domElement
+        if (!clientWidth || !clientHeight) return
+        renderer.setSize(clientWidth, clientHeight, false)
+        camera.aspect = clientWidth / clientHeight
+        camera.updateProjectionMatrix()
+      }
+      new ResizeObserver(fitView).observe(renderer.domElement)
+      fitView()
+
+      // Controles: la pagina aprieta teclas en el juego, que corre en la terminal con
+      // --teclas. Las reglas siguen siendo las del juego; esto solo manda teclas.
+      const keysLine = document.getElementById('keys')
+      const KEYMAP = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+        Enter: 'enter',
+        Escape: 'escape',
+        Backspace: 'backspace',
+        Tab: 'tab',
+        ' ': 'space'
+      }
+      let keyChain = Promise.resolve()
+      window.addEventListener('keydown', (event) => {
+        if (event.ctrlKey || event.metaKey || event.altKey) return
+        const key = KEYMAP[event.key] || (event.key.length === 1 ? event.key : null)
+        if (!key) return
+        event.preventDefault()
+        // Q cierra el juego: desde aca no se manda.
+        if (key === 'q' || key === 'Q') {
+          keysLine.textContent = 'Q cierra el juego: para salir usa la terminal.'
+          return
+        }
+        // En fila, para que el juego reciba las teclas en el orden apretado.
+        keyChain = keyChain.then(async () => {
+          try {
+            const response = await fetch('/key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Runa': '1' },
+              body: JSON.stringify({ key })
+            })
+            keysLine.textContent =
+              response.status === 409
+                ? 'El juego no esta leyendo teclas: abrilo con npm.cmd start -- --teclas'
+                : 'WASD o flechas: caminar. E: hablar. I: inventario.'
+          } catch {
+            keysLine.textContent = 'el visor no responde'
+          }
+        })
+      })
+
+      await refreshModels()
+      await poll()
+      // El estado sale de la memoria del visor: consultarlo seguido es barato y deja
+      // que el heroe siga los pasos de la terminal.
+      setInterval(poll, 200)
+      setInterval(refreshModels, 5000)
+    </script>
+  </body>
+</html>

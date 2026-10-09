@@ -20,3 +20,4 @@ vendor/model-viewer.min.js
 # Capturas de documentacion: solo los PNG finales se versionan.
 .playwright-cli/
 output/playwright/
+vendor/three/
