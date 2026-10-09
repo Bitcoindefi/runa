@@ -2,8 +2,12 @@
 
 La pagina `/heroe` del visor muestra al stickman de RUNA en 3D, vestido con el
 equipo de la ultima partida guardada. Equipas algo en el inventario de la
-terminal y aparece en el heroe 3D, con un aviso. Al entrar a las ruinas
-volcanicas aparece el Coloso de Tripo y cae ceniza.
+terminal y aparece en el heroe 3D, con un aviso. En los mapas camina el heroe de
+Tripo, que tambien lleva el yelmo de Tripo cuando lo equipas. Al entrar a las
+ruinas volcanicas aparece el Coloso de Tripo y cae ceniza.
+
+La misma pagina se publica como sitio estatico en GitHub Pages, en modo demo:
+ahi el heroe camina en el navegador, sin el juego. Ver "Sitio web" abajo.
 
 El stickman esta hecho con formas simples: no gasta creditos de Tripo y su mano
 sirve de enganche para cualquier arma. Las reglas del juego no cambian: no se
@@ -86,6 +90,14 @@ llegan mirando hacia +x y el heroe mira hacia +z: el yelmo se gira 90 grados.
 Para otro ajuste, la tabla `SKINS` de `scripts/tripo-heroe.html` recibe tamano,
 giro y altura por item.
 
+El heroe de Tripo no tiene esqueleto, asi que lo que va en la cabeza se apoya en
+su malla: la pagina mide la tapa de la cabeza (lo que queda en el 8% mas alto
+del cuerpo; la espada va hacia abajo) y la pieza la envuelve. `SKINS.<id>.hero`
+dice cuanto la envuelve (`grow`), cuanto sube su techo (`lift`) y cuanto se
+corre hacia la nuca (`back`). El yelmo usa 1,55, 0,22 y 0,12, calibrados en
+Chrome desde la consola con `runaView.tune('iron_helmet', { grow, lift, back })`:
+asi la cara se ve por la abertura y no asoma la vincha del heroe.
+
 ## El mundo en 3D
 
 En la ciudad, NOX, el castillo, el Coliseo y la arena del Coloso, la pagina arma
@@ -121,6 +133,35 @@ mapa se arma no se vuelve a pedir, aunque la consulta llegue cada 200 ms.
 La pradera, los campamentos y la cripta todavia muestran la vitrina: el terreno
 de la pradera sale de la semilla del dia, que el guardado no trae.
 
+## Sitio web
+
+Para quien no instala nada: https://bitcoindefi.github.io/runa/ sirve la misma
+pagina en modo demo, en ingles. El heroe de Tripo camina con WASD o flechas
+(en pantallas tactiles, con una cruceta), 1 a 6 cambian de lugar (ciudad, NOX,
+castillo, Coliseo, el Coloso y la vitrina con el reino de Tripo) y H pone o
+saca el yelmo de Tripo. El link de abajo lleva a la galeria de los 4 modelos.
+
+Los choques son los del juego: en los mapas, la tabla `TILES` (`isSolid` de
+`lib/map.js`); en las ruinas, `isWalkable` de `lib/boss-zone.js` y el cuerpo del
+Coloso (`distanceToBody` de `lib/world-boss-event.js`). Cada tecla es un paso de
+celda, a unos 6 m/s, y una diagonal que choca se desliza por el eje libre.
+
+```powershell
+node scripts/tripo-viewer.js --fetch-lib
+npm.cmd run web:build
+```
+
+`scripts/build-web.js` arma `out/web/` con las piezas que sirve el visor: las
+dos paginas con `data-demo="1"`, `mundo.js`, los mapas en `world/`, three.js y
+model-viewer de `vendor/`, los GLB de `assets/tripo/` y `.nojekyll`. Todo va con
+rutas relativas, asi anda bajo `/runa/`. Los GLB y three.js se publican solo en
+la rama `gh-pages`: `main` los sigue ignorando. Para probar el modo demo sin
+publicar, abri `/heroe?demo` en el visor local.
+
+En un Chrome recien abierto el primer pedido puede fallar con "Failed to fetch";
+la lista de modelos, los mapas y los GLB se reintentan antes de rendirse, porque
+sin la lista no aparece ningun modelo de Tripo.
+
 ## Prueba
 
 El 8 de octubre se probo en Chrome headless (SwiftShader) con la partida real y
@@ -128,3 +169,10 @@ con una partida de prueba, manejando una sola pagina abierta por CDP mientras
 cambiaba el guardado: cambio de arma, casco, pecho y escudo con su aviso; la
 plaza de RUNA, doce pasos al este, la arena del Coloso, el salon del trono y la
 vuelta a la pradera. La consola no mostro errores.
+
+El 9 de octubre el sitio se probo servido bajo `/runa/`, como en GitHub Pages,
+en Chrome headless sobre la GPU y con un perfil nuevo por corrida: el heroe de
+Tripo aparece en la ciudad, H le pone el yelmo, camina diez celdas al este y
+cuatro o cinco al sur, carga cada mapa, en las ruinas se frena contra el cuerpo del
+Coloso (celda 92) y la galeria carga los cuatro GLB. En dos de tres corridas el
+primer pedido de `models.json` fallo y el reintento lo recupero.

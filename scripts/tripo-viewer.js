@@ -20,6 +20,7 @@ const MODELS = path.join(root, 'assets/tripo')
 const VENDOR = path.join(root, 'vendor')
 const PAGES = {
   '/': path.join(__dirname, 'tripo-viewer.html'),
+  '/models.html': path.join(__dirname, 'tripo-viewer.html'),
   '/heroe': path.join(__dirname, 'tripo-heroe.html'),
   '/mundo': path.join(__dirname, 'tripo-heroe.html')
 }
@@ -455,11 +456,16 @@ function serve() {
     })
 }
 
-if (process.argv.includes('--fetch-lib')) {
-  fetchLibs().catch((error) => {
-    console.error(error.message)
-    process.exitCode = 1
-  })
-} else {
-  serve()
+// scripts/build-web.js arma el sitio estatico con estas mismas piezas.
+module.exports = { LIBS, VENDOR, MODELS, PAGES, WORLD_JS, WORLD_MAPS, listModels, worldMap }
+
+if (require.main === module) {
+  if (process.argv.includes('--fetch-lib')) {
+    fetchLibs().catch((error) => {
+      console.error(error.message)
+      process.exitCode = 1
+    })
+  } else {
+    serve()
+  }
 }

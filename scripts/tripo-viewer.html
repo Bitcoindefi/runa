@@ -11,7 +11,7 @@
       // alcanza y no sale a la red. Una ruta que el server no sirva rompe todos los GLB.
       self.ModelViewerElement = { meshoptDecoderLocation: 'data:text/javascript,' }
     </script>
-    <script type="module" src="/model-viewer.min.js"></script>
+    <script type="module" src="model-viewer.min.js"></script>
     <style>
       :root {
         color-scheme: dark;
@@ -71,12 +71,16 @@
         padding: 6px 8px;
         border-top: 1px solid var(--line);
       }
+      a {
+        color: var(--accent);
+      }
     </style>
   </head>
   <body>
     <header>
       <h1>[ RUNA / TRIPO ]</h1>
       <span id="status">Runa sigue en la terminal. Aca solo los GLB.</span>
+      <a id="back" href="./" hidden>Walk the world in 2.5D</a>
     </header>
     <main id="grid"></main>
     <script>
@@ -86,6 +90,17 @@
       let libMissing = false
       // Hasta la primera lista que llega, nada se marca como nuevo.
       let baseline = false
+      // En el sitio publicado (scripts/build-web.js) la galeria va en ingles y
+      // vuelve al mundo 2.5D.
+      const DEMO = document.documentElement.dataset.demo === '1'
+      const NAMES = {
+        heroe: "Runa's hero",
+        yelmo: 'Iron rune helmet',
+        coloso: 'Runic Colossus, the world boss',
+        paisaje: 'Kingdom diorama'
+      }
+      const INTRO = 'Four 3D models generated with Tripo (text-to-3D, model P1). Drag to turn them.'
+      if (DEMO) document.getElementById('back').hidden = false
 
       function say(text) {
         status.textContent = libMissing
@@ -103,7 +118,8 @@
           viewer.setAttribute('auto-rotate', '')
           viewer.setAttribute('shadow-intensity', '1')
           const caption = document.createElement('figcaption')
-          const label = model.name.replace(/\.glb$/, '')
+          const id = model.name.replace(/\.glb$/, '')
+          const label = DEMO ? NAMES[id] || id : id
           caption.textContent = label
           // Sin esto, un GLB que no decodifica deja la caja gris y nada mas.
           viewer.addEventListener('error', (event) => {
@@ -121,7 +137,7 @@
         if (entry.mtime === model.mtime) return
         entry.mtime = model.mtime
         // ?v= fuerza la descarga cuando un GLB se regenera con el mismo nombre.
-        const src = '/assets/tripo/' + encodeURIComponent(model.name) + '?v=' + model.mtime
+        const src = 'assets/tripo/' + encodeURIComponent(model.name) + '?v=' + model.mtime
         entry.viewer.setAttribute('src', src)
         entry.figure.classList.toggle('new', isNew)
         if (isNew) entry.figure.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -131,7 +147,7 @@
       // script en vivo aparece solo, sin recargar.
       async function refresh() {
         try {
-          const models = await (await fetch('/models.json', { cache: 'no-store' })).json()
+          const models = await (await fetch('models.json', { cache: 'no-store' })).json()
           for (const model of models) show(model, baseline)
           const names = new Set(models.map((model) => model.name))
           for (const [name, entry] of shown) {
@@ -141,11 +157,14 @@
             }
           }
           baseline = true
-          say(
-            models.length
-              ? 'Runa sigue en la terminal. Aca solo los GLB.'
-              : 'Sin GLB en assets/tripo/ todavia.'
-          )
+          if (DEMO) say(INTRO)
+          else {
+            say(
+              models.length
+                ? 'Runa sigue en la terminal. Aca solo los GLB.'
+                : 'Sin GLB en assets/tripo/ todavia.'
+            )
+          }
         } catch {
           say('El server del visor no responde.')
         }

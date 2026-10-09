@@ -8,8 +8,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "/vendor/three/three.module.min.js",
-          "three/addons/": "/vendor/three/addons/"
+          "three": "./vendor/three/three.module.min.js",
+          "three/addons/": "./vendor/three/addons/"
         }
       }
     </script>
@@ -90,6 +90,57 @@
       #toast.show {
         opacity: 1;
       }
+      /* Modo demo, el del sitio publicado: lugares, links y cruceta tactil. */
+      [hidden] {
+        display: none !important;
+      }
+      #hud > div:first-child {
+        max-width: min(640px, 70vw);
+      }
+      #places {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+        pointer-events: auto;
+      }
+      #places button,
+      #pad button {
+        font: inherit;
+        color: var(--fg);
+        background: rgba(11, 11, 12, 0.72);
+        border: 1px solid #3a3a36;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      #places button[aria-pressed='true'] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      #links {
+        position: fixed;
+        left: 16px;
+        bottom: 12px;
+        display: flex;
+        gap: 16px;
+      }
+      #links a {
+        color: var(--accent);
+      }
+      #pad {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        display: grid;
+        grid-template-columns: repeat(3, 52px);
+        grid-template-rows: repeat(3, 52px);
+        gap: 4px;
+        touch-action: none;
+      }
+      #pad button {
+        font-size: 20px;
+        padding: 0;
+      }
     </style>
   </head>
   <body>
@@ -99,16 +150,32 @@
         <div id="who">buscando la partida...</div>
         <div id="mode"></div>
         <div id="keys">WASD o flechas: caminar. E: hablar. I: inventario.</div>
+        <nav id="places" hidden></nav>
       </div>
       <dl id="gear"></dl>
     </header>
     <div id="toast"></div>
+    <footer id="links" hidden>
+      <a href="models.html">The 4 Tripo models</a>
+      <a href="https://github.com/Bitcoindefi/runa">Source and the terminal game</a>
+    </footer>
+    <div id="pad" hidden>
+      <span></span>
+      <button data-dir="up" aria-label="up">&#9650;</button>
+      <span></span>
+      <button data-dir="left" aria-label="left">&#9664;</button>
+      <span></span>
+      <button data-dir="right" aria-label="right">&#9654;</button>
+      <span></span>
+      <button data-dir="down" aria-label="down">&#9660;</button>
+      <span></span>
+    </div>
     <script type="module">
       import * as THREE from 'three'
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
-      import { buildWorld } from '/mundo.js'
+      import { buildWorld } from './mundo.js'
 
       // El stickman del juego en 3D, hecho con formas simples: no gasta creditos y
       // su mano sirve de enganche para cualquier arma. Lee /state.json, que el
@@ -127,8 +194,19 @@
       // (assets/tripo/spear.glb) se usa solo; aca van los alias y sus ajustes.
       const SKINS = {
         // Tripo entrega los modelos mirando hacia +x; el heroe mira hacia +z.
-        iron_helmet: { file: 'yelmo.glb', size: 0.46, yaw: -Math.PI / 2, lift: 0.03 }
+        // `hero` ajusta la pieza a la cabeza del heroe de Tripo: cuanto la envuelve,
+        // cuanto sube su techo sobre la coronilla y cuanto se corre hacia la nuca.
+        iron_helmet: {
+          file: 'yelmo.glb',
+          size: 0.46,
+          yaw: -Math.PI / 2,
+          lift: 0.03,
+          // Calibrado con runaView.tune en Chrome: asi envuelve la cabeza cuadrada
+          // del heroe, la cara se ve por la abertura y no asoma la vincha.
+          hero: { grow: 1.55, lift: 0.22, back: 0.12 }
+        }
       }
+      const HERO_FIT = { grow: 1.15, lift: 0.03, back: 0 }
       // Fondos por zona, con modelos de Tripo que ya existen.
       const SCENERY = {
         // Al costado y mirando al heroe, para que el heroe no lo tape.
@@ -146,6 +224,11 @@
       const mode = document.getElementById('mode')
       const gear = document.getElementById('gear')
       const toast = document.getElementById('toast')
+      // El sitio publicado (scripts/build-web.js) no tiene juego ni partida: ahi
+      // el heroe camina en el navegador. Localmente se prueba con /heroe?demo.
+      const DEMO =
+        document.documentElement.dataset.demo === '1' ||
+        new URLSearchParams(location.search).has('demo')
 
       // Escena
       const renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -185,6 +268,17 @@
       controls.minDistance = 2.4
       controls.maxDistance = 11
       controls.maxPolarAngle = Math.PI * 0.49
+      // Para probar la pagina en un navegador real.
+      window.runaView = {
+        camera,
+        controls,
+        // Ajuste en vivo de la pieza de cabeza del heroe, para calibrar `hero`.
+        tune(id, values) {
+          Object.assign(SKINS[id].hero, values)
+          if (worn.head === id) return wear('head', { id, name: id }, false)
+        },
+        head: () => avatarHead.getWorldPosition(new THREE.Vector3()).project(camera)
+      }
 
       const sky = new THREE.HemisphereLight(0xd8d8d0, 0x1a1408, 1.3)
       scene.add(sky)
@@ -507,17 +601,87 @@
                 if (child.isMesh) child.castShadow = true
               })
               avatar.add(object)
+              findHead(object)
+              // Lo que ya llevaba en la cabeza se vuelve a medir con su cabeza.
+              if (worn.head) wear('head', { id: worn.head, name: '' }, false)
             })
-            .catch(() => {
+            .catch((error) => {
+              console.warn('sin el heroe de Tripo', error)
               avatarLoading = null
             })
         }
         return avatarLoading || Promise.resolve()
       }
       function useAvatar(on) {
-        const ready = on && avatar.children.length > 0
+        const ready = on && avatar.children.length > 1
         avatar.visible = ready
         hero.hips.visible = !ready
+      }
+
+      // Lo que va en la cabeza tambien lo lleva el heroe de Tripo. Su cabeza se
+      // mide en la malla: la tapa es lo que queda en el 8% mas alto del cuerpo.
+      // El heroe de Tripo lleva la espada hacia abajo, asi que arriba solo esta
+      // la cabeza.
+      const avatarHead = new THREE.Group()
+      avatar.add(avatarHead)
+      const headSize = { width: 0.42, depth: 0.42 }
+      function findHead(object) {
+        avatar.updateMatrixWorld(true)
+        const inverse = new THREE.Matrix4().copy(avatar.matrixWorld).invert()
+        const toAvatar = new THREE.Matrix4()
+        const v = new THREE.Vector3()
+        const each = (visit) =>
+          object.traverse((child) => {
+            if (!child.isMesh) return
+            toAvatar.multiplyMatrices(inverse, child.matrixWorld)
+            const position = child.geometry.attributes.position
+            for (let i = 0; i < position.count; i++) {
+              visit(v.fromBufferAttribute(position, i).applyMatrix4(toAvatar))
+            }
+          })
+        let top = -Infinity
+        each((point) => {
+          top = Math.max(top, point.y)
+        })
+        const box = new THREE.Box3()
+        each((point) => {
+          if (point.y > top - AVATAR.height * 0.08) box.expandByPoint(point)
+        })
+        if (box.isEmpty()) return
+        const size = box.getSize(new THREE.Vector3())
+        headSize.width = size.x
+        headSize.depth = size.z
+        avatarHead.position.set((box.min.x + box.max.x) / 2, top, (box.min.z + box.max.z) / 2)
+        window.runaHead = () => ({ ...avatarHead.position, ...headSize })
+      }
+
+      // La pieza para la cabeza del heroe de Tripo envuelve su cabeza: un 15% mas
+      // ancha y mas profunda, con el techo apenas sobre la coronilla. Va dentro
+      // de un grupo para que el pop de equipar no le pise la escala.
+      async function avatarPiece(id) {
+        let object = null
+        try {
+          object = await tripoPiece(id, 'head', 1)
+        } catch (error) {
+          console.warn('sin modelo de Tripo para', id, error)
+        }
+        if (!object && BUILD[id]) object = BUILD[id]()
+        if (!object) return null
+        const tune = (SKINS[id] && SKINS[id].hero) || HERO_FIT
+        object.updateMatrixWorld(true)
+        const dims = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3())
+        object.scale.multiplyScalar(
+          tune.grow * Math.max(headSize.width / dims.x, headSize.depth / dims.z)
+        )
+        object.updateMatrixWorld(true)
+        const box = new THREE.Box3().setFromObject(object)
+        const center = box.getCenter(new THREE.Vector3())
+        object.position.x -= center.x
+        object.position.z -= center.z + tune.back
+        object.position.y += tune.lift - box.max.y
+        const holder = new THREE.Group()
+        holder.add(object)
+        return holder
       }
 
       // Cielo de atardecer para el mundo; la vitrina sigue en negro.
@@ -572,13 +736,28 @@
       const loaded = new Map()
       let models = new Map()
 
+      // Medido en Chrome recien abierto: el primer pedido puede fallar con "Failed
+      // to fetch". Cada pedido se reintenta dos veces antes de rendirse.
+      async function retry(task, times = 3) {
+        let failure
+        for (let i = 0; i < times; i++) {
+          if (i) await new Promise((resolve) => setTimeout(resolve, 500 * i))
+          try {
+            return await task()
+          } catch (error) {
+            failure = error
+          }
+        }
+        throw failure
+      }
+
       function loadGlb(file) {
         const key = file + ':' + models.get(file)
         if (!loaded.has(key)) {
-          const url = '/assets/tripo/' + encodeURIComponent(file) + '?v=' + models.get(file)
+          const url = 'assets/tripo/' + encodeURIComponent(file) + '?v=' + models.get(file)
           loaded.set(
             key,
-            loader.loadAsync(url).catch((error) => {
+            retry(() => loader.loadAsync(url)).catch((error) => {
               loaded.delete(key)
               throw error
             })
@@ -613,11 +792,12 @@
         return holder
       }
 
-      async function tripoPiece(id, slot) {
+      async function tripoPiece(id, slot, size) {
         const spec = SKINS[id] || { file: id + '.glb' }
         if (!models.has(spec.file)) return null
-        const size = spec.size || { left_hand: 1, right_hand: 0.62, head: 0.46 }[slot] || 0.5
-        const piece = fit(await loadGlb(spec.file), size, slot)
+        const fitted =
+          size || spec.size || { left_hand: 1, right_hand: 0.62, head: 0.46 }[slot] || 0.5
+        const piece = fit(await loadGlb(spec.file), fitted, slot)
         piece.rotation.y = spec.yaw || 0
         piece.position.y += spec.lift || 0
         return piece
@@ -655,14 +835,19 @@
         else {
           const socket = slot === 'head' ? hero.headSocket : hero.arms[slot].socket
           const next = id ? await piece(id, slot) : null
+          const onAvatar = slot === 'head' && id ? await avatarPiece(id) : null
           if (token !== tokens[slot]) return
           socket.clear()
           if (next) socket.add(next)
-          shown = next
+          if (slot === 'head') {
+            avatarHead.clear()
+            if (onAvatar) avatarHead.add(onAvatar)
+          }
+          shown = [next, onAvatar]
         }
         if (announce && id) {
           pop(shown)
-          say('equipaste ' + entry.name)
+          say((DEMO ? 'equipped ' : 'equipaste ') + entry.name)
           hop = performance.now()
         }
       }
@@ -768,6 +953,22 @@
         world = null
       }
 
+      // Los mapas no cambian mientras el visor corre: cada uno se pide una vez.
+      const maps = new Map()
+      function mapData(id) {
+        if (!maps.has(id)) {
+          const request = retry(() =>
+            fetch('world/' + id + '.json', { cache: 'no-store' }).then((response) => {
+              if (!response.ok) throw new Error('el visor respondio ' + response.status)
+              return response.json()
+            })
+          )
+          maps.set(id, request)
+          request.catch(() => maps.delete(id))
+        }
+        return maps.get(id)
+      }
+
       // La consulta llega cada 200 ms y armar la ciudad puede tardar mas: mientras
       // un mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
       let loadingMap = null
@@ -780,13 +981,11 @@
         }
         if (loadingMap === at.map) return
         loadingMap = at.map
-        mode.textContent = 'armando el mapa 3D...'
+        mode.textContent = DEMO ? 'building the 3D map...' : 'armando el mapa 3D...'
         const token = ++worldToken
         let data
         try {
-          const response = await fetch('/world/' + at.map + '.json', { cache: 'no-store' })
-          if (!response.ok) throw new Error('el visor respondio ' + response.status)
-          data = await response.json()
+          data = await mapData(at.map)
         } catch (error) {
           if (token === worldToken) loadingMap = null
           mode.textContent = 'no pude traer el mapa ' + at.map + ': ' + error.message
@@ -808,7 +1007,9 @@
         }
         // Mientras se armaba el heroe pudo moverse: se usa la ultima celda.
         if (lastAt && lastAt.map === at.map) at = lastAt
-        mode.textContent = 'mapa 3D: ' + data.name + '. Te moves desde la terminal del juego.'
+        mode.textContent = DEMO
+          ? placeName(at.map)
+          : 'mapa 3D: ' + data.name + '. Te moves desde la terminal del juego.'
         scene.add(built.group)
         world = { map: at.map, built }
         showcase(false)
@@ -843,7 +1044,7 @@
       let shownGear = ''
       async function poll() {
         try {
-          const state = await (await fetch('/state.json', { cache: 'no-store' })).json()
+          const state = await (await fetch('state.json', { cache: 'no-store' })).json()
           if (state.empty) {
             who.textContent = state.busy
               ? 'leyendo la partida...'
@@ -885,10 +1086,15 @@
 
       async function refreshModels() {
         try {
-          const list = await (await fetch('/models.json', { cache: 'no-store' })).json()
+          const response = await fetch('models.json', { cache: 'no-store' })
+          if (!response.ok) throw new Error('models.json respondio ' + response.status)
+          const list = await response.json()
           models = new Map(list.map((model) => [model.name, model.mtime]))
-        } catch {
+          return true
+        } catch (error) {
           // Sin lista no hay modelos de Tripo: quedan las formas simples.
+          if (DEMO) console.warn('sin la lista de modelos de Tripo', error)
+          return false
         }
       }
 
@@ -963,6 +1169,7 @@
           }
           ashGeo.attributes.position.needsUpdate = true
         }
+        if (DEMO) stepDemo(dt)
         if (world) walk(dt)
         controls.update()
         renderer.render(scene, camera)
@@ -996,6 +1203,10 @@
       let keyChain = Promise.resolve()
       window.addEventListener('keydown', (event) => {
         if (event.ctrlKey || event.metaKey || event.altKey) return
+        if (DEMO) {
+          demoKey(event, true)
+          return
+        }
         const key = KEYMAP[event.key] || (event.key.length === 1 ? event.key : null)
         if (!key) return
         event.preventDefault()
@@ -1007,7 +1218,7 @@
         // En fila, para que el juego reciba las teclas en el orden apretado.
         keyChain = keyChain.then(async () => {
           try {
-            const response = await fetch('/key', {
+            const response = await fetch('key', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Runa': '1' },
               body: JSON.stringify({ key })
@@ -1022,12 +1233,233 @@
         })
       })
 
-      await refreshModels()
-      await poll()
-      // El estado sale de la memoria del visor: consultarlo seguido es barato y deja
-      // que el heroe siga los pasos de la terminal.
-      setInterval(poll, 200)
-      setInterval(refreshModels, 5000)
+      // Modo demo: los mismos mapas con las colisiones del juego. En las ruinas
+      // manda boss-zone.js isWalkable mas el cuerpo del Coloso; en el resto, la
+      // tabla TILES (map.js isSolid). Cada tecla es un paso de celda.
+      const PLACES = [
+        { map: 'city', short: 'City', name: 'The city of RUNA', at: [160, 130] },
+        { map: 'nox', short: 'NOX', name: 'NOX, the rival kingdom', at: [160, 130] },
+        { map: 'castle', short: 'Castle', name: 'The castle', at: [56, 20] },
+        { map: 'coliseum', short: 'Coliseum', name: 'The Coliseum, for duels', at: [64, 26] },
+        {
+          map: 'boss',
+          short: 'Colossus',
+          name: 'Volcanic ruins: the Runic Colossus, the world boss',
+          at: [72, 22]
+        },
+        { map: null, short: 'Showcase', name: 'Showcase: the stickman and the Tripo kingdom' }
+      ]
+      const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
+      const MOVES = {
+        ArrowUp: 'up',
+        w: 'up',
+        ArrowDown: 'down',
+        s: 'down',
+        ArrowLeft: 'left',
+        a: 'left',
+        ArrowRight: 'right',
+        d: 'right'
+      }
+      const HELMET = { id: 'iron_helmet', name: 'the iron rune helmet, a Tripo model' }
+      const demo = { place: -1, data: null, x: 0, y: 0, held: new Set(), wait: 0 }
+      const placeButtons = []
+      window.runaDemo = () => ({
+        place: demo.place,
+        map: world ? world.map : null,
+        x: demo.x,
+        y: demo.y,
+        helmet: worn.head || null,
+        onAvatar: avatarHead.children.length,
+        avatar: avatar.visible
+      })
+
+      function placeName(map) {
+        const place = PLACES.find((entry) => entry.map === map)
+        return place ? place.name : map
+      }
+
+      function walkable(data, x, y) {
+        if (x < 0 || y < 0 || x >= data.width || y >= data.height) return false
+        const ch = (data.rows[y] || '')[x] || ' '
+        if (data.kind === 'boss') {
+          if ('#~|-+'.includes(ch)) return false
+          // El cuerpo del Coloso: world-boss-event.js distanceToBody.
+          const boss = data.boss
+          return !boss || Math.abs(x - boss.x) > 11 || y < boss.y - 8 || y > boss.y
+        }
+        const tile = data.tiles[ch]
+        return !!tile && !tile.solid
+      }
+
+      // La celda libre mas cercana, por si el punto de partida cae en una pared.
+      function nearestWalkable(data, x, y) {
+        const seen = new Set([x + ',' + y])
+        const queue = [[x, y]]
+        for (let i = 0; i < queue.length; i++) {
+          const [cx, cy] = queue[i]
+          if (walkable(data, cx, cy)) return [cx, cy]
+          for (const [dx, dy] of Object.values(DIRS)) {
+            const nx = cx + dx
+            const ny = cy + dy
+            if (nx < 0 || ny < 0 || nx >= data.width || ny >= data.height) continue
+            if (seen.has(nx + ',' + ny)) continue
+            seen.add(nx + ',' + ny)
+            queue.push([nx, ny])
+          }
+        }
+        return [x, y]
+      }
+
+      async function goPlace(index) {
+        const place = PLACES[index]
+        if (!place) return
+        demo.place = index
+        demo.held.clear()
+        placeButtons.forEach((button, i) =>
+          button.setAttribute('aria-pressed', String(i === index))
+        )
+        if (!place.map) {
+          demo.data = null
+          exitWorld()
+          setScene('reino')
+          mode.textContent = place.name
+          return
+        }
+        let data
+        try {
+          data = await mapData(place.map)
+        } catch (error) {
+          mode.textContent = 'could not load ' + place.short + ': ' + error.message
+          return
+        }
+        if (demo.place !== index) return
+        const [x, y] = nearestWalkable(data, ...place.at)
+        Object.assign(demo, { data, x, y })
+        await enterWorld({ map: place.map, x, y })
+      }
+
+      // Un paso de celda por vez, como en la terminal; si la diagonal choca, se
+      // desliza por el eje que queda libre. Unos 6 m/s: la celda mide 0,5 x 1.
+      function stepDemo(dt) {
+        const place = PLACES[demo.place]
+        if (!world || !demo.data || !place || world.map !== place.map) return
+        let dx = 0
+        let dy = 0
+        for (const dir of demo.held) {
+          dx += DIRS[dir][0]
+          dy += DIRS[dir][1]
+        }
+        dx = Math.sign(dx)
+        dy = Math.sign(dy)
+        if (!dx && !dy) {
+          demo.wait = 0
+          return
+        }
+        demo.wait -= dt
+        if (demo.wait > 0) return
+        const tries =
+          dx && dy
+            ? [
+                [dx, dy],
+                [dx, 0],
+                [0, dy]
+              ]
+            : [[dx, dy]]
+        for (const [sx, sy] of tries) {
+          if (!walkable(demo.data, demo.x + sx, demo.y + sy)) continue
+          demo.x += sx
+          demo.y += sy
+          heroTarget.copy(world.built.toWorld(demo.x, demo.y))
+          demo.wait = sy ? 1 / 6 : 1 / 12
+          return
+        }
+        demo.wait = 0.05
+      }
+
+      function showDemoGear() {
+        const dt = document.createElement('dt')
+        dt.textContent = 'head'
+        const dd = document.createElement('dd')
+        dd.textContent = worn.head ? 'iron rune helmet (Tripo)' : '-'
+        gear.replaceChildren(dt, dd)
+      }
+
+      function toggleHelmet() {
+        const on = worn.head !== HELMET.id
+        worn.head = on ? HELMET.id : null
+        wear('head', on ? HELMET : null, on)
+        if (!on) say('helmet off')
+        showDemoGear()
+      }
+
+      function demoKey(event, down) {
+        const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+        const dir = MOVES[key]
+        if (dir) {
+          event.preventDefault()
+          if (down) demo.held.add(dir)
+          else demo.held.delete(dir)
+          return
+        }
+        if (!down || event.repeat) return
+        if (key >= '1' && key <= String(PLACES.length)) goPlace(Number(key) - 1)
+        else if (key === 'h') toggleHelmet()
+      }
+
+      function startDemo() {
+        document.title = 'Runa x Tripo / 2.5D'
+        document.querySelector('h1').textContent = '[ RUNA x TRIPO ]'
+        who.textContent =
+          'The world of Runa in 2.5D, in your browser. The hero, the helmet, the Colossus ' +
+          'and the kingdom are 3D models generated with Tripo.'
+        keysLine.textContent = 'WASD or arrows: walk. 1-6: change place. H: Tripo helmet.'
+        const nav = document.getElementById('places')
+        PLACES.forEach((place, i) => {
+          const button = document.createElement('button')
+          button.textContent = i + 1 + ' ' + place.short
+          button.addEventListener('click', () => goPlace(i))
+          nav.append(button)
+          placeButtons.push(button)
+        })
+        const helmetButton = document.createElement('button')
+        helmetButton.textContent = 'H helmet'
+        helmetButton.addEventListener('click', toggleHelmet)
+        nav.append(helmetButton)
+        nav.hidden = false
+        document.getElementById('links').hidden = false
+        // La cruceta, solo en pantallas tactiles.
+        const pad = document.getElementById('pad')
+        for (const button of pad.querySelectorAll('button')) {
+          const dir = button.dataset.dir
+          const release = () => demo.held.delete(dir)
+          button.addEventListener('pointerdown', (event) => {
+            event.preventDefault()
+            demo.held.add(dir)
+          })
+          button.addEventListener('pointerup', release)
+          button.addEventListener('pointercancel', release)
+          button.addEventListener('pointerleave', release)
+        }
+        pad.hidden = !matchMedia('(pointer: coarse)').matches
+        window.addEventListener('keyup', (event) => demoKey(event, false))
+        window.addEventListener('blur', () => demo.held.clear())
+        showDemoGear()
+        goPlace(0)
+      }
+
+      // En el sitio la lista se pide una sola vez: si falla, se reintenta antes de
+      // arrancar, porque sin ella no aparece ningun modelo de Tripo.
+      for (let i = 0; !(await refreshModels()) && DEMO && i < 4; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 600 * (i + 1)))
+      }
+      if (DEMO) startDemo()
+      else {
+        await poll()
+        // El estado sale de la memoria del visor: consultarlo seguido es barato y
+        // deja que el heroe siga los pasos de la terminal.
+        setInterval(poll, 200)
+        setInterval(refreshModels, 5000)
+      }
     </script>
   </body>
 </html>
