@@ -882,6 +882,7 @@ const CSS = `
 .inv-down {
   margin-left: 6px;
   font-size: 12px;
+  font-style: normal;
 }
 .inv-up {
   color: #8fdc7f;
@@ -1079,6 +1080,28 @@ const CSS = `
   }
   .inv-detail {
     max-height: none;
+  }
+}
+/* Sobre la pantalla de texto (una zona sin mapa 3D): el panel va al centro y
+   oscurece lo de atras, que es el inventario de texto del juego. */
+@media (min-width: 900px) and (min-height: 540px) {
+  .inv.solo {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    width: min(760px, calc(100vw - 32px));
+    height: min(760px, calc(100vh - 32px));
+    transform: translate(-50%, -50%);
+    box-shadow:
+      0 0 0 100vmax rgba(5, 5, 6, 0.93),
+      0 20px 70px rgba(0, 0, 0, 0.65);
+    animation-name: inv-fade;
+  }
+}
+@keyframes inv-fade {
+  from {
+    opacity: 0;
   }
 }
 /* Pantallas altas (1080p): la ficha del objeto como una carta, con el dibujo
@@ -1557,8 +1580,8 @@ export function createInventory(ctx) {
     else if (touch()) text = L('Tap an item to see it.', 'Toca un objeto para verlo.')
     else {
       text = L(
-        'Click an item to pick it, double click to equip. The keys work too.',
-        'Clic en un objeto para elegirlo, doble clic para equiparlo. Las teclas tambien.'
+        'Click to pick, double click to equip. The keys work too.',
+        'Clic para elegir, doble clic para equipar. Las teclas tambien.'
       )
     }
     const before = drawn.status
@@ -1736,6 +1759,9 @@ export function createInventory(ctx) {
       hide()
       return false
     }
+    // Sin mapa 3D atras queda la pantalla de texto: el panel va al centro. Se
+    // decide al abrir, y vale hasta cerrar (aunque la ayuda pase por encima).
+    if (!visited) root.classList.toggle('solo', textShown())
     visited = true
     show()
     paint(view)
