@@ -580,6 +580,13 @@ body.runa-vitrina #toast {
     display: none;
   }
 }
+/* Celular acostado: la ficha queda en el nombre y los botones. */
+@media (max-height: 500px) {
+  #vitrina-card .note,
+  #vitrina-card .tip > span {
+    display: none;
+  }
+}
 `
 
 // Lo que la vitrina toca de los controles de la camara y devuelve al salir.
@@ -700,7 +707,8 @@ export function createShowcase(ctx) {
   function materials() {
     return {
       stone: new THREE.MeshStandardMaterial({ color: 0x27231e, roughness: 0.6 }),
-      top: new THREE.MeshStandardMaterial({ color: 0x38322b, roughness: 0.3 }),
+      // Mate: pulida, la tapa espejaba el foco y se veia blanca.
+      top: new THREE.MeshStandardMaterial({ color: 0x302b25, roughness: 0.62 }),
       gold: new THREE.MeshStandardMaterial({
         color: 0xc9a245,
         metalness: 0.85,
@@ -1652,9 +1660,11 @@ export function createShowcase(ctx) {
     const parts = []
     if (ex.loading) parts.push(text(L('loading the model...', 'cargando el modelo...')))
     if (ex.clip) {
+      // El clip por su nombre en el GLB; en castellano, con lo que hace.
       const now = document.createElement('span')
       const b = document.createElement('b')
-      b.textContent = ex.clip
+      const doing = { Idle: 'quieto', Walk: 'camina', Run: 'corre' }[ex.clip]
+      b.textContent = L(ex.clip, doing ? `${doing} (${ex.clip})` : ex.clip)
       now.append(L('Now: ', 'Ahora: '), b)
       parts.push(now)
     }
@@ -1962,16 +1972,12 @@ export function createShowcase(ctx) {
       lift: document.documentElement.style.getPropertyValue('--vitrina-lift'),
       marked: document.body.classList.contains('runa-vitrina'),
       yaw: hero.root.rotation.y,
-      programs: renderer.info.programs ? renderer.info.programs.length : null
+      programs: renderer.info.programs ? renderer.info.programs.length : null,
+      room: { x: center.x, z: center.z, radius, span: exhibits.length ? -exhibits[0].phi : 0 }
     }
   }
 
-  window.runaVitrina = Object.assign(state, {
-    go: goTo,
-    point: screenPoint,
-    snapshot,
-    parts: () => ({ hall, exhibits, follow, dust, renderer })
-  })
+  window.runaVitrina = Object.assign(state, { go: goTo, point: screenPoint, snapshot })
 
   return { show, update }
 }
