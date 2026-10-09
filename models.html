@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en" data-demo="1">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Runa / Tripo</title>
+    <link rel="icon" href="data:," />
+    <script>
+      // model-viewer 4.3.1 solo habilita meshopt si recibe una URL: espera que ese
+      // script cargue y despues usa su decodificador interno. Una data: URL vacia
+      // alcanza y no sale a la red. Una ruta que el server no sirva rompe todos los GLB.
+      self.ModelViewerElement = { meshoptDecoderLocation: 'data:text/javascript,' }
+    </script>
+    <script type="module" src="model-viewer.min.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0c;
+        --fg: #d8d8d0;
+        --dim: #7a7a72;
+        --line: #2a2a2a;
+        --accent: #e0c060;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          14px/1.4 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 16px;
+        color: var(--accent);
+        letter-spacing: 0.1em;
+      }
+      #status {
+        color: var(--dim);
+      }
+      main {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      figure {
+        margin: 0;
+        border: 1px solid var(--line);
+      }
+      figure.new {
+        border-color: var(--accent);
+      }
+      model-viewer {
+        width: 100%;
+        height: 300px;
+        background: #141414;
+      }
+      figcaption {
+        padding: 6px 8px;
+        border-top: 1px solid var(--line);
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>[ RUNA / TRIPO ]</h1>
+      <span id="status">Runa sigue en la terminal. Aca solo los GLB.</span>
+      <a id="back" href="./" hidden>Walk the world in 2.5D</a>
+    </header>
+    <main id="grid"></main>
+    <script>
+      const grid = document.getElementById('grid')
+      const status = document.getElementById('status')
+      const shown = new Map()
+      let libMissing = false
+      // Hasta la primera lista que llega, nada se marca como nuevo.
+      let baseline = false
+      // En el sitio publicado (scripts/build-web.js) la galeria va en ingles y
+      // vuelve al mundo 2.5D.
+      const DEMO = document.documentElement.dataset.demo === '1'
+      const NAMES = {
+        heroe: "Runa's hero",
+        yelmo: 'Iron rune helmet',
+        coloso: 'Runic Colossus, the world boss',
+        paisaje: 'Kingdom diorama'
+      }
+      const INTRO = 'Four 3D models generated with Tripo (text-to-3D, model P1). Drag to turn them.'
+      if (DEMO) document.getElementById('back').hidden = false
+
+      function say(text) {
+        status.textContent = libMissing
+          ? 'Falta model-viewer: node scripts/tripo-viewer.js --fetch-lib'
+          : text
+      }
+
+      function show(model, isNew) {
+        let entry = shown.get(model.name)
+        if (!entry) {
+          const figure = document.createElement('figure')
+          const viewer = document.createElement('model-viewer')
+          viewer.setAttribute('alt', model.name)
+          viewer.setAttribute('camera-controls', '')
+          viewer.setAttribute('auto-rotate', '')
+          viewer.setAttribute('shadow-intensity', '1')
+          const caption = document.createElement('figcaption')
+          const id = model.name.replace(/\.glb$/, '')
+          const label = DEMO ? NAMES[id] || id : id
+          caption.textContent = label
+          // Sin esto, un GLB que no decodifica deja la caja gris y nada mas.
+          viewer.addEventListener('error', (event) => {
+            const reason = (event.detail && event.detail.type) || 'error'
+            caption.textContent = label + ' (no carga: ' + reason + ')'
+          })
+          viewer.addEventListener('load', () => {
+            caption.textContent = label
+          })
+          figure.append(viewer, caption)
+          grid.append(figure)
+          entry = { figure, viewer, mtime: null }
+          shown.set(model.name, entry)
+        }
+        if (entry.mtime === model.mtime) return
+        entry.mtime = model.mtime
+        // ?v= fuerza la descarga cuando un GLB se regenera con el mismo nombre.
+        const src = 'assets/tripo/' + encodeURIComponent(model.name) + '?v=' + model.mtime
+        entry.viewer.setAttribute('src', src)
+        entry.figure.classList.toggle('new', isNew)
+        if (isNew) entry.figure.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+
+      // Cada 3 s pregunta por GLB nuevos, regenerados o borrados: el que baja el
+      // script en vivo aparece solo, sin recargar.
+      async function refresh() {
+        try {
+          const models = await (await fetch('models.json', { cache: 'no-store' })).json()
+          for (const model of models) show(model, baseline)
+          const names = new Set(models.map((model) => model.name))
+          for (const [name, entry] of shown) {
+            if (!names.has(name)) {
+              entry.figure.remove()
+              shown.delete(name)
+            }
+          }
+          baseline = true
+          if (DEMO) say(INTRO)
+          else {
+            say(
+              models.length
+                ? 'Runa sigue en la terminal. Aca solo los GLB.'
+                : 'Sin GLB en assets/tripo/ todavia.'
+            )
+          }
+        } catch {
+          say('El server del visor no responde.')
+        }
+      }
+
+      setTimeout(() => {
+        if (!customElements.get('model-viewer')) {
+          libMissing = true
+          say('')
+        }
+      }, 1500)
+      // Si el modulo tarda mas de 1,5 s, el aviso se va cuando termina de cargar.
+      customElements.whenDefined('model-viewer').then(() => {
+        libMissing = false
+      })
+      refresh()
+      setInterval(refresh, 3000)
+    </script>
+  </body>
+</html>
