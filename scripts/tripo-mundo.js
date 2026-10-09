@@ -2519,6 +2519,20 @@ export function buildWorld(data, extras = {}) {
   const inBuilding = new Uint8Array(width * height)
   const seen = new Uint8Array(width * height)
   const buildings = []
+  // El monumento del ranking ("heroes runa"): su arte ASCII no es un edificio.
+  // Esas celdas quedan para el pedestal y la estatua gigante de mas abajo, y
+  // ninguna otra pasada las levanta. En el juego todo ese rectangulo es solido.
+  const monuments = (data.landmarks || []).filter(
+    (mark) => mark.id === 'hero-statue' && mark.bounds
+  )
+  for (const { bounds } of monuments) {
+    for (let y = bounds.y1; y <= bounds.y2; y++) {
+      for (let x = bounds.x1; x <= bounds.x2; x++) {
+        inBuilding[y * width + x] = 1
+        seen[y * width + x] = 1
+      }
+    }
+  }
   for (let start = 0; start < kinds.length; start++) {
     if (seen[start] || !STRUCTURE.has(kinds[start])) continue
     const stack = [start]
@@ -2865,23 +2879,59 @@ export function buildWorld(data, extras = {}) {
         .catch(() => {})
     )
   }
-  for (const mark of data.landmarks || []) {
-    if (mark.id !== 'hero-statue' || !mark.bounds) continue
-    const { x1, y1, x2, y2 } = mark.bounds
-    const center = toWorld((x1 + x2) / 2, (y1 + y2) / 2)
-    const plinth = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.4, 1.6, 0.8, 16),
-      new THREE.MeshStandardMaterial({ color: 0x6e6a62, roughness: 0.9 })
+  // El monumento de los heroes, donde se consulta el ranking: tres gradas de
+  // piedra que llenan el lugar del arte (lo mismo que ocupan los choques), una
+  // banda de runas doradas, una placa con el nombre y, arriba, el heroe de Tripo
+  // gigante mirando al sur, a la plaza. Con la camara 2.5D a 44 m de alto no
+  // tapa al heroe que camina detras.
+  function monument({ x1, y1, x2, y2 }) {
+    const west = x1 * CX
+    const east = (x2 + 1) * CX
+    const north = y1 * CZ
+    const south = (y2 + 1) * CZ
+    const cx = (west + east) / 2
+    const cz = (north + south) / 2
+    const tiers = [
+      [0, 0.7, 0xa89f8c],
+      [2.2, 0.6, 0xb8af9c],
+      [5.2, 0.9, 0xc8bfac]
+    ]
+    let top = 0
+    for (const [inset, h, color] of tiers) {
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(east - west - inset * 2, h, south - north - inset * 2),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.88 })
+      )
+      slab.position.set(cx, top + h / 2, cz)
+      slab.castShadow = true
+      slab.receiveShadow = true
+      group.add(slab)
+      top += h
+    }
+    const gold = new THREE.MeshStandardMaterial({
+      color: 0xe0c060,
+      emissive: 0xe0a030,
+      emissiveIntensity: 0.6,
+      metalness: 0.6,
+      roughness: 0.35
+    })
+    const band = new THREE.Mesh(
+      new THREE.BoxGeometry(east - west - 10.3, 0.12, south - north - 10.3),
+      gold
     )
-    plinth.position.set(center.x, 0.4, center.z)
-    plinth.castShadow = true
-    group.add(plinth)
+    band.position.set(cx, top - 0.25, cz)
+    group.add(band)
+    const plaque = new THREE.Mesh(new THREE.BoxGeometry(6, 0.9, 0.12), gold)
+    // Sobre la cara sur de la segunda grada (z crece hacia el sur).
+    plaque.position.set(cx, 1.0, south - 2.2 + 0.07)
+    group.add(plaque)
     // La estatua mira al sur, hacia la plaza.
-    place('heroe.glb', center.setY(0.8), 3.2, -Math.PI / 2)
-    const tag = label(text(mark.name))
-    tag.position.set(center.x, 4.8, center.z)
+    place('heroe.glb', new THREE.Vector3(cx, top, cz), 12, -Math.PI / 2)
+    const tag = label(text('heroes runa'))
+    tag.position.set(cx, 2.6, south - 1.4)
     group.add(tag)
   }
+  for (const mark of monuments) monument(mark.bounds)
   // El Coloso mira al oeste, hacia el portal por donde llega el heroe.
   if (data.boss) place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI)
 

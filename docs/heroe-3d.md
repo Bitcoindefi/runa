@@ -85,11 +85,24 @@ Shift corre. En una pantalla tactil el boton Run cambia entre correr y caminar.
 | esprintar | 9 m/s     | Run  | 2,25 x             |
 
 Cada paso es una tecla para el juego, al ritmo del paso: una columna mide 0,5 m y
-una fila 1 m, asi que corriendo van unas 14 columnas o 7 filas por segundo. En
-diagonal van dos columnas por fila, que en el mapa es a 45 grados. Una tecla que
-no movio al heroe (una pared, un NPC) no se repite enseguida, asi el registro no
-se llena. En combate cada paso contra el monstruo es un golpe, y van de a uno
-cada 0,3 s.
+una fila 1 m, asi que corriendo van unas 14 columnas o 7 filas por segundo.
+
+Hay 8 direcciones: con dos teclas (W+D, S+A...) el heroe va en diagonal. El juego
+mueve un eje por tecla, asi que en diagonal un paso manda las dos teclas juntas y
+el siguiente solo la horizontal: dos columnas por fila, que en el mapa es a 45
+grados, y cada paso dura lo que avanza sobre la recta, asi la diagonal va a la
+misma velocidad que derecho. La figura no salta de celda en celda: va derecha
+hacia donde apuntan las teclas y se acerca de a poco a la celda del juego por el
+costado. Medido el 9 de octubre en Chrome: con W+D sostenidas la figura va a 45,3
+grados, a 6,95 m/s, y no se aparta mas de 3 cm de la recta (en escalera se
+apartaba unos 35 cm). Lo mismo en el recorrido libre.
+
+Un eje que no se movio (una pared, un NPC) queda frenado un rato: el heroe se
+desliza por el otro y la tecla no se repite, asi el registro no se llena. En
+combate cada paso contra el monstruo es un golpe: va una sola tecla, cada 0,3 s.
+
+La ficha muestra la celda donde esta el heroe, como la terminal (`X:163 Y:132`),
+y cambia en cada paso; en el recorrido libre va en la linea del lugar.
 
 La velocidad de cada clip sale de medirlo: en los huesos de `heroe-anim.glb`, el
 pie apoyado de `Walk` retrocede a 0,6 m/s y el de `Run` a 3,4 m/s con el heroe de
@@ -213,8 +226,11 @@ ese mapa en 3D con el mismo arte ASCII y la tabla `TILES` del juego
   grava. Hay arboles, matas, piedras, flores, agua y, en la arena, rios de lava.
 - Cada puerta tiene una columna de luz y su nombre. Los NPC son dibujos de su
   tipo hechos con Higgsfield (`assets/npcs/`), con su nombre.
-- La estatua de los heroes de la plaza es el heroe de Tripo (`heroe.glb`) y el
-  Coloso de Tripo (`coloso.glb`) espera en su arena.
+- El monumento de los heroes, donde se consulta el ranking, ya no es un edificio:
+  el heroe de Tripo (`heroe.glb`) de 12 m mira a la plaza desde tres gradas de
+  piedra con una banda de runas doradas y la placa "runa heroes". Las gradas
+  llenan el rectangulo del arte, que en el juego es solido, asi que no hay
+  paredes invisibles. El Coloso de Tripo (`coloso.glb`) espera en su arena.
 
 La camara sigue al heroe desde el sur, mirando al norte como la terminal, en una
 vista 2.5D: lente cerrada y desde lejos (o mas cerca, en Settings). Con el mouse

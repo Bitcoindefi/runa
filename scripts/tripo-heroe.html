@@ -368,6 +368,11 @@
         font-size: 12px;
         margin-bottom: 4px;
       }
+      #stats .xy {
+        margin-left: 6px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
       .bar {
         position: relative;
         height: 14px;
@@ -1887,12 +1892,38 @@
       const timer = new THREE.Timer()
       const step = new THREE.Vector3()
       const follow = new THREE.Vector3()
+      const steer = new THREE.Vector3()
+      const lateral = new THREE.Vector3()
       const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle))
+
+      // Hacia donde apuntan las teclas (o los dedos en la cruceta), en el piso:
+      // una de 8 direcciones, sin el eje que una pared frena. Null si no se camina.
+      function steerDir() {
+        let source = null
+        if (screen === 'play') {
+          if (!session || !exploring(live) || peek || !live.world) return null
+          source = mover
+        } else if (screen === 'tour') source = demo
+        else return null
+        let [dx, dy] = heading(source.held, source.fingers)
+        const now = performance.now()
+        if (dx && dy) {
+          if (now < (source.blockedX || 0)) dx = 0
+          if (now < (source.blockedY || 0)) dy = 0
+        }
+        if (!dx && !dy) return null
+        return steer.set(dx, 0, dy).normalize()
+      }
 
       // En el mundo: el heroe va hacia la celda del juego al paso elegido, mira
       // hacia donde va y la camara lo sigue sin perder el angulo que eligio quien
       // mira. El clip sale del paso: Run al correr o esprintar, Walk al caminar e
       // Idle quieto, con la velocidad del clip atada a la del heroe.
+      //
+      // El juego avanza de a una celda por eje. Con las teclas sostenidas la
+      // figura no salta de celda en celda: va derecha hacia donde apuntan, a la
+      // velocidad del paso, y se acerca de a poco a la celda del juego por el
+      // costado. Asi la diagonal es una recta y no una escalera.
       function walk(dt) {
         const pos = hero.root.position
         step.subVectors(heroTarget, pos).setY(0)
@@ -1900,8 +1931,23 @@
         let moved = 0
         // Siguiendo a la terminal no se sabe a que paso va: se la alcanza rapido.
         const speed = screen === 'mirror' ? 12 : pace().speed
+        const dir = dist < 3 ? steerDir() : null
         if (dist > 6) pos.set(heroTarget.x, pos.y, heroTarget.z)
-        else if (dist > 0.004) {
+        else if (dir) {
+          // Cuanto le falta por delante a la celda del juego: con medio metro de
+          // ventaja va a la velocidad del paso; si la alcanzo (una pared), frena.
+          const along = step.dot(dir)
+          lateral.copy(step).addScaledVector(dir, -along)
+          const forward = speed * Math.min(1.4, Math.max(0, along / 0.55))
+          const sideways = Math.min(1, dt * 3)
+          const x = dir.x * forward * dt + lateral.x * sideways
+          const z = dir.z * forward * dt + lateral.z * sideways
+          pos.x += x
+          pos.z += z
+          moved = Math.hypot(x, z)
+          const yaw = Math.atan2(dir.x, dir.z)
+          hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 12)
+        } else if (dist > 0.004) {
           moved = Math.min(dist, (speed * 1.12 + dist * 3) * dt)
           pos.addScaledVector(step.normalize(), moved)
           const yaw = Math.atan2(step.x, step.z)
@@ -2651,8 +2697,18 @@
         setTerm(text || peek)
         playBox.hidden = termShown
         refreshPlayHud()
+        showCell(st)
         stepGame(dt, st)
         if (termShown && termDirty) drawTerm()
+      }
+
+      // La celda donde esta el heroe, como la ficha de la terminal (X:163 Y:132).
+      // Cambia en cada paso: se escribe aparte, sin rearmar la ficha.
+      function showCell(st) {
+        const spot = statsBox.querySelector('.xy')
+        if (!spot || !st.location) return
+        const text = `X:${st.location.x} Y:${st.location.y}`
+        if (spot.textContent !== text) spot.textContent = text
       }
 
       function dressFrom(st) {
@@ -2722,7 +2778,7 @@
           .join(', ')
         statsBox.innerHTML =
           `<div class="who">${esc(st.name)} &middot; ${L('Lv', 'Nv')} ${st.level}</div>` +
-          `<div class="where">${esc(placeOf(st))}</div>` +
+          `<div class="where">${esc(placeOf(st))} <span class="xy"></span></div>` +
           bar('hp', st.hp, st.maxhp, `${L('HP', 'Vida')} ${st.hp}/${st.maxhp}`) +
           bar('xp', st.xp, st.xpneed, `${L('XP', 'Exp')} ${st.xp}/${st.xpneed || '-'}`) +
           `<div class="purse">${L('Gold', 'Oro')} ${st.gold} &middot; ${L('Potions', 'Pociones')} ${st.potions}</div>` +
@@ -2856,17 +2912,19 @@
 
       // Cada paso es una tecla para el juego, al ritmo del paso elegido: una celda
       // mide 0,5 m de ancho y 1 m de alto, asi que al correr van unas 14 columnas
-      // o 7 filas por segundo. En diagonal van dos columnas por fila, que en el
-      // mapa es en serio a 45 grados. Una tecla que no movio al heroe (una pared,
-      // un NPC) no se repite enseguida, para no llenar el registro.
+      // o 7 filas por segundo. Hay 8 direcciones: en diagonal un paso mueve los
+      // dos ejes juntos y el siguiente solo el horizontal, dos columnas por fila,
+      // que en el mapa es en serio a 45 grados, a la misma velocidad que derecho.
+      // Un eje que no se movio (una pared, un NPC) queda frenado un rato: se
+      // desliza por el otro y no se repite la tecla, para no llenar el registro.
       const mover = {
         held: new Set(),
         fingers: new Map(),
         wait: 0,
         phase: 0,
         last: null,
-        blocked: null,
-        until: 0
+        blockedX: 0,
+        blockedY: 0
       }
       const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
       const MOVES = {
@@ -2889,19 +2947,36 @@
         }
         return [Math.sign(dx), Math.sign(dy)]
       }
-      const cellOf = (st) =>
-        st && st.location
-          ? st.location.x + ',' + st.location.y + ',' + (st.location.mapId || st.field)
-          : ''
+      const placeOfCell = (st) => (st.location ? st.location.mapId || st.field : '')
       function exploring(st) {
         return !!st && !st.title && !st.naming && !st.overlay && !paused
       }
 
+      // El paso que toca: [sx, sy] y cuantos metros avanza sobre la recta de la
+      // direccion (para que la diagonal vaya a la misma velocidad que derecho).
+      function nextStep(dx, dy, state) {
+        const now = performance.now()
+        const freeX = dx && now >= (state.blockedX || 0)
+        const freeY = dy && now >= (state.blockedY || 0)
+        if (dx && dy && freeX && freeY) {
+          const both = state.phase++ % 2 === 0
+          const sx = dx
+          const sy = both ? dy : 0
+          return [sx, sy, (CX + (both ? CZ : 0)) * Math.SQRT1_2]
+        }
+        const sx = freeX ? dx : 0
+        const sy = freeY ? dy : 0
+        return [sx, sy, Math.abs(sx) * CX + Math.abs(sy) * CZ]
+      }
+
       function stepGame(dt, st) {
+        // Que eje no se movio con el ultimo paso: una pared o un NPC.
         if (mover.last) {
-          if (cellOf(st) === mover.last.from) {
-            mover.blocked = mover.last.key
-            mover.until = performance.now() + 450
+          const now = performance.now()
+          const loc = st.location
+          if (loc && placeOfCell(st) === mover.last.place) {
+            if (mover.last.sx && loc.x === mover.last.x) mover.blockedX = now + 450
+            if (mover.last.sy && loc.y === mover.last.y) mover.blockedY = now + 450
           }
           mover.last = null
         }
@@ -2918,21 +2993,17 @@
         mover.wait -= dt
         if (mover.wait > 0) return
         if (mover.wait < -0.1) mover.wait = 0
-        const horizontal = dx < 0 ? 'left' : 'right'
-        const vertical = dy < 0 ? 'up' : 'down'
-        const now = performance.now()
-        const stuck = (key) => key === mover.blocked && now < mover.until
-        let key =
-          dx && dy ? (mover.phase++ % 3 === 2 ? vertical : horizontal) : dx ? horizontal : vertical
-        // En diagonal contra una pared, se desliza por el eje que queda libre.
-        if (stuck(key) && dx && dy) key = key === vertical ? horizontal : vertical
-        if (stuck(key)) {
+        const [sx, sy, meters] = nextStep(dx, dy, mover)
+        if (!sx && !sy) {
           mover.wait = 0.05
           return
         }
-        mover.last = { key, from: cellOf(st) }
-        session.press(key)
-        const meters = key === 'up' || key === 'down' ? CZ : CX
+        const loc = st.location || {}
+        // En combate cada tecla hacia el monstruo es un golpe: va una sola.
+        const vertical = sy && !(st.combat && sx)
+        mover.last = { sx, sy: vertical ? sy : 0, x: loc.x, y: loc.y, place: placeOfCell(st) }
+        if (vertical) session.press(sy < 0 ? 'up' : 'down')
+        if (sx) session.press(sx < 0 ? 'left' : 'right')
         mover.wait += meters / pace().speed
         // En combate cada paso contra el monstruo es un golpe: uno cada 0,3 s.
         if (st.combat) mover.wait = Math.max(mover.wait, 0.3)
@@ -3202,6 +3273,9 @@
         held: new Set(),
         fingers: new Map(),
         wait: 0,
+        phase: 0,
+        blockedX: 0,
+        blockedY: 0,
         busy: false,
         bag: DEMO_BAG
       }
@@ -3305,40 +3379,43 @@
         hint()
       }
 
-      // Un paso de celda por vez, como en la terminal, al paso elegido; si la
-      // diagonal choca, se desliza por el eje que queda libre. Como la terminal
-      // mueve un eje por vez, la diagonal solo pasa si una de las dos celdas de al
-      // lado esta libre: asi no se cuela entre dos paredes.
+      // Un paso por vez al paso elegido, en 8 direcciones como en una partida
+      // (nextStep). Cada eje se prueba por separado, como en la terminal: primero
+      // el vertical y despues el horizontal desde la fila nueva. El que choca queda
+      // frenado un rato y se sigue por el otro, asi no se cuela entre dos paredes.
       function stepDemo(dt) {
         if (demo.busy || !world || !demo.data || world.map !== demo.map) return
         const [dx, dy] = heading(demo.held, demo.fingers)
         if (!dx && !dy) {
           demo.wait = 0
+          demo.phase = 0
           return
         }
         demo.wait -= dt
         if (demo.wait > 0) return
         if (demo.wait < -0.1) demo.wait = 0
-        const tries =
-          dx && dy
-            ? [
-                [dx, dy],
-                [dx, 0],
-                [0, dy]
-              ]
-            : [[dx, dy]]
-        const free = (sx, sy) => walkable(demo.data, demo.x + sx, demo.y + sy)
-        for (const [sx, sy] of tries) {
-          if (!free(sx, sy)) continue
-          if (sx && sy && !free(sx, 0) && !free(0, sy)) continue
-          demo.x += sx
-          demo.y += sy
-          heroTarget.copy(world.built.toWorld(demo.x, demo.y))
-          demo.wait += Math.hypot(sx * CX, sy * CZ) / pace().speed
-          arrive()
+        const [sx, sy, meters] = nextStep(dx, dy, demo)
+        const free = (cx, cy) => walkable(demo.data, demo.x + cx, demo.y + cy)
+        const now = performance.now()
+        let my = 0
+        let mx = 0
+        if (sy) {
+          if (free(0, sy)) my = sy
+          else demo.blockedY = now + 300
+        }
+        if (sx) {
+          if (free(sx, my)) mx = sx
+          else demo.blockedX = now + 300
+        }
+        if (!mx && !my) {
+          demo.wait = 0.05
           return
         }
-        demo.wait = 0.05
+        demo.x += mx
+        demo.y += my
+        heroTarget.copy(world.built.toWorld(demo.x, demo.y))
+        demo.wait += meters / pace().speed
+        arrive()
       }
 
       // Pisar un porton lleva al otro mapa; pisar una puerta avisa que adentro se
@@ -3412,7 +3489,9 @@
         if (!demo.map || screen !== 'tour') return
         const npc = nearbyNpc()
         mode.textContent =
-          placeName(demo.map) + (npc ? L(' · E: talk to ', ' · E: hablar con ') + tr(npc.name) : '')
+          placeName(demo.map) +
+          ` · X:${demo.x} Y:${demo.y}` +
+          (npc ? L(' · E: talk to ', ' · E: hablar con ') + tr(npc.name) : '')
       }
 
       let talkTimer = 0
@@ -3634,7 +3713,13 @@
           return
         }
         who.textContent =
-          state.name + ', ' + L('level ', 'nivel ') + state.level + ', ' + (tr(state.place) || '')
+          state.name +
+          ', ' +
+          L('level ', 'nivel ') +
+          state.level +
+          ', ' +
+          (tr(state.place) || '') +
+          (state.world ? ` · X:${state.world.x} Y:${state.world.y}` : '')
         const gearKey = JSON.stringify(state.equipped)
         if (gearKey !== mirrorGear) {
           mirrorGear = gearKey
