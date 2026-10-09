@@ -193,6 +193,11 @@ const GLB = /^[\w-]+\.glb$/
 // Los NPC pintados de la vista 2.5D: un PNG por tipo, con el mismo cuidado.
 const NPC_PREFIX = '/assets/npcs/'
 const NPC_PNG = /^[a-z]+\.png$/
+// Los modelos libres (CC0) de la escenografia: <pack>/<modelo>.glb o la paleta
+// que esos GLB piden por ruta relativa, <pack>/Textures/<nombre>.png.
+const CC0 = path.join(root, 'assets/cc0')
+const CC0_PREFIX = '/assets/cc0/'
+const CC0_FILE = /^[a-z0-9-]+\/(?:[\w-]+(?:\.gltf)?\.glb|Textures\/[\w-]+\.png)$/
 const skipped = new Set()
 
 // El juego reescribe la ranura en cada tecla (game.js saveCurrent), unas 15 veces
@@ -626,6 +631,11 @@ function serve() {
       if (GLB.test(name)) return send(res, path.join(MODELS, name), 'model/gltf-binary')
       const art = urlPath.startsWith(NPC_PREFIX) ? urlPath.slice(NPC_PREFIX.length) : ''
       if (NPC_PNG.test(art)) return send(res, path.join(root, 'assets/npcs', art), 'image/png')
+      const free = urlPath.startsWith(CC0_PREFIX) ? urlPath.slice(CC0_PREFIX.length) : ''
+      if (CC0_FILE.test(free)) {
+        const type = free.endsWith('.png') ? 'image/png' : 'model/gltf-binary'
+        return send(res, path.join(CC0, free), type)
+      }
       res.writeHead(404).end()
     })
     .on('error', (error) => {

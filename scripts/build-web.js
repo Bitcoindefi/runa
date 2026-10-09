@@ -97,11 +97,34 @@ async function main() {
   for (const name of fs.readdirSync(npcArt).filter((file) => /^[a-z]+\.png$/.test(file))) {
     write(`assets/npcs/${name}`, fs.readFileSync(path.join(npcArt, name)))
   }
+  // Los modelos libres (CC0) de la escenografia: cada pack con sus GLB, la
+  // paleta que piden y su licencia.
+  const free = path.join(__dirname, '..', 'assets', 'cc0')
+  let freeCount = 0
+  for (const pack of fs.readdirSync(free, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+    const dir = path.join(free, pack.name)
+    for (const name of fs.readdirSync(dir)) {
+      if (/\.glb$|^License\.txt$|^LICENSE\.txt$/.test(name)) {
+        write(`assets/cc0/${pack.name}/${name}`, fs.readFileSync(path.join(dir, name)))
+        if (name.endsWith('.glb')) freeCount++
+      }
+    }
+    const textures = path.join(dir, 'Textures')
+    if (fs.existsSync(textures)) {
+      for (const name of fs.readdirSync(textures).filter((file) => file.endsWith('.png'))) {
+        write(
+          `assets/cc0/${pack.name}/Textures/${name}`,
+          fs.readFileSync(path.join(textures, name))
+        )
+      }
+    }
+  }
+  write('assets/cc0/README.md', fs.readFileSync(path.join(free, 'README.md')))
   // Sin Jekyll, GitHub Pages sirve cada archivo tal cual.
   write('.nojekyll', '')
   const kb = Math.round(game.bytes / 1024)
   console.log(
-    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo y ${ids.length} mapas`
+    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo, ${freeCount} libres (CC0) y ${ids.length} mapas`
   )
 }
 
