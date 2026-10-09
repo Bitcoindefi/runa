@@ -2,7 +2,7 @@
 
 El juego reproduce 24 vistas de texto precalculadas. No abre GLB, no usa un
 motor 3D y no llama a Tripo durante la partida. El reloj existente cambia el
-cuadro del menu cada 600 ms: una vuelta tarda 14,4 segundos. El reino gira
+cuadro del menu cada 450 ms: una vuelta tarda 10,8 segundos. El Coloso gira
 solo, en cian, sin figuras superpuestas ni texturas originales. Heroe y
 yelmo giran cada 125 ms en sus propias pantallas.
 
@@ -13,6 +13,7 @@ python3 scripts/glb-to-ascii.py assets/tripo/heroe.glb --output assets/ascii/her
 python3 scripts/glb-to-ascii.py assets/tripo/coloso.glb --output assets/ascii/coloso.json
 python3 scripts/glb-to-ascii.py assets/tripo/yelmo.glb --output assets/ascii/yelmo.json
 python3 scripts/glb-to-ascii.py assets/tripo/coloso.glb --output assets/ascii/coloso-field.json --sizes 43x13
+python3 scripts/glb-to-ascii.py assets/tripo/coloso.glb --output assets/ascii/coloso-menu.json --sizes 88x22,60x10,32x5 --frame-ms 450 --azimuth 90
 python3 scripts/glb-to-ascii.py assets/tripo/paisaje.glb --sizes 88x22,60x10,32x5 --frame-ms 600 --elevation 18 --azimuth=-15 --output assets/ascii/paisaje.json
 ```
 
@@ -23,7 +24,7 @@ texturas. Produce tres tamanos para adaptar la portada a la terminal.
 Los GLB comprimidos con Draco requieren descompresion previa.
 
 Los cuadros JSON se incluyen en el juego y pueden versionarse; los GLB
-permanecen fuera de git. El menu muestra solo el reino. El conversor conserva
+permanecen fuera de git. El menu muestra solo el Coloso. El conversor conserva
 sus opciones de composicion, pero no se usan en la portada actual.
 El mapa del jefe reutiliza el Coloso sobre el lienzo original 43x13; sus avisos
 y poderes siguen siendo los del juego. La creacion muestra el heroe. Al seleccionar el

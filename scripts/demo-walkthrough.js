@@ -28,7 +28,7 @@ function chapter(caption, seconds, step = () => {}) {
   }
 }
 
-chapter('RUNA | A kingdom generated with Tripo, rendered inside the terminal', 8)
+chapter('RUNA | Tripo Colossus rotating inside the terminal', 8)
 press('enter')
 chapter('New game | Tripo hero, player name and home kingdom', 8, (i) => {
   if (i >= 20 && i < 24) type('Ayla'[i - 20])

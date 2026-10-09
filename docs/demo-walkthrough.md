@@ -1,12 +1,12 @@
 # Demo grabada de RUNA y Tripo
 
 El video muestra 68 segundos de recorrido por el render real de RUNA:
-menu con paisaje, creacion de personaje, ciudad, NOX, pradera, compra del
+menu con Coloso girando, creacion de personaje, ciudad, NOX, pradera, compra del
 yelmo, inventario y arena del Coloso.
 
-La version actual es `docs/demo/runa-tripo-demo-en.mp4`. Tanto el juego como
-los subtitulos de recorrido estan en ingles. El menu muestra solo el reino
-en cian, con una vuelta cada 14,4 segundos para facilitar su lectura.
+La version actual es `docs/demo/runa-tripo-demo-colossus-en.mp4`. Tanto el juego como
+los subtitulos de recorrido estan en ingles. El menu muestra solo el Coloso
+en cian, con una vuelta cada 10,8 segundos y un angulo frontal inicial.
 Los videos anteriores se conservan como versiones historicas.
 
 Es una grabacion reproducible del render ANSI presentado en un navegador,
@@ -20,11 +20,11 @@ de demostracion: no representan una subida de nivel obtenida durante el video.
 La compra del yelmo se ejecuta con la entrada real Enter y consume oro.
 
 ```bash
-npx bare scripts/demo-walkthrough.js output/playwright/demo-en
-python3 -m http.server 4177 --bind 127.0.0.1 --directory output/playwright/demo-en
+npx bare scripts/demo-walkthrough.js output/playwright/demo-colossus
+python3 -m http.server 4178 --bind 127.0.0.1 --directory output/playwright/demo-colossus
 ```
 
-Abrir `http://127.0.0.1:4177/`, esperar a `window.demo.ready` y ejecutar
+Abrir `http://127.0.0.1:4178/`, esperar a `window.demo.ready` y ejecutar
 `window.startDemo()` para reproducir. La secuencia termina cuando
 `window.demo.done` es true. `chapters.json` registra los tiempos y titulos.
 La captura se realiza con Playwright a 1280x900 y 15 FPS, y se convierte a

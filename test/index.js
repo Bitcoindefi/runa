@@ -208,18 +208,18 @@ test('title turntable rotates on ticks without hiding menu controls', (t) => {
   const menu = { page: 'main', slots: [], frame: 0 }
   t.is(
     render.titleScreen(80, 44, '', menu),
-    render.titleScreen(80, 44, '', { ...menu, frame: 116 }),
-    'the landscape wraps after one rotation'
+    render.titleScreen(80, 44, '', { ...menu, frame: 87 }),
+    'the colossus wraps after one rotation'
   )
-  t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('REINO'))
+  t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('COLOSO'))
   const slow = new Runa({ presence: false })
   slow.update({ type: 'resize', width: 120, height: 44 })
   const initial = slow.view()
   slow.update({ type: 'tick' })
   slow.update({ type: 'tick' })
   t.is(initial, slow.view(), 'the menu holds each angle long enough to read it')
-  t.ok(initial.includes('\x1b[36m'), 'the kingdom is colored cyan')
-  t.absent(initial.includes('\x1b[31m'), 'the kingdom preview contains no superposed colossus')
+  t.ok(initial.includes('\x1b[36m'), 'the colossus is colored cyan')
+  t.absent(initial.includes('REINO'), 'the menu shows only the colossus')
 })
 
 test('language selection localizes views without changing names, items or other games', (t) => {
