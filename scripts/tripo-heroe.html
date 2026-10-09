@@ -2018,7 +2018,13 @@
         label,
         text: (name) => tr(name)
       })
-      const inventory = createInventory({ tr: (name) => tr(name), L, settings })
+      const inventory = createInventory({
+        tr: (name) => tr(name),
+        L,
+        settings,
+        models: () => models,
+        loadGlb
+      })
       const vitrina = createShowcase({
         scene,
         camera,

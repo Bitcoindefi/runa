@@ -11,7 +11,10 @@
 // nada.
 //
 // Recibe `ctx`: tr(texto) (traduce nombres del juego), L(en, es) (textos de la
-// pagina en el idioma elegido) y settings (las opciones de quien juega).
+// pagina en el idioma elegido) y settings (las opciones de quien juega). Si
+// tambien trae models() (los GLB de Tripo que hay) y loadGlb(file) (el GLB, del
+// cache de la pagina), el objeto elegido que tiene modelo de Tripo (el yelmo de
+// hierro) gira en 3D en su ficha, como el yelmo del inventario de la terminal.
 //
 // Lo que muestra sale de lib/game.js tal cual: la mochila es inventoryItems() en
 // el orden del juego, el cursor es inventoryCursor, los totales son duelStats()
@@ -23,6 +26,8 @@
 // sigue al cursor del juego y a su registro.
 //
 // window.runaInventory() cuenta que muestra el panel, para probarlo.
+import * as THREE from 'three'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { document, performance } = globalThis
@@ -206,6 +211,152 @@ function itemIcon(item) {
   return KIND_ICONS[item.kind] || SLOT_ICONS[item.slot] || 'unknown'
 }
 
+// --- El modelo de Tripo en la ficha ------------------------------------------
+// Los objetos con modelo, como los viste el heroe de la pagina (SKINS en
+// tripo-heroe.html): el yelmo es yelmo.glb y Tripo lo entrega mirando hacia +x.
+// Un GLB llamado como el id del objeto (spear.glb) tambien se usa solo.
+const TRIPO = { iron_helmet: { file: 'yelmo.glb', yaw: -Math.PI / 2 } }
+
+// Centrado, de un metro y mirando a la camara; la camara se aleja lo que haga
+// falta para que entre girando (userData.distance, con 28 grados de lente).
+function fitModel(object, spec) {
+  object.rotation.y = spec.yaw || 0
+  object.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(object)
+  const dims = box.getSize(new THREE.Vector3())
+  const most = Math.max(dims.x, dims.y, dims.z, 1e-6)
+  object.position.sub(box.getCenter(new THREE.Vector3()))
+  const holder = new THREE.Group()
+  holder.add(object)
+  holder.scale.setScalar(1 / most)
+  const radius = (Math.hypot(dims.x, dims.z) / 2 / most) * 1.02
+  const tall = dims.y / 2 / most
+  holder.userData.distance = Math.max(radius, tall) / Math.sin(THREE.MathUtils.degToRad(14)) + 0.15
+  return holder
+}
+
+// Un modelo de Tripo girando en el cuadro del objeto elegido. Tiene su propio
+// lienzo WebGL, chico, que se dibuja solo mientras se ve; si algo falla queda el
+// dibujo de linea.
+function createTurntable(ctx) {
+  if (typeof ctx.loadGlb !== 'function' || typeof ctx.models !== 'function') return null
+  const canvas = document.createElement('canvas')
+  canvas.className = 'inv-model'
+  const models = new Map()
+  let renderer = null
+  let broken = false
+  let scene = null
+  let camera = null
+  let shown = null
+  let wanted = null
+  let host = null
+  let since = 0
+  let drawnAt = 0
+  let size = ''
+
+  function specOf(id) {
+    const spec = TRIPO[id] || { file: id + '.glb', yaw: 0 }
+    try {
+      const list = ctx.models()
+      return list && list.has(spec.file) ? spec : null
+    } catch {
+      return null
+    }
+  }
+
+  function setup() {
+    if (renderer || broken) return !!renderer
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
+    } catch {
+      broken = true
+      return false
+    }
+    renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2))
+    scene = new THREE.Scene()
+    // El metal de Tripo necesita algo que reflejar, como en la pagina.
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    pmrem.dispose()
+    scene.environmentIntensity = 0.7
+    const key = new THREE.DirectionalLight(0xffe6b8, 2.2)
+    key.position.set(2, 3, 4)
+    const rim = new THREE.DirectionalLight(0xe0c060, 1.6)
+    rim.position.set(-3, 1.5, -3)
+    scene.add(new THREE.HemisphereLight(0xfff1d6, 0x1a1408, 1.2), key, rim)
+    camera = new THREE.PerspectiveCamera(28, 1, 0.01, 20)
+    return true
+  }
+
+  function load(id, spec) {
+    if (!models.has(id)) {
+      models.set(
+        id,
+        Promise.resolve()
+          .then(() => ctx.loadGlb(spec.file))
+          .then((object) => (object ? fitModel(object, spec) : null))
+          .catch(() => null)
+      )
+    }
+    return models.get(id)
+  }
+
+  function place(id, object, el) {
+    if (wanted !== id || host !== el || !el.isConnected || !setup()) return
+    const fresh = !shown || shown.object !== object
+    if (fresh) {
+      if (shown) scene.remove(shown.object)
+      scene.add(object)
+      shown = { id, object }
+      since = performance.now()
+      const d = object.userData.distance
+      camera.position.set(0, d * 0.28, d)
+      camera.lookAt(0, 0, 0)
+    }
+    // La ficha se rearma (al equipar, por ejemplo): el lienzo se muda al cuadro
+    // nuevo y sigue girando donde iba.
+    el.classList.add('model')
+    el.append(canvas)
+    size = ''
+    if (fresh && canvas.animate) {
+      canvas.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, easing: 'ease-out' })
+    }
+  }
+
+  // El cuadro del objeto elegido: si tiene modelo, el lienzo tapa el dibujo
+  // cuando el modelo esta listo. Sin id, deja de dibujar.
+  function attach(id, el) {
+    wanted = id
+    host = el
+    const spec = id && el ? specOf(id) : null
+    if (!spec) return
+    load(id, spec).then((object) => {
+      if (object) place(id, object, el)
+    })
+  }
+
+  // A 30 cuadros por segundo alcanza para un objeto que gira despacio, y el
+  // mundo de atras se queda con el resto.
+  function frame(now) {
+    if (!renderer || !shown || shown.id !== wanted || !host || !host.isConnected) return
+    if (now - drawnAt < 30) return
+    drawnAt = now
+    const w = canvas.clientWidth
+    const h = canvas.clientHeight
+    if (!w || !h) return
+    if (size !== w + 'x' + h) {
+      size = w + 'x' + h
+      renderer.setSize(w, h, false)
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+    }
+    shown.object.rotation.y = ((now - since) / 1000) * 0.9
+    renderer.render(scene, camera)
+  }
+
+  return { attach, frame }
+}
+
 // El stickman del juego detras de las ranuras del muneco.
 const FIGURE =
   '<svg class="inv-figure" viewBox="0 0 120 150" aria-hidden="true" focusable="false" ' +
@@ -236,7 +387,7 @@ const CSS = `
   color: var(--inv-fg);
   background:
     radial-gradient(120% 50% at 50% 0%, rgba(224, 192, 96, 0.07), rgba(224, 192, 96, 0) 60%),
-    linear-gradient(180deg, rgba(19, 18, 15, 0.97), rgba(9, 9, 10, 0.97));
+    linear-gradient(180deg, #13120f, #09090a);
   border: 1px solid var(--inv-line);
   border-radius: 10px;
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(224, 192, 96, 0.14);
@@ -645,10 +796,12 @@ const CSS = `
   align-items: center;
 }
 .inv-art {
+  position: relative;
   display: grid;
   place-items: center;
   width: 66px;
   height: 66px;
+  overflow: hidden;
   border-radius: 11px;
   color: var(--inv-gold);
   background:
@@ -660,8 +813,18 @@ const CSS = `
   box-shadow: 0 0 18px rgba(224, 192, 96, 0.22);
 }
 .inv-art svg {
-  width: 48px;
-  height: 48px;
+  width: 72%;
+  height: 72%;
+  transition: opacity 0.3s;
+}
+.inv-art.model svg {
+  opacity: 0;
+}
+.inv-model {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 .inv-name {
   margin: 0;
@@ -828,10 +991,6 @@ const CSS = `
     width: 54px;
     height: 54px;
   }
-  .inv-art svg {
-    width: 40px;
-    height: 40px;
-  }
   .inv-name {
     font-size: 16px;
   }
@@ -912,6 +1071,20 @@ const CSS = `
     max-height: none;
   }
 }
+/* Pantallas altas (1080p): la ficha del objeto como una carta, con el dibujo
+   grande arriba. */
+@media (min-width: 900px) and (min-height: 860px) {
+  .inv-detail-top {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+  }
+  .inv-art {
+    width: 136px;
+    height: 136px;
+    border-radius: 16px;
+  }
+}
 `
 
 function addStyle() {
@@ -963,6 +1136,21 @@ function glow(element) {
   )
 }
 
+// La pestana del inventario que se ve: el cofre solo existe en el hogar.
+const tabOf = (runa) =>
+  runa.inventoryHome && runa.inventoryTab === 'stored' ? 'stored' : 'carried'
+
+// Lo que pide por el objeto la tienda que lo vende (player.canBuy solo consulta,
+// y dice el precio aunque ya lo tengas); 0 si ninguna lo vende.
+function priceOf(runa, id) {
+  try {
+    const deal = runa.player.canBuy(id)
+    return deal && deal.price > 0 ? deal.price : 0
+  } catch {
+    return 0
+  }
+}
+
 // La diferencia con lo que ya tiene puesto en esa ranura: verde si mejora.
 function change(stat, mine, theirs) {
   const diff = mine - theirs
@@ -985,6 +1173,7 @@ export function createInventory(ctx) {
     !!(globalThis.matchMedia && globalThis.matchMedia('(pointer: coarse)').matches)
 
   addStyle()
+  const turntable = createTurntable(ctx)
   const root = document.createElement('section')
   root.className = 'inv'
   root.hidden = true
@@ -1038,20 +1227,10 @@ export function createInventory(ctx) {
   // Elegir algo de la otra pestana (en el hogar): primero Tab, despues el cursor.
   let want = null
   let failure = null
+  // El inventario ya se mostro en el panel desde que se abrio.
+  let visited = false
 
   // --- Lo que dice el juego ----------------------------------------------------
-
-  const tabOf = (runa) =>
-    runa.inventoryHome && runa.inventoryTab === 'stored' ? 'stored' : 'carried'
-
-  function priceOf(runa, id) {
-    try {
-      const deal = runa.player.canBuy(id)
-      return deal && deal.price > 0 ? deal.price : 0
-    } catch {
-      return 0
-    }
-  }
 
   function read(runa, st) {
     const home = !!runa.inventoryHome
@@ -1209,40 +1388,43 @@ export function createInventory(ctx) {
     return html
   }
 
-  function paintDetail(v) {
-    const item = v.selected
-    if (!item) {
-      const hint =
-        v.tab === 'stored'
-          ? L('Store gear here to travel light.', 'Guarda equipo aca para viajar liviano.')
-          : L('What you buy shows up here.', 'Lo que compres aparece aca.')
-      ui.detail.innerHTML =
-        `<div class="inv-detail-top"><div class="inv-art">${icon('unknown')}</div><div>` +
-        `<h3 class="inv-name">${esc(L('Nothing here', 'No hay nada'))}</h3>` +
-        `<p class="inv-kind">${esc(hint)}</p></div></div>`
-      return
-    }
-    const on = v.tab === 'carried' && wearing(v, item)
-    const slotWorn = v.worn[item.slot]
-    // Contra lo que ya lleva puesto en esa ranura, si es otra cosa.
-    const other = !on && slotWorn && slotWorn.id !== item.id ? slotWorn : null
+  // La ficha sin objeto: la mochila o el cofre vacios.
+  function emptyCard(v) {
+    const hint =
+      v.tab === 'stored'
+        ? L('Store gear here to travel light.', 'Guarda equipo aca para viajar liviano.')
+        : L('What you buy shows up here.', 'Lo que compres aparece aca.')
+    return (
+      `<div class="inv-detail-top"><div class="inv-art">${icon('unknown')}</div><div>` +
+      `<h3 class="inv-name">${esc(L('Nothing here', 'No hay nada'))}</h3>` +
+      `<p class="inv-kind">${esc(hint)}</p></div></div>`
+    )
+  }
+
+  // Arriba de la ficha: el dibujo, el nombre, el tipo y donde se lleva.
+  function cardTop(v, item, on) {
     const kind = KINDS[item.kind] ? pick(KINDS[item.kind]) : title(tr(item.kind || ''))
-    const where = WORN_ON[item.slot] ? pick(WORN_ON[item.slot]) : ''
-    const rows = statRows(item, other)
+    const where = WORN_ON[item.slot] ? ' &middot; ' + esc(pick(WORN_ON[item.slot])) : ''
     let badge = ''
     if (on) badge = L('Equipped', 'Equipado')
     else if (v.tab === 'stored') badge = L('In the chest', 'En el cofre')
-    let html =
+    return (
       `<div class="inv-detail-top"><div class="inv-art${on ? ' worn' : ''}">${icon(itemIcon(item))}` +
       `</div><div><h3 class="inv-name">${esc(title(tr(item.name)))}</h3>` +
-      `<p class="inv-kind">${esc(kind)}${where ? ' &middot; ' + esc(where) : ''}</p>` +
+      `<p class="inv-kind">${esc(kind)}${where}</p>` +
       (badge ? `<span class="inv-badge">${esc(badge)}</span>` : '') +
       '</div></div>'
-    if (other) {
-      html += `<p class="inv-versus">${esc(L('Against your', 'Contra tu'))} <b>${esc(
-        title(tr(other.name))
-      )}</b></p>`
-    }
+    )
+  }
+
+  // Los numeros (contra lo que ya lleva en esa ranura), la descripcion del
+  // juego y el precio de la tienda.
+  function cardBody(v, item, other) {
+    const rows = statRows(item, other)
+    let html = other
+      ? `<p class="inv-versus">${esc(L('Against your', 'Contra tu'))} ` +
+        `<b>${esc(title(tr(other.name)))}</b></p>`
+      : ''
     html += rows
       ? `<div class="inv-stats">${rows}</div>`
       : `<p class="inv-versus">${esc(L('No bonuses', 'Sin bonificaciones'))}</p>`
@@ -1252,8 +1434,24 @@ export function createInventory(ctx) {
         `<p class="inv-price">${icon('coin')}${esc(L('Shop price', 'Precio en la tienda'))} ` +
         `<b>${v.price}</b></p>`
     }
-    ui.detail.innerHTML = html
+    return html
+  }
+
+  function paintDetail(v) {
+    const item = v.selected
+    if (!item) {
+      ui.detail.innerHTML = emptyCard(v)
+      if (turntable) turntable.attach(null, null)
+      return
+    }
+    const on = v.tab === 'carried' && wearing(v, item)
+    const slotWorn = v.worn[item.slot]
+    // Contra lo que ya lleva puesto en esa ranura, si es otra cosa.
+    const other = !on && slotWorn && slotWorn.id !== item.id ? slotWorn : null
+    ui.detail.innerHTML = cardTop(v, item, on) + cardBody(v, item, other)
     ui.detail.scrollTop = 0
+    // El modelo de Tripo, si lo tiene, gira en el cuadro del dibujo.
+    if (turntable) turntable.attach(item.id, ui.detail.querySelector('.inv-art'))
   }
 
   // Los botones del objeto elegido, con la tecla que mandan (lib/game.js
@@ -1370,6 +1568,7 @@ export function createInventory(ctx) {
     saidAt = null
     wornBefore = null
     view = null
+    if (turntable) turntable.attach(null, null)
   }
 
   // --- Lo que se toca ------------------------------------------------------------
@@ -1455,13 +1654,30 @@ export function createInventory(ctx) {
       text: b.firstChild ? b.firstChild.textContent : ''
     })),
     status: ui.status.textContent,
+    // El modelo de Tripo girando en la ficha.
+    model: !!root.querySelector('.inv-art.model canvas'),
     error: failure ? String(failure.message || failure) : null
   })
+
+  // La pantalla de texto de la pagina esta a la vista.
+  function textShown() {
+    const term = document.getElementById('term')
+    return !!term && !term.hidden
+  }
 
   function sync(st, next) {
     session = next || null
     const runa = session && session.runa
     if (!st || !runa || st.title || st.naming || st.overlay !== 'inventory') {
+      // La ayuda del juego (?) se abre encima del inventario: al cerrarla vuelve
+      // el panel, no la pantalla de texto.
+      if (!st || st.overlay !== 'controls') visited = false
+      hide()
+      return false
+    }
+    // Si en un mapa 3D quien juega pidio la pantalla de texto (Tab) antes de
+    // abrir el inventario, queda la de texto: es lo que eligio ver.
+    if (!visited && st.world && textShown()) {
       hide()
       return false
     }
@@ -1475,8 +1691,10 @@ export function createInventory(ctx) {
       hide()
       return false
     }
+    visited = true
     show()
     paint(view)
+    if (turntable) turntable.frame(performance.now())
     return true
   }
 
