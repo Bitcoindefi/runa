@@ -1654,8 +1654,7 @@ export function createInventory(ctx) {
   }
 
   // La ranura del muneco elige lo que lleva puesto, o lo primero de la mochila
-  // que va ahi.
-  // True si ya quedo elegido (desde el cofre hace falta un Tab antes).
+  // que va ahi. True si ya quedo elegido: desde el cofre hace falta un Tab antes.
   function chooseSlot(slot) {
     const runa = runaOpen()
     if (!runa) return false
