@@ -120,8 +120,8 @@ function listModels() {
 // Donde guarda el juego: persistent() de bare-storage, "runa" y "saves"
 // (bin.mjs). RUNA_STORAGE equivale a --storage del juego. La ruta de macOS
 // sale de la documentacion de Apple, no de una prueba.
-function savesDir() {
-  if (process.env.RUNA_STORAGE) return path.join(process.env.RUNA_STORAGE, 'saves')
+function storageDir() {
+  if (process.env.RUNA_STORAGE) return process.env.RUNA_STORAGE
   const home = os.homedir()
   const base =
     process.platform === 'win32'
@@ -129,7 +129,70 @@ function savesDir() {
       : process.platform === 'darwin'
         ? path.join(home, 'Library', 'Application Support')
         : process.env.XDG_DATA_HOME || path.join(home, '.local', 'share')
-  return path.join(base, 'runa', 'saves')
+  return path.join(base, 'runa')
+}
+
+function savesDir() {
+  return path.join(storageDir(), 'saves')
+}
+
+// Teclas para el juego, si se arranco con --teclas (bin.mjs crea la carpeta).
+const KEY_BYTES = {
+  up: '\x1b[A',
+  down: '\x1b[B',
+  right: '\x1b[C',
+  left: '\x1b[D',
+  enter: '\r',
+  escape: '\x1b',
+  backspace: '\x7f',
+  tab: '\t',
+  space: ' '
+}
+let keySerial = 0
+
+function keyBytes(key) {
+  if (typeof key !== 'string') return null
+  if (Object.hasOwn(KEY_BYTES, key)) return KEY_BYTES[key]
+  return key.length === 1 && key >= ' ' && key <= '~' ? key : null
+}
+
+// Solo la pagina del visor manda teclas: el header propio obliga a cualquier otra
+// web a un preflight CORS que este server no contesta, y el Origin tiene que ser
+// el del visor. Ctrl+C nunca llega: no es una tecla de la tabla.
+function sendKey(req, res, origins) {
+  if (req.headers['x-runa'] !== '1' || (req.headers.origin && !origins.has(req.headers.origin))) {
+    res.writeHead(403).end()
+    return
+  }
+  let body = ''
+  req.on('data', (chunk) => {
+    body += chunk
+    if (body.length > 200) req.destroy()
+  })
+  req.on('end', () => {
+    let bytes = null
+    try {
+      bytes = keyBytes(JSON.parse(body).key)
+    } catch {
+      // Cuerpo invalido: cae en el 400.
+    }
+    if (bytes === null) return res.writeHead(400).end()
+    const inbox = path.join(storageDir(), 'keys')
+    if (!fs.existsSync(inbox)) {
+      res.writeHead(409, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'el juego no escucha teclas: npm start -- --teclas' }))
+      return
+    }
+    const name = `${Date.now()}-${String(keySerial++ % 1e6).padStart(6, '0')}.key`
+    const file = path.join(inbox, name)
+    try {
+      fs.writeFileSync(file + '.tmp', bytes)
+      fs.renameSync(file + '.tmp', file)
+    } catch {
+      return res.writeHead(500).end()
+    }
+    res.writeHead(204).end()
+  })
 }
 
 function item(id) {
@@ -325,6 +388,7 @@ function serve() {
   const hero = heroWatcher()
   // Solo estos Host: una pagina ajena con DNS rebinding no puede leer los GLB.
   const hosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`])
+  const origins = new Set([...hosts].map((host) => `http://${host}`))
   http
     .createServer((req, res) => {
       if (!hosts.has(req.headers.host)) {
@@ -343,6 +407,7 @@ function serve() {
       }
       if (urlPath === '/models.json') return json(res, listModels())
       if (urlPath === '/state.json') return json(res, hero.state())
+      if (urlPath === '/key' && req.method === 'POST') return sendKey(req, res, origins)
       if (urlPath === '/mundo.js') return send(res, WORLD_JS, 'text/javascript; charset=utf-8')
       const world = /^\/world\/([a-z]+)\.json$/.exec(urlPath)
       if (world) {

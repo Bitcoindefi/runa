@@ -56,6 +56,12 @@
       #who {
         color: var(--dim);
       }
+      #mode {
+        color: var(--accent);
+      }
+      #keys {
+        color: var(--dim);
+      }
       #gear {
         display: grid;
         grid-template-columns: auto auto;
@@ -91,6 +97,8 @@
       <div>
         <h1>[ RUNA / HEROE ]</h1>
         <div id="who">buscando la partida...</div>
+        <div id="mode"></div>
+        <div id="keys">WASD o flechas: caminar. E: hablar. I: inventario.</div>
       </div>
       <dl id="gear"></dl>
     </header>
@@ -135,14 +143,21 @@
       }
 
       const who = document.getElementById('who')
+      const mode = document.getElementById('mode')
       const gear = document.getElementById('gear')
       const toast = document.getElementById('toast')
 
       // Escena
       const renderer = new THREE.WebGLRenderer({ antialias: true })
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      // Con 1,5 alcanza para que se vea nitido y no se trabe en pantallas densas.
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
       renderer.shadowMap.enabled = true
       document.body.prepend(renderer.domElement)
+      // Para medir desde la consola cuanto cuesta cada cuadro.
+      window.runaInfo = () => ({
+        ...renderer.info.render,
+        geometries: renderer.info.memory.geometries
+      })
 
       const scene = new THREE.Scene()
       scene.background = new THREE.Color(0x0b0b0c)
@@ -293,12 +308,33 @@
         white: 0xd8d8d0,
         gray: 0x9a9a92
       }
+      // Una figura liviana: tres mallas que comparten geometria y material, sin
+      // sombra. En la ciudad hay 17 NPC y tienen que costar poco.
+      const NPC = {
+        body: new THREE.CapsuleGeometry(0.17, 0.62, 2, 6),
+        head: new THREE.SphereGeometry(0.16, 8, 6),
+        legs: new THREE.BoxGeometry(0.26, 0.8, 0.12)
+      }
+      const npcSkins = {}
       function figure(color) {
-        const skin = new THREE.MeshStandardMaterial({
-          color: TERMINAL[color] || 0xbdb8aa,
-          roughness: 0.7
-        })
-        return stickman(skin).root
+        if (!npcSkins[color]) {
+          npcSkins[color] = new THREE.MeshStandardMaterial({
+            color: TERMINAL[color] || 0xbdb8aa,
+            roughness: 0.7
+          })
+        }
+        const skin = npcSkins[color]
+        const body = new THREE.Group()
+        const torso = new THREE.Mesh(NPC.body, skin)
+        torso.position.y = 1.25
+        const head = new THREE.Mesh(NPC.head, skin)
+        head.position.y = 1.86
+        const legs = new THREE.Mesh(NPC.legs, skin)
+        legs.position.y = 0.4
+        body.add(torso, head, legs)
+        // Comparte geometria y material con los demas NPC: el mapa no los libera.
+        body.userData.shared = true
+        return body
       }
 
       // Armas y piezas con formas simples, en el marco del enchufe.
@@ -654,15 +690,17 @@
         ring.visible = on
         if (backdrop) backdrop.visible = on
         controls.autoRotate = on
-        controls.minDistance = on ? 2.4 : 4
-        controls.maxDistance = on ? 11 : 45
-        scene.fog.near = on ? 11 : 28
-        scene.fog.far = on ? 30 : 75
+        // En el mapa, vista 2.5D: lente cerrada y desde lejos, casi isometrica.
+        camera.fov = on ? 38 : 24
+        controls.minDistance = on ? 2.4 : 14
+        controls.maxDistance = on ? 11 : 110
+        scene.fog.near = on ? 11 : 60
+        scene.fog.far = on ? 30 : 150
         const reach = on ? 6 : 24
         Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach })
         sun.shadow.camera.far = on ? 30 : 80
         sun.shadow.camera.updateProjectionMatrix()
-        camera.far = on ? 100 : 160
+        camera.far = on ? 100 : 220
         camera.updateProjectionMatrix()
       }
 
@@ -673,24 +711,47 @@
         world = null
       }
 
+      // La consulta llega cada 200 ms y armar la ciudad puede tardar mas: mientras
+      // un mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
+      let loadingMap = null
+      let lastAt = null
       async function enterWorld(at) {
+        lastAt = at
         if (world && world.map === at.map) {
           heroTarget.copy(world.built.toWorld(at.x, at.y))
           return
         }
+        if (loadingMap === at.map) return
+        loadingMap = at.map
+        mode.textContent = 'armando el mapa 3D...'
         const token = ++worldToken
         let data
         try {
-          data = await (await fetch('/world/' + at.map + '.json', { cache: 'no-store' })).json()
-        } catch {
+          const response = await fetch('/world/' + at.map + '.json', { cache: 'no-store' })
+          if (!response.ok) throw new Error('el visor respondio ' + response.status)
+          data = await response.json()
+        } catch (error) {
+          if (token === worldToken) loadingMap = null
+          mode.textContent = 'no pude traer el mapa ' + at.map + ': ' + error.message
           return
         }
         if (token !== worldToken) return
+        loadingMap = null
         leaveWorld()
-        const built = buildWorld(data, {
-          figure,
-          glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null))
-        })
+        let built
+        try {
+          built = buildWorld(data, {
+            figure,
+            glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null))
+          })
+        } catch (error) {
+          mode.textContent = 'no pude armar el mapa ' + at.map + ': ' + error.message
+          console.error(error)
+          return
+        }
+        // Mientras se armaba el heroe pudo moverse: se usa la ultima celda.
+        if (lastAt && lastAt.map === at.map) at = lastAt
+        mode.textContent = 'mapa 3D: ' + data.name + '. Te moves desde la terminal del juego.'
         scene.add(built.group)
         world = { map: at.map, built }
         showcase(false)
@@ -702,11 +763,12 @@
         hero.root.position.copy(heroTarget)
         controls.target.copy(heroTarget).setY(1)
         // La camara arranca al sur del heroe, mirando al norte como la terminal.
-        camera.position.copy(heroTarget).add(new THREE.Vector3(0, 11, 13))
+        camera.position.copy(heroTarget).add(new THREE.Vector3(0, 44, 32))
       }
 
       function exitWorld() {
         worldToken++
+        loadingMap = null
         if (!world) return
         leaveWorld()
         showcase(true)
@@ -754,6 +816,8 @@
           else {
             exitWorld()
             setScene(state.scene)
+            mode.textContent =
+              'vitrina: ' + (state.place || 'esta zona') + ' todavia no tiene mapa 3D'
           }
           first = false
         } catch {
@@ -853,6 +917,44 @@
       }
       new ResizeObserver(fitView).observe(renderer.domElement)
       fitView()
+
+      // Controles: la pagina aprieta teclas en el juego, que corre en la terminal con
+      // --teclas. Las reglas siguen siendo las del juego; esto solo manda teclas.
+      const keysLine = document.getElementById('keys')
+      const KEYMAP = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right',
+        Enter: 'enter',
+        Escape: 'escape',
+        Backspace: 'backspace',
+        Tab: 'tab',
+        ' ': 'space'
+      }
+      let keyChain = Promise.resolve()
+      window.addEventListener('keydown', (event) => {
+        if (event.ctrlKey || event.metaKey || event.altKey) return
+        const key = KEYMAP[event.key] || (event.key.length === 1 ? event.key : null)
+        if (!key) return
+        event.preventDefault()
+        // En fila, para que el juego reciba las teclas en el orden apretado.
+        keyChain = keyChain.then(async () => {
+          try {
+            const response = await fetch('/key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Runa': '1' },
+              body: JSON.stringify({ key })
+            })
+            keysLine.textContent =
+              response.status === 409
+                ? 'Para jugar desde aca, arranca el juego con: npm.cmd start -- --teclas'
+                : 'WASD o flechas: caminar. E: hablar. I: inventario.'
+          } catch {
+            keysLine.textContent = 'el visor no responde'
+          }
+        })
+      })
 
       await refreshModels()
       await poll()

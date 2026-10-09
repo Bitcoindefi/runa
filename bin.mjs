@@ -17,7 +17,8 @@ const cmd = command(
   flag('--storage <dir>', 'custom storage directory'),
   flag('--no-updates', 'disable OTA updates for this run'),
   flag('--name <name>', 'name other players see in the town'),
-  flag('--solo', 'play without presence, nobody sees you and you see nobody')
+  flag('--solo', 'play without presence, nobody sees you and you see nobody'),
+  flag('--teclas', 'accept keys from the 3D viewer page (scripts/tripo-viewer.js /heroe)')
 )
 
 cmd.parse(Bare.argv.slice(isDev ? 2 : 1))
@@ -114,9 +115,44 @@ app.on('updated', () => news('el mundo cambio. reinicia para verlo.'))
 app.on('update-applied', () => news('el mundo cambio. reinicia para verlo.'))
 app.on('error', () => {})
 
+// Teclas desde la pagina 3D del visor. Cada una llega como un archivo en
+// <dir>/keys y entra al juego por el mismo camino que la terminal, asi que las
+// reglas no cambian: el navegador solo aprieta teclas. Apagado salvo --teclas.
+let stopKeys = () => {}
+if (cmd.flags.teclas) {
+  const { default: fs } = await import('bare-fs')
+  const inbox = path.join(dir, 'keys')
+  fs.mkdirSync(inbox, { recursive: true })
+  // Las teclas que quedaron de otra sesion no se juegan.
+  for (const name of fs.readdirSync(inbox)) fs.unlinkSync(path.join(inbox, name))
+  const timer = setInterval(() => {
+    let names
+    try {
+      names = fs
+        .readdirSync(inbox)
+        .filter((name) => name.endsWith('.key'))
+        .sort()
+    } catch {
+      return
+    }
+    for (const name of names) {
+      const file = path.join(inbox, name)
+      try {
+        const bytes = fs.readFileSync(file)
+        fs.unlinkSync(file)
+        if (program.input) program.input.emit('data', bytes)
+      } catch {
+        // Otro lector la tomo o todavia se esta escribiendo: sigue en la proxima.
+      }
+    }
+  }, 40)
+  stopKeys = () => clearInterval(timer)
+}
+
 try {
   await program.run()
 } finally {
+  stopKeys()
   runa.saveCurrent()
   await app.close().catch(() => {})
 }

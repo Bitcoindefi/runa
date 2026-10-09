@@ -6,8 +6,31 @@ terminal y aparece en el heroe 3D, con un aviso. Al entrar a las ruinas
 volcanicas aparece el Coloso de Tripo y cae ceniza.
 
 El stickman esta hecho con formas simples: no gasta creditos de Tripo y su mano
-sirve de enganche para cualquier arma. El juego no cambia: no se toco `lib/` ni
-`bin.mjs`.
+sirve de enganche para cualquier arma. Las reglas del juego no cambian: no se
+toco `lib/`. `bin.mjs` suma una opcion, `--teclas`, para recibir teclas de la
+pagina; sin ella el juego queda igual que antes.
+
+## Jugar desde el navegador
+
+```powershell
+npm.cmd start -- --teclas
+npm.cmd run tripo:viewer
+```
+
+Con `--teclas`, el juego crea `<carpeta de partidas>/../keys` y la revisa cada
+40 ms. La pagina manda WASD o flechas, E, I, Enter, Esc y cualquier letra; cada
+tecla llega como un archivo y entra al juego por el mismo camino que la
+terminal (`program.input`), asi que las reglas no cambian: el navegador solo
+aprieta teclas. Las teclas de una sesion anterior se descartan al arrancar.
+
+Solo la pagina del visor puede mandar teclas: el pedido lleva un header propio,
+que obliga a cualquier otra web a un preflight que el visor no contesta, y su
+Origin tiene que ser el del visor. Ctrl+C no esta en la tabla de teclas. Si el
+juego no se arranco con `--teclas`, la pagina lo avisa.
+
+Probado de punta a punta el 8 de octubre con el juego real en Windows: `n` y
+Enter desde el visor crearon una partida en la ciudad, y seis `d` la movieron
+seis celdas. Sin el header o desde otro Origin el visor responde 403.
 
 ## Correrlo
 
@@ -70,9 +93,12 @@ ese mapa en 3D con el mismo arte ASCII y la tabla `TILES` del juego
 (`scripts/tripo-mundo.js`, servido en `/mundo.js`; los mapas salen de
 `/world/<id>.json`):
 
-- Cada caracter sube como un bloque con la altura y el color de lo que es:
-  paredes, tejados, mamposteria y ventanas encendidas. El interior de un
-  edificio se rellena como volumen.
+- Cada edificio cerrado del arte (un grupo lleno de paredes y relleno que no
+  toca el borde) es una caja de 4,5 a 9 de alto, el doble a cuatro veces y media
+  el heroe, con techo a dos aguas y ventanas encendidas por piso. Todos los
+  edificios de un mapa van en una sola malla.
+- Lo que queda suelto sube por tramos de una fila: las murallas `#` a 3,4,
+  cercos, mamposteria y adornos mas bajos.
 - Las letras que el arte pinta en los edificios y carteles quedan como bloques
   con su letra, asi que "mercado del alba" se lee en 3D. Una `o` o una `t`
   pegada a otras letras es letra, no piedra ni arbol.
@@ -84,9 +110,13 @@ ese mapa en 3D con el mismo arte ASCII y la tabla `TILES` del juego
   Coloso de Tripo (`coloso.glb`) espera en su arena.
 
 El heroe camina hacia la celda del guardado, con las piernas en movimiento, y la
-camara lo sigue desde el sur, mirando al norte como la terminal. Con el mouse se
-gira y se acerca. Una columna mide 0,5 y una fila 1: la celda de terminal es el
-doble de alta que de ancha.
+camara lo sigue desde el sur, mirando al norte como la terminal, en una vista
+2.5D: lente cerrada y desde lejos. Con el mouse se gira y se acerca. Una columna
+mide 0,5 y una fila 1: la celda de terminal es el doble de alta que de ancha.
+
+Medido en la ciudad: 88 llamadas de dibujo y unos 59.000 triangulos por cuadro.
+Los NPC son tres mallas compartidas y la resolucion se limita a 1,5x. Mientras un
+mapa se arma no se vuelve a pedir, aunque la consulta llegue cada 200 ms.
 
 La pradera, los campamentos y la cripta todavia muestran la vitrina: el terreno
 de la pradera sale de la semilla del dia, que el guardado no trae.
