@@ -317,13 +317,13 @@ function glowTexture(kind) {
   }
   g.putImageData(image, 0, 0)
   // Grietas: caminos al azar, dibujados nueve veces corridos para que la
-  // textura de la vuelta sin cortes.
-  g.strokeStyle = '#ffffff'
+  // textura de la vuelta sin cortes. Cada una con un halo tenue y el centro
+  // fino y blanco: brilla desde adentro, no parece pintada.
   g.lineCap = 'round'
   g.lineJoin = 'round'
   let k = kind === 'veins' ? 11 : 29
   const rnd = () => hash(k++, 4243)
-  const count = kind === 'veins' ? 5 : 14
+  const count = kind === 'veins' ? 5 : 11
   for (let i = 0; i < count; i++) {
     const path = []
     let x = rnd() * n
@@ -336,12 +336,21 @@ function glowTexture(kind) {
       x += Math.cos(a) * 10
       y += Math.sin(a) * 10
     }
-    g.lineWidth = kind === 'veins' ? 1.2 + rnd() : 1.6 + rnd() * 2.4
-    for (const dx of [-n, 0, n]) {
-      for (const dy of [-n, 0, n]) {
-        g.beginPath()
-        path.forEach(([px, py], j) => (j ? g.lineTo(px + dx, py + dy) : g.moveTo(px + dx, py + dy)))
-        g.stroke()
+    const core = kind === 'veins' ? 1 + rnd() * 0.6 : 1.1 + rnd() * 1.3
+    for (const [width, style] of [
+      [core * 3.2, 'rgba(255,255,255,0.22)'],
+      [core, '#ffffff']
+    ]) {
+      g.lineWidth = width
+      g.strokeStyle = style
+      for (const dx of [-n, 0, n]) {
+        for (const dy of [-n, 0, n]) {
+          g.beginPath()
+          path.forEach(([px, py], j) =>
+            j ? g.lineTo(px + dx, py + dy) : g.moveTo(px + dx, py + dy)
+          )
+          g.stroke()
+        }
       }
     }
   }
@@ -1392,8 +1401,10 @@ function placeTowers(world, s, grid, gates, style, towers) {
 // rectangulos, una cara donde la altura baja, y en las caras que tocan el piso
 // talud, cordon y caras rectas; arriba parapeto y almenas. Sigue la grilla en
 // las dos direcciones, asi un paredon vertical es uno solo y no una pila de
-// cajas. `blocked(x, z)` dice donde hay una torre (ahi no van almenas).
-function massGeometry(world, grid, shop, style, colors, blocked) {
+// cajas. `blocked(x, z)` dice donde hay una torre (ahi no van almenas). Con
+// `paving` las tapas van a otro material, con el uv que diga paving.uv(x, z):
+// el piso dibujado de una plaza.
+function massGeometry(world, grid, shop, style, colors, blocked, paving = null) {
   const { CX, CZ } = world
   const { GW, GH, gm, gh, ghost } = grid
   const X = (gx) => (gx - PAD_X) * CX
@@ -1434,22 +1445,22 @@ function massGeometry(world, grid, shop, style, colors, blocked) {
       }
       while (y1 + 1 < GH && rowFits(y1 + 1)) y1++
       for (let yy = gy; yy <= y1; yy++) for (let xx = gx; xx <= x1; xx++) used[yy * GW + xx] = 1
-      const k = shop.at('stone', X(gx), Z(gy))
       const a = X(gx)
       const b = X(x1 + 1)
       const c = Z(gy)
       const d = Z(y1 + 1)
-      k.face(
-        [
-          [a, h, c],
-          [b, h, c],
-          [b, h, d],
-          [a, h, d]
-        ],
-        colors.walk,
-        [0, 1, 0],
-        false
-      )
+      const lid = [
+        [a, h, c],
+        [b, h, c],
+        [b, h, d],
+        [a, h, d]
+      ]
+      if (paving) {
+        const uvs = lid.map(([x, , z]) => paving.uv(x, z))
+        shop.at(paving.material, a, c).face(lid, colors.white, [0, 1, 0], false, uvs)
+      } else {
+        shop.at('stone', a, c).face(lid, colors.walk, [0, 1, 0], false)
+      }
     }
   }
 
@@ -2720,7 +2731,8 @@ function banner(shop, b, colors) {
 
 // El paño se mueve con el viento: una ola que baja por la tela y un temblor
 // mas corto. uv.y es cuanto se aleja del palo, asi el borde de arriba no se
-// despega. Como la tela es fina, se mueve sobre su propia normal.
+// despega. Como la tela es fina, se mueve sobre su propia normal, y casi
+// siempre hacia afuera: colgada de una pared, no se mete en ella.
 function clothMaterial(clock) {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -2737,7 +2749,7 @@ function clothMaterial(clock) {
         float reach = min( uv.y, 2.4 );
         float sway = sin( wind * 1.9 - reach * 1.6 + position.x * 0.7 + position.z * 0.5 );
         float flutter = sin( wind * 4.7 - reach * 3.3 + position.x * 1.9 - position.z * 1.1 ) * 0.4;
-        transformed += objectNormal * ( sway + flutter ) * 0.075 * reach;`
+        transformed += objectNormal * ( 0.55 + 0.45 * sway + flutter ) * 0.075 * reach;`
       )
   }
   return material
@@ -3036,9 +3048,16 @@ function monumentGrid(world, s) {
     return false
   }
   let any = false
+  // La caja del dibujo en metros, y donde esta la estatua (tripo-mundo.js la
+  // pone en el medio de esa caja).
+  let center = null
+  let box = null
   for (const mark of data.landmarks || []) {
     if (mark.id !== 'hero-statue' || !mark.bounds) continue
     const { x1, y1, x2, y2 } = mark.bounds
+    const { CX, CZ } = world
+    center = [((x1 + x2) / 2 + 0.5) * CX, ((y1 + y2) / 2 + 0.5) * CZ]
+    box = { x0: x1 * CX, z0: y1 * CZ, w: (x2 - x1 + 1) * CX, d: (y2 - y1 + 1) * CZ }
     for (let y = Math.max(0, y1); y <= Math.min(H - 1, y2); y++) {
       for (let x = Math.max(0, x1); x <= Math.min(W - 1, x2); x++) {
         const i = y * W + x
@@ -3076,7 +3095,93 @@ function monumentGrid(world, s) {
       gh[g] = inner(x, y) ? 0.6 : 0.3
     }
   }
-  return { cells, grid: { GW, GH, gm, gh, ghost: new Uint8Array(GW * GH) } }
+  return { cells, center, box, grid: { GW, GH, gm, gh, ghost: new Uint8Array(GW * GH) } }
+}
+
+// El piso del monumento, dibujado en un canvas que cubre su caja (box, en
+// metros): losas de marmol en damero de un metro con sus juntas, un anillo de
+// piedra rojiza alrededor de la estatua con dos filetes dorados y una rosa de
+// los vientos de ocho puntas. Se arma una vez por pagina.
+let plazaSet = null
+function plazaTexture(box, center) {
+  const key = [box.x0, box.z0, box.w, box.d].join(':')
+  if (plazaSet && plazaSet.key === key) return plazaSet.texture
+  const ppm = 44
+  const c = canvas(Math.round(box.w * ppm), Math.round(box.d * ppm))
+  const g = c.getContext('2d')
+  const [cx, cz] = [(center[0] - box.x0) * ppm, (center[1] - box.z0) * ppm]
+  // Las losas: cada una con su tono, alternando claras y oscuras.
+  for (let y = 0; y < Math.ceil(box.d); y++) {
+    for (let x = 0; x < Math.ceil(box.w); x++) {
+      const v = ((x + y) % 2 ? 236 : 212) + Math.round((hash(x + 31, y + 17) - 0.5) * 14)
+      g.fillStyle = `rgb(${v}, ${v - 9}, ${v - 26})`
+      g.fillRect(x * ppm, y * ppm, ppm, ppm)
+    }
+  }
+  // Las juntas entre losas.
+  g.strokeStyle = 'rgba(70, 52, 34, 0.35)'
+  g.lineWidth = 2
+  g.beginPath()
+  for (let x = 0; x <= box.w; x++) {
+    g.moveTo(x * ppm, 0)
+    g.lineTo(x * ppm, c.height)
+  }
+  for (let y = 0; y <= box.d; y++) {
+    g.moveTo(0, y * ppm)
+    g.lineTo(c.width, y * ppm)
+  }
+  g.stroke()
+  // La rosa de los vientos: puntas largas a los cuatro vientos, cortas entre
+  // ellas, mitad clara y mitad oscura como una estrella tallada.
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4
+    const len = (k % 2 ? 4.6 : 6.8) * ppm
+    const base = 2.45 * ppm
+    const half = (k % 2 ? 0.45 : 0.62) * ppm
+    const [dx, dz] = [Math.cos(a), Math.sin(a)]
+    const tip = [cx + dx * len, cz + dz * len]
+    const root = [cx + dx * base, cz + dz * base]
+    for (const [side, fill] of [
+      [1, k % 2 ? '#b98a3e' : '#8c4a32'],
+      [-1, k % 2 ? '#d6ad5c' : '#a85e40']
+    ]) {
+      g.fillStyle = fill
+      g.beginPath()
+      g.moveTo(root[0], root[1])
+      g.lineTo(root[0] - dz * half * side, root[1] + dx * half * side)
+      g.lineTo(tip[0], tip[1])
+      g.closePath()
+      g.fill()
+    }
+  }
+  // El anillo y sus filetes.
+  g.strokeStyle = '#7e4630'
+  g.lineWidth = 0.62 * ppm
+  g.beginPath()
+  g.arc(cx, cz, 2.18 * ppm, 0, Math.PI * 2)
+  g.stroke()
+  g.strokeStyle = '#d2a64e'
+  g.lineWidth = 0.09 * ppm
+  for (const r of [1.82, 2.54]) {
+    g.beginPath()
+    g.arc(cx, cz, r * ppm, 0, Math.PI * 2)
+    g.stroke()
+  }
+  const texture = new THREE.CanvasTexture(c)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 8
+  texture.userData.shared = true
+  plazaSet = { key, texture }
+  return texture
+}
+
+// Como se pega el piso dibujado sobre las tapas del monumento: el uv sale de
+// la posicion en su caja (el canvas baja en y, la textura sube en v).
+function monumentPaving(box) {
+  return {
+    material: 'plaza',
+    uv: (x, z) => [(x - box.x0) / box.w, 1 - (z - box.z0) / box.d]
+  }
 }
 
 // --- El coliseo -------------------------------------------------------------
@@ -3731,7 +3836,8 @@ function seeThrough(shader) {
 // Un material por clase de pieza; las texturas son las mismas para todos los
 // mapas (quedan en memoria), los materiales se liberan con el mapa. La piedra
 // de NOX lleva las juntas encendidas y la de las ruinas grietas con lava.
-function materialsFor(style, look, clock) {
+// `plaza` es el piso dibujado del monumento, si el mapa lo tiene.
+function materialsFor(style, look, clock, plaza) {
   const stone = stoneTextures()
   const roof = roofTextures()
   const wood = woodTextures()
@@ -3748,7 +3854,7 @@ function materialsFor(style, look, clock) {
       style.veins ? look.vein || style.accent : look.glow || style.accent
     )
     rock.emissiveMap = glowTexture(style.veins ? 'veins' : 'cracks')
-    rock.emissiveIntensity = style.veins ? 0.85 : 1.6
+    rock.emissiveIntensity = style.veins ? 0.8 : 1.45
   }
   rock.onBeforeCompile = (shader) => {
     seeThrough(shader)
@@ -3788,8 +3894,11 @@ function materialsFor(style, look, clock) {
       roughness: 0.5
     }),
     glow: new THREE.MeshBasicMaterial({ vertexColors: true }),
-    // Color liso, sin textura: el publico del coliseo.
-    paint: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 })
+    // Color liso, sin textura: el publico del coliseo, lo que se vende.
+    paint: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }),
+    plaza: plaza
+      ? new THREE.MeshStandardMaterial({ map: plaza, vertexColors: true, roughness: 0.6 })
+      : null
   }
 }
 
@@ -3928,7 +4037,7 @@ function castleGates(world, s, shop, colors, decor) {
     // Los estandartes, colgados bajo el adarve de las murallas a los dos lados
     // de la torre del porton: la enmarcan.
     for (const u of [-1, 1]) {
-      const [bx, , bz] = P(u * (block + 1.1), 0, 0.06)
+      const [bx, , bz] = P(u * (block + 1.1), 0, 0.12)
       decor.banners.push({
         x: bx,
         z: bz,
@@ -4081,9 +4190,10 @@ export function buildRamparts(world) {
   lowWalls(world, s, shop, style, colors)
   for (const st of stalls) stallGeometry(world, s, shop, st, colors)
   if (monument) {
-    // Piedra clara y pulida: el pedestal del heroe.
+    // Piedra clara y pulida: el pedestal del heroe, con su piso de marmol.
     const marble = { ...colors, stone: colors.trim, walk: colors.trim.clone().multiplyScalar(0.92) }
-    massGeometry(world, monument.grid, shop, style, marble, () => false)
+    const paving = monument.box ? monumentPaving(monument.box) : null
+    massGeometry(world, monument.grid, shop, style, marble, () => false, paving)
   }
   if (plan) {
     amphitheater(shop, plan, style, colors, decor)
@@ -4092,15 +4202,19 @@ export function buildRamparts(world) {
   for (const b of [...decor.banners, ...flags]) banner(shop, b, colors)
 
   // Una malla por material y por trozo. La raiz no la libera tripo-mundo.js
-  // (shared): la libera dispose(), sin tocar las texturas compartidas.
-  const materials = materialsFor(style, look, clock)
+  // (shared): la libera dispose(), sin tocar las texturas compartidas. Lo que
+  // casi no da sombra (telas, colores lisos, rejas, venas) no se dibuja otra
+  // vez en el mapa de sombras: es una llamada menos por cuadro.
+  const plaza = monument && monument.box ? plazaTexture(monument.box, monument.center) : null
+  const materials = materialsFor(style, look, clock, plaza)
   const root = new THREE.Group()
   root.userData.shared = true
+  const shadows = new Set(['stone', 'roof', 'wood'])
   for (const { material, kit: k } of shop.bins.values()) {
     if (!k.count()) continue
     const mesh = new THREE.Mesh(k.build(), materials[material])
     mesh.name = 'murallas:' + material
-    mesh.castShadow = material !== 'glow' && material !== 'fence'
+    mesh.castShadow = shadows.has(material)
     mesh.receiveShadow = material !== 'glow'
     root.add(mesh)
   }
@@ -4146,7 +4260,7 @@ export function buildRamparts(world) {
         if (node.geometry) node.geometry.dispose()
       })
       if (flames) flames.material.dispose()
-      for (const material of Object.values(materials)) material.dispose()
+      for (const material of Object.values(materials)) if (material) material.dispose()
     }
   }
 }
