@@ -170,7 +170,8 @@ function tiled(source, srgb) {
 function wrappedNoise(n, cells, seed) {
   const out = new Float32Array(n * n)
   const step = n / cells
-  const at = (i, j) => hash(((i % cells) + cells) % cells, (((j % cells) + cells) % cells) + seed * 977)
+  const at = (i, j) =>
+    hash(((i % cells) + cells) % cells, (((j % cells) + cells) % cells) + seed * 977)
   for (let y = 0; y < n; y++) {
     const j = Math.floor(y / step)
     const ty = smooth(0, 1, y / step - j)
@@ -483,7 +484,11 @@ function ironFence() {
 // cada lado). Cada punto lleva su uv y su color, que se interpolan.
 function clipper(boxes) {
   const lerp = (a, b, t) => ({
-    p: [a.p[0] + (b.p[0] - a.p[0]) * t, a.p[1] + (b.p[1] - a.p[1]) * t, a.p[2] + (b.p[2] - a.p[2]) * t],
+    p: [
+      a.p[0] + (b.p[0] - a.p[0]) * t,
+      a.p[1] + (b.p[1] - a.p[1]) * t,
+      a.p[2] + (b.p[2] - a.p[2]) * t
+    ],
     u: a.u + (b.u - a.u) * t,
     v: a.v + (b.v - a.v) * t,
     r: a.r + (b.r - a.r) * t,
@@ -513,7 +518,12 @@ function clipper(boxes) {
       for (const t of pieces) {
         const xs = t.map((q) => q.p[0])
         const zs = t.map((q) => q.p[2])
-        if (Math.max(...xs) <= box.x0 || Math.min(...xs) >= box.x1 || Math.max(...zs) <= box.z0 || Math.min(...zs) >= box.z1) {
+        if (
+          Math.max(...xs) <= box.x0 ||
+          Math.min(...xs) >= box.x1 ||
+          Math.max(...zs) <= box.z0 ||
+          Math.min(...zs) >= box.z1
+        ) {
           next.push(t)
           continue
         }
@@ -598,13 +608,73 @@ function kit(tile = TILE, state = {}) {
   // Caja alineada a los ejes, sin piso salvo que se pida.
   function box(x0, y0, z0, x1, y1, z1, color, { bottom = false, grime = true, top } = {}) {
     const lid = top || color
-    face([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], lid, [0, 1, 0], grime)
-    face([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], color, [0, 0, 1], grime)
-    face([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]], color, [0, 0, -1], grime)
-    face([[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]], color, [1, 0, 0], grime)
-    face([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], color, [-1, 0, 0], grime)
+    face(
+      [
+        [x0, y1, z0],
+        [x1, y1, z0],
+        [x1, y1, z1],
+        [x0, y1, z1]
+      ],
+      lid,
+      [0, 1, 0],
+      grime
+    )
+    face(
+      [
+        [x0, y0, z1],
+        [x1, y0, z1],
+        [x1, y1, z1],
+        [x0, y1, z1]
+      ],
+      color,
+      [0, 0, 1],
+      grime
+    )
+    face(
+      [
+        [x0, y0, z0],
+        [x1, y0, z0],
+        [x1, y1, z0],
+        [x0, y1, z0]
+      ],
+      color,
+      [0, 0, -1],
+      grime
+    )
+    face(
+      [
+        [x1, y0, z0],
+        [x1, y0, z1],
+        [x1, y1, z1],
+        [x1, y1, z0]
+      ],
+      color,
+      [1, 0, 0],
+      grime
+    )
+    face(
+      [
+        [x0, y0, z0],
+        [x0, y0, z1],
+        [x0, y1, z1],
+        [x0, y1, z0]
+      ],
+      color,
+      [-1, 0, 0],
+      grime
+    )
     if (bottom) {
-      face([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], color, [0, -1, 0], grime)
+      face(
+        [
+          [x0, y0, z0],
+          [x1, y0, z0],
+          [x1, y0, z1],
+          [x0, y0, z1]
+        ],
+        color,
+        [0, -1, 0],
+        grime
+      )
     }
   }
   // Caja girada en el plano: centro (x, z), eje (dx, dz) a lo largo, largo `len`
@@ -946,12 +1016,26 @@ function findGates(world, s, style) {
       const open = l + r - 1
       const lanes = Math.max(open, road(x, y - 1, 1, 0), road(x, y + 1, 1, 0))
       const back = isWalk(x, y - 1) ? (isWalk(x, y + 1) ? 0 : -1) : 1
-      gate = { along: 'x', line: y, at: (x - (l - r) / 2 + 0.5) * CX, lanes: lanes * CX, open: open * CX, face: back }
+      gate = {
+        along: 'x',
+        line: y,
+        at: (x - (l - r) / 2 + 0.5) * CX,
+        lanes: lanes * CX,
+        open: open * CX,
+        face: back
+      }
     } else if (u && d) {
       const open = u + d - 1
       const lanes = Math.max(open, road(x - 1, y, 0, 1), road(x + 1, y, 0, 1))
       const back = isWalk(x - 1, y) ? (isWalk(x + 1, y) ? 0 : -1) : 1
-      gate = { along: 'z', line: x, at: (y - (u - d) / 2 + 0.5) * CZ, lanes: lanes * CZ, open: open * CZ, face: back }
+      gate = {
+        along: 'z',
+        line: x,
+        at: (y - (u - d) / 2 + 0.5) * CZ,
+        lanes: lanes * CZ,
+        open: open * CZ,
+        face: back
+      }
     } else {
       // Pegada a la muralla: la puerta esta delante y la muralla la cierra.
       for (const [dx, dy] of [
@@ -1115,7 +1199,8 @@ function placeTowers(world, s, grid, gates, style, towers) {
     }
   }
   const outside = (t) => t.x < 0 || t.z < 0 || t.x > s.W * CX || t.z > s.H * CZ
-  const blocksExit = (t) => outside(t) && exits.some(([x, z]) => Math.hypot(x - t.x, z - t.z) < t.r + 3)
+  const blocksExit = (t) =>
+    outside(t) && exits.some(([x, z]) => Math.hypot(x - t.x, z - t.z) < t.r + 3)
   // Esquinas salientes: la celda y sus dos vecinas de un lado no son muralla.
   const corners = []
   for (let gy = 0; gy < GH; gy++) {
@@ -1130,9 +1215,15 @@ function placeTowers(world, s, grid, gates, style, towers) {
         if (solid(gx + dx, gy) || solid(gx, gy + dy) || solid(gx + dx, gy + dy)) continue
         // Que las dos caras sigan al menos 2,5 m.
         let along = 0
-        while (along < 8 && solid(gx - dx * (along + 1), gy) && !solid(gx - dx * (along + 1), gy + dy)) along++
+        while (
+          along < 8 &&
+          solid(gx - dx * (along + 1), gy) &&
+          !solid(gx - dx * (along + 1), gy + dy)
+        )
+          along++
         let down = 0
-        while (down < 4 && solid(gx, gy - dy * (down + 1)) && !solid(gx + dx, gy - dy * (down + 1))) down++
+        while (down < 4 && solid(gx, gy - dy * (down + 1)) && !solid(gx + dx, gy - dy * (down + 1)))
+          down++
         if ((along + 1) * CX < 2.4 || (down + 1) * CZ < 2.4) continue
         const x = X(gx) + (dx > 0 ? CX : 0)
         const z = Z(gy) + (dy > 0 ? CZ : 0)
@@ -1288,7 +1379,16 @@ function massGeometry(world, grid, shop, style, colors, blocked) {
     const out = [n[0], 0, n[2]]
     const [c0, c1] = ends
     if (y0 > 0.01) {
-      k.face([P(o, t, n, s0, y0, 0), P(o, t, n, s1, y0, 0), P(o, t, n, s1, y1, 0), P(o, t, n, s0, y1, 0)], colors.stone, out)
+      k.face(
+        [
+          P(o, t, n, s0, y0, 0),
+          P(o, t, n, s1, y0, 0),
+          P(o, t, n, s1, y1, 0),
+          P(o, t, n, s0, y1, 0)
+        ],
+        colors.stone,
+        out
+      )
     } else {
       const e = (c, d) => (c ? d : 0)
       // Talud: abajo sale BATTER mas que la cara.
@@ -1309,8 +1409,26 @@ function massGeometry(world, grid, shop, style, colors, blocked) {
         const cy = foot + 0.13
         const cs0 = s0 - e(c0, OFF + CORD)
         const cs1 = s1 + e(c1, OFF + CORD)
-        k.face([P(o, t, n, cs0, foot, OFF + CORD), P(o, t, n, cs1, foot, OFF + CORD), P(o, t, n, cs1, cy, OFF + CORD), P(o, t, n, cs0, cy, OFF + CORD)], colors.trim, out)
-        k.face([P(o, t, n, cs0, cy, OFF), P(o, t, n, cs1, cy, OFF), P(o, t, n, cs1, cy, OFF + CORD), P(o, t, n, cs0, cy, OFF + CORD)], colors.trim, [0, 1, 0])
+        k.face(
+          [
+            P(o, t, n, cs0, foot, OFF + CORD),
+            P(o, t, n, cs1, foot, OFF + CORD),
+            P(o, t, n, cs1, cy, OFF + CORD),
+            P(o, t, n, cs0, cy, OFF + CORD)
+          ],
+          colors.trim,
+          out
+        )
+        k.face(
+          [
+            P(o, t, n, cs0, cy, OFF),
+            P(o, t, n, cs1, cy, OFF),
+            P(o, t, n, cs1, cy, OFF + CORD),
+            P(o, t, n, cs0, cy, OFF + CORD)
+          ],
+          colors.trim,
+          [0, 1, 0]
+        )
         base = cy
       }
       k.face(
@@ -1331,7 +1449,12 @@ function massGeometry(world, grid, shop, style, colors, blocked) {
           const m = s0 + (length * i) / (n2 + 1)
           const sy = y1 * 0.55
           k.face(
-            [P(o, t, n, m - 0.07, sy, OFF + 0.006), P(o, t, n, m + 0.07, sy, OFF + 0.006), P(o, t, n, m + 0.07, sy + 0.75, OFF + 0.006), P(o, t, n, m - 0.07, sy + 0.75, OFF + 0.006)],
+            [
+              P(o, t, n, m - 0.07, sy, OFF + 0.006),
+              P(o, t, n, m + 0.07, sy, OFF + 0.006),
+              P(o, t, n, m + 0.07, sy + 0.75, OFF + 0.006),
+              P(o, t, n, m - 0.07, sy + 0.75, OFF + 0.006)
+            ],
             colors.dark,
             out,
             false
@@ -1347,14 +1470,50 @@ function massGeometry(world, grid, shop, style, colors, blocked) {
     const ps1 = s1 + (c1 ? off : 0)
     const top = y1 + BREAST
     const inner = off - pt
-    k.face([P(o, t, n, ps0, y1, off), P(o, t, n, ps1, y1, off), P(o, t, n, ps1, top, off), P(o, t, n, ps0, top, off)], colors.stone, out)
-    k.face([P(o, t, n, ps0, y1, inner), P(o, t, n, ps1, y1, inner), P(o, t, n, ps1, top, inner), P(o, t, n, ps0, top, inner)], colors.stone, [-n[0], 0, -n[2]])
-    k.face([P(o, t, n, ps0, top, inner), P(o, t, n, ps1, top, inner), P(o, t, n, ps1, top, off), P(o, t, n, ps0, top, off)], colors.trim, [0, 1, 0])
+    k.face(
+      [
+        P(o, t, n, ps0, y1, off),
+        P(o, t, n, ps1, y1, off),
+        P(o, t, n, ps1, top, off),
+        P(o, t, n, ps0, top, off)
+      ],
+      colors.stone,
+      out
+    )
+    k.face(
+      [
+        P(o, t, n, ps0, y1, inner),
+        P(o, t, n, ps1, y1, inner),
+        P(o, t, n, ps1, top, inner),
+        P(o, t, n, ps0, top, inner)
+      ],
+      colors.stone,
+      [-n[0], 0, -n[2]]
+    )
+    k.face(
+      [
+        P(o, t, n, ps0, top, inner),
+        P(o, t, n, ps1, top, inner),
+        P(o, t, n, ps1, top, off),
+        P(o, t, n, ps0, top, off)
+      ],
+      colors.trim,
+      [0, 1, 0]
+    )
     for (const [s, sign] of [
       [ps0, -1],
       [ps1, 1]
     ]) {
-      k.face([P(o, t, n, s, y1, inner), P(o, t, n, s, y1, off), P(o, t, n, s, top, off), P(o, t, n, s, top, inner)], colors.stone, [t[0] * sign, 0, t[2] * sign])
+      k.face(
+        [
+          P(o, t, n, s, y1, inner),
+          P(o, t, n, s, y1, off),
+          P(o, t, n, s, top, off),
+          P(o, t, n, s, top, inner)
+        ],
+        colors.stone,
+        [t[0] * sign, 0, t[2] * sign]
+      )
     }
     const length = ps1 - ps0
     const count = Math.max(1, Math.round((length + CRENEL) / (MERLON + CRENEL)))
@@ -1374,9 +1533,18 @@ function massGeometry(world, grid, shop, style, colors, blocked) {
       const a = P(o, t, n, m - len / 2, top, inner)
       const b = P(o, t, n, m + len / 2, top + mh, off)
       const tint = colors.stone.clone().multiplyScalar(0.92 + rnd(mx + 1, mz) * 0.16)
-      k.box(Math.min(a[0], b[0]), top, Math.min(a[2], b[2]), Math.max(a[0], b[0]), top + mh, Math.max(a[2], b[2]), tint, {
-        top: colors.trim
-      })
+      k.box(
+        Math.min(a[0], b[0]),
+        top,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        top + mh,
+        Math.max(a[2], b[2]),
+        tint,
+        {
+          top: colors.trim
+        }
+      )
     }
   }
 
@@ -1495,7 +1663,9 @@ function roundTower(shop, t, style, colors, flags) {
       if (sy + 0.7 > h - 0.6) break
       const cx = x + Math.cos(a) * (r + 0.01)
       const cz = z + Math.sin(a) * (r + 0.01)
-      k.obox(cx, cz, -Math.sin(a), Math.cos(a), 0.14, 0.02, sy, sy + 0.7, colors.dark, { grime: false })
+      k.obox(cx, cz, -Math.sin(a), Math.cos(a), 0.14, 0.02, sy, sy + 0.7, colors.dark, {
+        grime: false
+      })
     }
   }
   if (!roofed) {
@@ -1507,7 +1677,18 @@ function roundTower(shop, t, style, colors, flags) {
       const mx = x + Math.cos(a) * (lip - 0.15)
       const mz = z + Math.sin(a) * (lip - 0.15)
       const mh = style.ruined ? MERLON_H * (0.3 + hash(i, 5) * 0.7) : MERLON_H
-      k.obox(mx, mz, -Math.sin(a), Math.cos(a), MERLON * 0.9, 0.3, crown, crown + mh, colors.stone, { top: colors.trim, grime: false })
+      k.obox(
+        mx,
+        mz,
+        -Math.sin(a),
+        Math.cos(a),
+        MERLON * 0.9,
+        0.3,
+        crown,
+        crown + mh,
+        colors.stone,
+        { top: colors.trim, grime: false }
+      )
     }
     return crown + MERLON_H
   }
@@ -1544,34 +1725,119 @@ function squareTower(shop, t, style, colors, flags) {
   const half = t.r * 0.86
   const k = shop.at('stone', x, z)
   const faces = [
-    [[x - half, 0, z + half], [1, 0, 0], [0, 0, 1]],
-    [[x + half, 0, z - half], [-1, 0, 0], [0, 0, -1]],
-    [[x + half, 0, z + half], [0, 0, -1], [1, 0, 0]],
-    [[x - half, 0, z - half], [0, 0, 1], [-1, 0, 0]]
+    [
+      [x - half, 0, z + half],
+      [1, 0, 0],
+      [0, 0, 1]
+    ],
+    [
+      [x + half, 0, z - half],
+      [-1, 0, 0],
+      [0, 0, -1]
+    ],
+    [
+      [x + half, 0, z + half],
+      [0, 0, -1],
+      [1, 0, 0]
+    ],
+    [
+      [x - half, 0, z - half],
+      [0, 0, 1],
+      [-1, 0, 0]
+    ]
   ]
   const P = (o, tt, n, s, y, d) => [o[0] + tt[0] * s + n[0] * d, y, o[2] + tt[2] * s + n[2] * d]
   const L = half * 2
   for (const [o, tt, n] of faces) {
     const out = [n[0], 0, n[2]]
-    k.face([P(o, tt, n, -BATTER, 0, BATTER), P(o, tt, n, L + BATTER, 0, BATTER), P(o, tt, n, L, 1.2, 0), P(o, tt, n, 0, 1.2, 0)], colors.stone, out)
-    k.face([P(o, tt, n, 0, 1.2, 0), P(o, tt, n, L, 1.2, 0), P(o, tt, n, L, h, 0), P(o, tt, n, 0, h, 0)], colors.stone, out)
-    k.face([P(o, tt, n, -0.12, h, 0.12), P(o, tt, n, L + 0.12, h, 0.12), P(o, tt, n, L + 0.12, h + BREAST, 0.12), P(o, tt, n, -0.12, h + BREAST, 0.12)], colors.stone, out)
-    k.face([P(o, tt, n, -0.12, h - 0.2, 0.12), P(o, tt, n, L + 0.12, h - 0.2, 0.12), P(o, tt, n, L + 0.12, h, 0), P(o, tt, n, -0.12, h, 0)], colors.trim, [n[0], -1, n[2]])
-    k.face([P(o, tt, n, 0, h + BREAST, -0.2), P(o, tt, n, L, h + BREAST, -0.2), P(o, tt, n, L + 0.12, h + BREAST, 0.12), P(o, tt, n, -0.12, h + BREAST, 0.12)], colors.trim, [0, 1, 0])
+    k.face(
+      [
+        P(o, tt, n, -BATTER, 0, BATTER),
+        P(o, tt, n, L + BATTER, 0, BATTER),
+        P(o, tt, n, L, 1.2, 0),
+        P(o, tt, n, 0, 1.2, 0)
+      ],
+      colors.stone,
+      out
+    )
+    k.face(
+      [P(o, tt, n, 0, 1.2, 0), P(o, tt, n, L, 1.2, 0), P(o, tt, n, L, h, 0), P(o, tt, n, 0, h, 0)],
+      colors.stone,
+      out
+    )
+    k.face(
+      [
+        P(o, tt, n, -0.12, h, 0.12),
+        P(o, tt, n, L + 0.12, h, 0.12),
+        P(o, tt, n, L + 0.12, h + BREAST, 0.12),
+        P(o, tt, n, -0.12, h + BREAST, 0.12)
+      ],
+      colors.stone,
+      out
+    )
+    k.face(
+      [
+        P(o, tt, n, -0.12, h - 0.2, 0.12),
+        P(o, tt, n, L + 0.12, h - 0.2, 0.12),
+        P(o, tt, n, L + 0.12, h, 0),
+        P(o, tt, n, -0.12, h, 0)
+      ],
+      colors.trim,
+      [n[0], -1, n[2]]
+    )
+    k.face(
+      [
+        P(o, tt, n, 0, h + BREAST, -0.2),
+        P(o, tt, n, L, h + BREAST, -0.2),
+        P(o, tt, n, L + 0.12, h + BREAST, 0.12),
+        P(o, tt, n, -0.12, h + BREAST, 0.12)
+      ],
+      colors.trim,
+      [0, 1, 0]
+    )
     for (let i = 0; i < 2; i++) {
       const m = L * (0.3 + i * 0.4)
       const sy = 2 + i * 1.3
-      k.face([P(o, tt, n, m - 0.07, sy, 0.006), P(o, tt, n, m + 0.07, sy, 0.006), P(o, tt, n, m + 0.07, sy + 0.7, 0.006), P(o, tt, n, m - 0.07, sy + 0.7, 0.006)], colors.dark, out, false)
+      k.face(
+        [
+          P(o, tt, n, m - 0.07, sy, 0.006),
+          P(o, tt, n, m + 0.07, sy, 0.006),
+          P(o, tt, n, m + 0.07, sy + 0.7, 0.006),
+          P(o, tt, n, m - 0.07, sy + 0.7, 0.006)
+        ],
+        colors.dark,
+        out,
+        false
+      )
     }
     const count = Math.max(2, Math.round((L + CRENEL) / (MERLON + CRENEL)))
     for (let i = 0; i < count; i++) {
       const m = -0.12 + ((L + 0.24) * (i + 0.5)) / count
       const a = P(o, tt, n, m - MERLON * 0.45, 0, -0.18)
       const b = P(o, tt, n, m + MERLON * 0.45, 0, 0.12)
-      k.box(Math.min(a[0], b[0]), h + BREAST, Math.min(a[2], b[2]), Math.max(a[0], b[0]), h + BREAST + MERLON_H, Math.max(a[2], b[2]), colors.stone, { top: colors.trim, grime: false })
+      k.box(
+        Math.min(a[0], b[0]),
+        h + BREAST,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        h + BREAST + MERLON_H,
+        Math.max(a[2], b[2]),
+        colors.stone,
+        { top: colors.trim, grime: false }
+      )
     }
   }
-  k.face([[x - half, h, z - half], [x + half, h, z - half], [x + half, h, z + half], [x - half, h, z + half]], colors.walk, [0, 1, 0], false)
+  k.face(
+    [
+      [x - half, h, z - half],
+      [x + half, h, z - half],
+      [x + half, h, z + half],
+      [x - half, h, z + half]
+    ],
+    colors.walk,
+    [0, 1, 0],
+    false
+  )
   if (style.roof !== 'pyramid') return h + BREAST + MERLON_H
   const rise = half * 1.9
   const roof = new THREE.ConeGeometry(half * 1.2, rise, 4, 1, true)
@@ -1630,7 +1896,11 @@ function gatehouse(shop, g, style, colors, decor) {
   shape.lineTo(u1 * flip, H)
   shape.lineTo(u0 * flip, H)
   shape.closePath()
-  const block = new THREE.ExtrudeGeometry(shape, { depth: D, bevelEnabled: false, curveSegments: 16 })
+  const block = new THREE.ExtrudeGeometry(shape, {
+    depth: D,
+    bevelEnabled: false,
+    curveSegments: 16
+  })
   k.add(place(block), colors.stone)
 
   // Dovelas: nueve cuñas alrededor del arco, la del medio (la clave) mas alta.
@@ -1657,7 +1927,15 @@ function gatehouse(shop, g, style, colors, decor) {
       const w = j % 2 ? 0.32 : 0.5
       const a = at(side * (half - 0.04), y0, g.v0 - 0.05)
       const b = at(side * (half + w), y1, g.v1 + 0.05)
-      k.box(Math.min(a[0], b[0]), y0, Math.min(a[2], b[2]), Math.max(a[0], b[0]), y1, Math.max(a[2], b[2]), colors.trim)
+      k.box(
+        Math.min(a[0], b[0]),
+        y0,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        y1,
+        Math.max(a[2], b[2]),
+        colors.trim
+      )
     }
   }
   // Un portico (una abertura sin porton) termina aca: el arco y sus dovelas,
@@ -1665,7 +1943,16 @@ function gatehouse(shop, g, style, colors, decor) {
   if (g.plain) {
     const a = at(g.u0 - 0.03, H, g.v0 - 0.06)
     const b = at(g.u1 + 0.03, H + 0.1, g.v1 + 0.06)
-    k.box(Math.min(a[0], b[0]), H, Math.min(a[2], b[2]), Math.max(a[0], b[0]), H + 0.1, Math.max(a[2], b[2]), colors.trim, { bottom: true, grime: false })
+    k.box(
+      Math.min(a[0], b[0]),
+      H,
+      Math.min(a[2], b[2]),
+      Math.max(a[0], b[0]),
+      H + 0.1,
+      Math.max(a[2], b[2]),
+      colors.trim,
+      { bottom: true, grime: false }
+    )
     return
   }
   // Parapeto y almenas arriba, en los bordes del frente y de atras.
@@ -1676,7 +1963,16 @@ function gatehouse(shop, g, style, colors, decor) {
   for (const [ua, ub, va, vb] of edges) {
     const a = at(ua, H, va)
     const b = at(ub, H + BREAST, vb)
-    k.box(Math.min(a[0], b[0]), H, Math.min(a[2], b[2]), Math.max(a[0], b[0]), H + BREAST, Math.max(a[2], b[2]), colors.stone, { top: colors.trim, grime: false })
+    k.box(
+      Math.min(a[0], b[0]),
+      H,
+      Math.min(a[2], b[2]),
+      Math.max(a[0], b[0]),
+      H + BREAST,
+      Math.max(a[2], b[2]),
+      colors.stone,
+      { top: colors.trim, grime: false }
+    )
     const length = ub - ua
     const count = Math.max(2, Math.round((length + CRENEL) / (MERLON + CRENEL)))
     for (let i = 0; i < count; i++) {
@@ -1684,7 +1980,16 @@ function gatehouse(shop, g, style, colors, decor) {
       const m = ua + (length * (i + 0.5)) / count
       const p = at(m - MERLON * 0.45, 0, va)
       const q = at(m + MERLON * 0.45, 0, vb)
-      k.box(Math.min(p[0], q[0]), H + BREAST, Math.min(p[2], q[2]), Math.max(p[0], q[0]), H + BREAST + MERLON_H, Math.max(p[2], q[2]), colors.stone, { top: colors.trim, grime: false })
+      k.box(
+        Math.min(p[0], q[0]),
+        H + BREAST,
+        Math.min(p[2], q[2]),
+        Math.max(p[0], q[0]),
+        H + BREAST + MERLON_H,
+        Math.max(p[2], q[2]),
+        colors.stone,
+        { top: colors.trim, grime: false }
+      )
     }
   }
   // Las caras que se ven: las dos si el porton se cruza; si es ciego, la que
@@ -1700,19 +2005,46 @@ function gatehouse(shop, g, style, colors, decor) {
       const yb = H - 0.85
       const a = at(-span, yb, v)
       const b = at(span, H + BREAST, v + f.out * 0.42)
-      k.box(Math.min(a[0], b[0]), yb, Math.min(a[2], b[2]), Math.max(a[0], b[0]), H + BREAST, Math.max(a[2], b[2]), colors.stone, { bottom: true, top: colors.trim, grime: false })
+      k.box(
+        Math.min(a[0], b[0]),
+        yb,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        H + BREAST,
+        Math.max(a[2], b[2]),
+        colors.stone,
+        { bottom: true, top: colors.trim, grime: false }
+      )
       const count = 5
       for (let i = 0; i < count; i++) {
         const m = -span + 0.15 + ((span * 2 - 0.3) * i) / (count - 1)
         const p = at(m - 0.1, yb - 0.45, v)
         const q = at(m + 0.1, yb, v + f.out * 0.36)
-        k.box(Math.min(p[0], q[0]), yb - 0.45, Math.min(p[2], q[2]), Math.max(p[0], q[0]), yb, Math.max(p[2], q[2]), colors.trim, { bottom: true, grime: false })
+        k.box(
+          Math.min(p[0], q[0]),
+          yb - 0.45,
+          Math.min(p[2], q[2]),
+          Math.max(p[0], q[0]),
+          yb,
+          Math.max(p[2], q[2]),
+          colors.trim,
+          { bottom: true, grime: false }
+        )
       }
       for (let i = 0; i < 4; i++) {
-        const m = -span + ((span * 2) * (i + 0.5)) / 4
+        const m = -span + (span * 2 * (i + 0.5)) / 4
         const p = at(m - 0.24, 0, v + f.out * 0.12)
         const q = at(m + 0.24, 0, v + f.out * 0.42)
-        k.box(Math.min(p[0], q[0]), H + BREAST, Math.min(p[2], q[2]), Math.max(p[0], q[0]), H + BREAST + MERLON_H, Math.max(p[2], q[2]), colors.stone, { top: colors.trim, grime: false })
+        k.box(
+          Math.min(p[0], q[0]),
+          H + BREAST,
+          Math.min(p[2], q[2]),
+          Math.max(p[0], q[0]),
+          H + BREAST + MERLON_H,
+          Math.max(p[2], q[2]),
+          colors.stone,
+          { top: colors.trim, grime: false }
+        )
       }
     }
     // Antorchas a los dos lados del arco.
@@ -1720,9 +2052,21 @@ function gatehouse(shop, g, style, colors, decor) {
       const u = side * (half + 0.62)
       const p = at(u - 0.05, 2.15, v)
       const q = at(u + 0.05, 2.3, v + f.out * 0.34)
-      wood.box(Math.min(p[0], q[0]), 2.15, Math.min(p[2], q[2]), Math.max(p[0], q[0]), 2.3, Math.max(p[2], q[2]), colors.iron, { bottom: true, grime: false })
+      wood.box(
+        Math.min(p[0], q[0]),
+        2.15,
+        Math.min(p[2], q[2]),
+        Math.max(p[0], q[0]),
+        2.3,
+        Math.max(p[2], q[2]),
+        colors.iron,
+        { bottom: true, grime: false }
+      )
       const cup = at(u, 2.3, v + f.out * 0.34)
-      wood.box(cup[0] - 0.07, 2.3, cup[2] - 0.07, cup[0] + 0.07, 2.55, cup[2] + 0.07, colors.iron, { bottom: true, grime: false })
+      wood.box(cup[0] - 0.07, 2.3, cup[2] - 0.07, cup[0] + 0.07, 2.55, cup[2] + 0.07, colors.iron, {
+        bottom: true,
+        grime: false
+      })
       decor.flames.push([cup[0], 2.72, cup[2]])
     }
     // Estandartes: cuelgan de la cornisa, sobre los pilares o junto al arco.
@@ -1732,7 +2076,14 @@ function gatehouse(shop, g, style, colors, decor) {
     for (const side of [-1, 1]) {
       const [bx, , bz] = at(side * bu, 0, v + f.out * 0.07)
       const along = g.along === 'x' ? [1, 0] : [0, 1]
-      decor.banners.push({ x: bx, z: bz, y: H - 0.12, along, size: [bw, Math.min(2.4, H - 3.1)], out: g.along === 'x' ? [0, f.out] : [f.out, 0] })
+      decor.banners.push({
+        x: bx,
+        z: bz,
+        y: H - 0.12,
+        along,
+        size: [bw, Math.min(2.4, H - 3.1)],
+        out: g.along === 'x' ? [0, f.out] : [f.out, 0]
+      })
     }
   }
 
@@ -1757,11 +2108,28 @@ function gatehouse(shop, g, style, colors, decor) {
     const u = side * (half - 0.09)
     const p = at(u - 0.05, 0.02, wFront)
     const q = at(u + 0.05, doorH, wFront + dir * leaf)
-    wood.box(Math.min(p[0], q[0]), 0.02, Math.min(p[2], q[2]), Math.max(p[0], q[0]), doorH, Math.max(p[2], q[2]), colors.wood)
+    wood.box(
+      Math.min(p[0], q[0]),
+      0.02,
+      Math.min(p[2], q[2]),
+      Math.max(p[0], q[0]),
+      doorH,
+      Math.max(p[2], q[2]),
+      colors.wood
+    )
     for (const y of [0.45, doorH * 0.5, doorH - 0.45]) {
       const a = at(u - side * 0.07, y, wFront + dir * 0.04)
       const b = at(u - side * 0.055, y + 0.09, wFront + dir * (leaf - 0.04))
-      wood.box(Math.min(a[0], b[0]), y, Math.min(a[2], b[2]), Math.max(a[0], b[0]), y + 0.09, Math.max(a[2], b[2]), colors.iron, { grime: false })
+      wood.box(
+        Math.min(a[0], b[0]),
+        y,
+        Math.min(a[2], b[2]),
+        Math.max(a[0], b[0]),
+        y + 0.09,
+        Math.max(a[2], b[2]),
+        colors.iron,
+        { grime: false }
+      )
     }
   }
   const crownY = spring + half
@@ -1771,14 +2139,32 @@ function gatehouse(shop, g, style, colors, decor) {
     if (top - low < 0.12) continue
     const a = at(u - 0.025, low, wGate - 0.025)
     const b = at(u + 0.025, top, wGate + 0.025)
-    wood.box(Math.min(a[0], b[0]), low - 0.12, Math.min(a[2], b[2]), Math.max(a[0], b[0]), top, Math.max(a[2], b[2]), colors.iron, { bottom: true, grime: false })
+    wood.box(
+      Math.min(a[0], b[0]),
+      low - 0.12,
+      Math.min(a[2], b[2]),
+      Math.max(a[0], b[0]),
+      top,
+      Math.max(a[2], b[2]),
+      colors.iron,
+      { bottom: true, grime: false }
+    )
   }
   for (const y of [low + 0.18, low + 0.58]) {
     const reach = Math.sqrt(Math.max(0, half * half - (y - spring) * (y - spring))) - 0.05
     if (reach <= 0.2) continue
     const a = at(-reach, y, wGate - 0.035)
     const b = at(reach, y + 0.06, wGate + 0.035)
-    wood.box(Math.min(a[0], b[0]), y, Math.min(a[2], b[2]), Math.max(a[0], b[0]), y + 0.06, Math.max(a[2], b[2]), colors.iron, { bottom: true, grime: false })
+    wood.box(
+      Math.min(a[0], b[0]),
+      y,
+      Math.min(a[2], b[2]),
+      Math.max(a[0], b[0]),
+      y + 0.06,
+      Math.max(a[2], b[2]),
+      colors.iron,
+      { bottom: true, grime: false }
+    )
   }
 }
 
@@ -1873,7 +2259,12 @@ function lowWalls(world, s, shop, style, colors) {
         }
         const kind = look[y * W + x]
         let b = a
-        while (b + 1 < cells && isLow(rowWise ? b + 1 : line, rowWise ? line : b + 1) && look[(rowWise ? line : b + 1) * W + (rowWise ? b + 1 : line)] === kind) b++
+        while (
+          b + 1 < cells &&
+          isLow(rowWise ? b + 1 : line, rowWise ? line : b + 1) &&
+          look[(rowWise ? line : b + 1) * W + (rowWise ? b + 1 : line)] === kind
+        )
+          b++
         if (b > a) {
           const { t, h } = spec[kind]
           const c0 = rowWise ? (a + 0.5) * CX : (line + 0.5) * CX
@@ -1888,12 +2279,18 @@ function lowWalls(world, s, shop, style, colors) {
             // Mostrador de madera: tabla arriba y frente oscuro.
             const k = shop.at('wood', (x0 + x1) / 2, (zz0 + zz1) / 2)
             k.box(x0, 0, zz0, x1, h - 0.08, zz1, colors.wood.clone().multiplyScalar(0.7))
-            k.box(x0 - 0.06, h - 0.08, zz0 - 0.06, x1 + 0.06, h, zz1 + 0.06, colors.wood, { bottom: true })
+            k.box(x0 - 0.06, h - 0.08, zz0 - 0.06, x1 + 0.06, h, zz1 + 0.06, colors.wood, {
+              bottom: true
+            })
           } else {
             const k = shop.at('stone', (x0 + x1) / 2, (zz0 + zz1) / 2)
             k.box(x0, 0, zz0, x1, h, zz1, colors.stone)
-            k.box(x0 - 0.05, h, zz0 - 0.05, x1 + 0.05, h + 0.08, zz1 + 0.05, colors.trim, { bottom: true, grime: false })
-            if (kind === LOOK.wall && style.fence === 'iron') fences.push({ rowWise, x0, x1, z0: zz0, z1: zz1, y: h + 0.08 })
+            k.box(x0 - 0.05, h, zz0 - 0.05, x1 + 0.05, h + 0.08, zz1 + 0.05, colors.trim, {
+              bottom: true,
+              grime: false
+            })
+            if (kind === LOOK.wall && style.fence === 'iron')
+              fences.push({ rowWise, x0, x1, z0: zz0, z1: zz1, y: h + 0.08 })
           }
         }
         a = b + 1
@@ -1916,7 +2313,8 @@ function lowWalls(world, s, shop, style, colors) {
         if (ch === '|' || ch === '+' || h2 + v2 === 0) pillars.push({ x, y, kind, ch })
         continue
       }
-      if (end || corner || ch === '+' || (kind === LOOK.wall && regular)) pillars.push({ x, y, kind, ch })
+      if (end || corner || ch === '+' || (kind === LOOK.wall && regular))
+        pillars.push({ x, y, kind, ch })
     }
   }
   for (const p of pillars) {
@@ -1924,14 +2322,27 @@ function lowWalls(world, s, shop, style, colors) {
     const cz = (p.y + 0.5) * CZ
     const { t, h } = spec[p.kind]
     if (p.kind === LOOK.stall) {
-      shop.at('wood', cx, cz).box(cx - 0.09, 0, cz - 0.09, cx + 0.09, 2.25, cz + 0.09, colors.wood.clone().multiplyScalar(0.8))
+      shop
+        .at('wood', cx, cz)
+        .box(
+          cx - 0.09,
+          0,
+          cz - 0.09,
+          cx + 0.09,
+          2.25,
+          cz + 0.09,
+          colors.wood.clone().multiplyScalar(0.8)
+        )
       continue
     }
     const k = shop.at('stone', cx, cz)
     const w = (p.kind === LOOK.rim ? t + 0.08 : t + 0.2) / 2
     const ph = style.fence === 'iron' && p.kind === LOOK.wall ? 1.6 : h + 0.38
     k.box(cx - w, 0, cz - w, cx + w, ph, cz + w, colors.stone)
-    k.box(cx - w - 0.05, ph, cz - w - 0.05, cx + w + 0.05, ph + 0.08, cz + w + 0.05, colors.trim, { bottom: true, grime: false })
+    k.box(cx - w - 0.05, ph, cz - w - 0.05, cx + w + 0.05, ph + 0.08, cz + w + 0.05, colors.trim, {
+      bottom: true,
+      grime: false
+    })
     if (p.kind === LOOK.rim) continue
     if (style.fence === 'iron') {
       const cap = new THREE.OctahedronGeometry(0.13, 0)
@@ -1950,20 +2361,42 @@ function lowWalls(world, s, shop, style, colors) {
     const y1 = f.y + 1.1
     if (f.rowWise) {
       const z = (f.z0 + f.z1) / 2
-      k.face([[f.x0, y0, z], [f.x1, y0, z], [f.x1, y1, z], [f.x0, y1, z]], colors.white, [0, 0, 1], false, [
-        [f.x0, 0],
-        [f.x1, 0],
-        [f.x1, 1],
-        [f.x0, 1]
-      ])
+      k.face(
+        [
+          [f.x0, y0, z],
+          [f.x1, y0, z],
+          [f.x1, y1, z],
+          [f.x0, y1, z]
+        ],
+        colors.white,
+        [0, 0, 1],
+        false,
+        [
+          [f.x0, 0],
+          [f.x1, 0],
+          [f.x1, 1],
+          [f.x0, 1]
+        ]
+      )
     } else {
       const x = (f.x0 + f.x1) / 2
-      k.face([[x, y0, f.z0], [x, y0, f.z1], [x, y1, f.z1], [x, y1, f.z0]], colors.white, [1, 0, 0], false, [
-        [f.z0, 0],
-        [f.z1, 0],
-        [f.z1, 1],
-        [f.z0, 1]
-      ])
+      k.face(
+        [
+          [x, y0, f.z0],
+          [x, y0, f.z1],
+          [x, y1, f.z1],
+          [x, y1, f.z0]
+        ],
+        colors.white,
+        [1, 0, 0],
+        false,
+        [
+          [f.z0, 0],
+          [f.z1, 0],
+          [f.z1, 1],
+          [f.z0, 1]
+        ]
+      )
     }
   }
 }
@@ -1977,7 +2410,11 @@ function banner(shop, b, colors) {
   const k = shop.at('cloth', b.x, b.z)
   const [w, h] = b.size
   const [ax, az] = b.along
-  const P = (s, y, d = 0) => [b.x + ax * s + (b.out ? b.out[0] * d : 0), y, b.z + az * s + (b.out ? b.out[1] * d : 0)]
+  const P = (s, y, d = 0) => [
+    b.x + ax * s + (b.out ? b.out[0] * d : 0),
+    y,
+    b.z + az * s + (b.out ? b.out[1] * d : 0)
+  ]
   // El uv.y de la tela es cuanto se aleja del palo: el shader la mueve mas
   // cuanto mas lejos.
   if (b.pennant) {
@@ -2026,7 +2463,16 @@ function banner(shop, b, colors) {
   const pole = shop.at('wood', b.x, b.z)
   const p = P(-w / 2 - 0.1, top, 0.03)
   const q = P(w / 2 + 0.1, top + 0.08, 0.1)
-  pole.box(Math.min(p[0], q[0]), top, Math.min(p[2], q[2]), Math.max(p[0], q[0]), top + 0.08, Math.max(p[2], q[2]), colors.iron, { bottom: true, grime: false })
+  pole.box(
+    Math.min(p[0], q[0]),
+    top,
+    Math.min(p[2], q[2]),
+    Math.max(p[0], q[0]),
+    top + 0.08,
+    Math.max(p[2], q[2]),
+    colors.iron,
+    { bottom: true, grime: false }
+  )
 }
 
 // El paño se mueve con el viento: una ola que baja por la tela y un temblor
@@ -2086,14 +2532,20 @@ function flameMesh(spots, style, clock) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.wind = clock
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float wind;\nattribute float flare;\nattribute float phase;')
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform float wind;\nattribute float flare;\nattribute float phase;'
+      )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         float flick = sin( wind * 13.0 + phase ) * sin( wind * 7.7 + phase * 1.9 );
         transformed.y += flick * 0.03 * flare;`
       )
-      .replace('gl_PointSize = size;', 'gl_PointSize = size * flare * ( 0.84 + 0.16 * sin( wind * 11.0 + phase * 2.3 ) );')
+      .replace(
+        'gl_PointSize = size;',
+        'gl_PointSize = size * flare * ( 0.84 + 0.16 * sin( wind * 11.0 + phase * 2.3 ) );'
+      )
   }
   const points = new THREE.Points(geometry, material)
   points.renderOrder = 3
@@ -2145,9 +2597,18 @@ function hipRoof(shop, box, y, pitch, colors) {
   const cap = shop.at('wood', cx, cz)
   const lo = [Math.min(R0[0], R1[0]) - 0.12, Math.min(R0[2], R1[2]) - 0.12]
   const hi = [Math.max(R0[0], R1[0]) + 0.12, Math.max(R0[2], R1[2]) + 0.12]
-  cap.box(lo[0], top - 0.06, lo[1], hi[0], top + 0.12, hi[1], colors.roof.clone().multiplyScalar(0.55), {
-    grime: false
-  })
+  cap.box(
+    lo[0],
+    top - 0.06,
+    lo[1],
+    hi[0],
+    top + 0.12,
+    hi[1],
+    colors.roof.clone().multiplyScalar(0.55),
+    {
+      grime: false
+    }
+  )
   return top
 }
 
@@ -2194,7 +2655,8 @@ function findOpenings(world, s, style) {
   const { W, H, mass, walk, high } = s
   const door = new Set(doors.map((d) => d.y * W + d.x))
   const solid = (x, y) => x >= 0 && y >= 0 && x < W && y < H && mass[y * W + x] > 0
-  const open = (x, y) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x] === 1 && !mass[y * W + x]
+  const open = (x, y) =>
+    x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x] === 1 && !mass[y * W + x]
   const pass = (x, y) => x < 0 || y < 0 || x >= W || y >= H || open(x, y)
   const found = []
   for (const along of ['x', 'z']) {
@@ -2250,7 +2712,9 @@ function findOpenings(world, s, style) {
         const reach = Math.max(1, Math.round(1.5 / cell))
         let pier = 1
         for (let p = 2; p <= reach; p++) {
-          const ok = [at(i - p, j0), at(e + p - 1, j0), at(i - p, j1), at(e + p - 1, j1)].every(([x, y]) => solid(x, y))
+          const ok = [at(i - p, j0), at(e + p - 1, j0), at(i - p, j1), at(e + p - 1, j1)].every(
+            ([x, y]) => solid(x, y)
+          )
           if (!ok) break
           pier = p
         }
@@ -2278,7 +2742,18 @@ function monumentGrid(world, s) {
   const { W, H, walk, reach } = s
   // Tambien las piedras del dibujo (los ojos de la estatua) y el piso que el
   // dibujo encierra: nadie lo pisa.
-  const ART = new Set(['body', 'wall', 'masonry', 'roof', 'frame', 'building', 'window', 'ornament', 'rampart', 'rock'])
+  const ART = new Set([
+    'body',
+    'wall',
+    'masonry',
+    'roof',
+    'frame',
+    'building',
+    'window',
+    'ornament',
+    'rampart',
+    'rock'
+  ])
   const cells = new Uint8Array(W * H)
   const wetAt = (x, y) => {
     for (let dy = -1; dy <= 1; dy++) {
@@ -2557,17 +3032,33 @@ function amphitheater(shop, plan, style, colors, decor) {
     const into = [-out[0], 0, -out[2]]
     const [kx, , kz] = E(1, mid)
     const k = shop.at('stone', kx, kz)
-    const wall = (q, y0, y1, color, face) => k.face([E(q, a, y0), E(q, b, y0), E(q, b, y1), E(q, a, y1)], color, face)
-    const flat = (q0, q1, y, color) => k.face([E(q0, a, y), E(q0, b, y), E(q1, b, y), E(q1, a, y)], color, [0, 1, 0], false)
+    const wall = (q, y0, y1, color, face) =>
+      k.face([E(q, a, y0), E(q, b, y0), E(q, b, y1), E(q, a, y1)], color, face)
+    const flat = (q0, q1, y, color) =>
+      k.face([E(q0, a, y), E(q0, b, y), E(q1, b, y), E(q1, a, y)], color, [0, 1, 0], false)
     // Podio: cara a la arena con el pasamanos, su tapa, su espalda y el paseo.
     // Su radio cambia con el angulo (qAt): sigue de cerca el borde de la arena.
     const pa = qAt[i]
     const pb = qAt[i + 1]
     const top = Hp + rail
     k.face([E(pa, a, 0), E(pb, b, 0), E(pb, b, top), E(pa, a, top)], colors.stone, into)
-    k.face([E(pa, a, top), E(pb, b, top), E(pb + lip, b, top), E(pa + lip, a, top)], colors.trim, [0, 1, 0], false)
-    k.face([E(pa + lip, a, Hp), E(pb + lip, b, Hp), E(pb + lip, b, top), E(pa + lip, a, top)], colors.stone, out)
-    k.face([E(pa + lip, a, Hp), E(pb + lip, b, Hp), E(qB, b, Hp), E(qB, a, Hp)], colors.walk, [0, 1, 0], false)
+    k.face(
+      [E(pa, a, top), E(pb, b, top), E(pb + lip, b, top), E(pa + lip, a, top)],
+      colors.trim,
+      [0, 1, 0],
+      false
+    )
+    k.face(
+      [E(pa + lip, a, Hp), E(pb + lip, b, Hp), E(pb + lip, b, top), E(pa + lip, a, top)],
+      colors.stone,
+      out
+    )
+    k.face(
+      [E(pa + lip, a, Hp), E(pb + lip, b, Hp), E(qB, b, Hp), E(qB, a, Hp)],
+      colors.walk,
+      [0, 1, 0],
+      false
+    )
     // Gradas: contrahuella y huella; cada tanto una escalera mas clara.
     const stair = i % 12 === 0
     let prev = Hp
@@ -2610,8 +3101,14 @@ function amphitheater(shop, plan, style, colors, decor) {
   let span = total
   if (tunnel && !tunnel.alongX) {
     const side = tunnel.sign
-    const t0 = Math.atan2(side * Math.sqrt(Math.max(0, 1 - ((tunnel.x1 + 0.5 - X0) / ax) ** 2)), (tunnel.x1 + 0.5 - X0) / ax)
-    const t1 = Math.atan2(side * Math.sqrt(Math.max(0, 1 - ((tunnel.x0 - 0.5 - X0) / ax) ** 2)), (tunnel.x0 - 0.5 - X0) / ax)
+    const t0 = Math.atan2(
+      side * Math.sqrt(Math.max(0, 1 - ((tunnel.x1 + 0.5 - X0) / ax) ** 2)),
+      (tunnel.x1 + 0.5 - X0) / ax
+    )
+    const t1 = Math.atan2(
+      side * Math.sqrt(Math.max(0, 1 - ((tunnel.x0 - 0.5 - X0) / ax) ** 2)),
+      (tunnel.x0 - 0.5 - X0) / ax
+    )
     const d0 = (((side > 0 ? t0 : t1) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)
     const d1 = (((side > 0 ? t1 : t0) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)
     start = len[Math.round(d1 * fine)]
@@ -2662,27 +3159,76 @@ function amphitheater(shop, plan, style, colors, decor) {
         hole.lineTo(-opening / 2, 0.55)
         shape.holes.push(hole)
       }
-      const frame = new THREE.ExtrudeGeometry(shape, { depth: 0.6, bevelEnabled: false, curveSegments: 10 })
+      const frame = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.6,
+        bevelEnabled: false,
+        curveSegments: 10
+      })
       frame.applyMatrix4(basis.clone().setPosition(mx, y0, mz))
       k.add(frame, colors.stone)
       // Pilastra en el borde del arco y cornisa arriba de cada piso.
       const [px, , pz] = P(-w / 2, 0, 0.07)
       k.obox(px, pz, t.x, t.z, 0.44, 0.16, y0, y0 + sh - 0.2, colors.trim, { grime: f === 0 })
       const [cx2, , cz2] = P(0, 0, 0.08)
-      k.obox(cx2, cz2, t.x, t.z, w + 0.06, 0.28, y0 + sh - 0.22, y0 + sh, colors.trim, { grime: false, bottom: true })
+      k.obox(cx2, cz2, t.x, t.z, w + 0.06, 0.28, y0 + sh - 0.22, y0 + sh, colors.trim, {
+        grime: false,
+        bottom: true
+      })
       // La galeria detras: el piso de cada nivel.
-      k.face([P(-w / 2, y0 + 0.02, -0.6), P(w / 2, y0 + 0.02, -0.6), P(w / 2, y0 + 0.02, -2.2), P(-w / 2, y0 + 0.02, -2.2)], colors.dark, [0, 1, 0], false)
+      k.face(
+        [
+          P(-w / 2, y0 + 0.02, -0.6),
+          P(w / 2, y0 + 0.02, -0.6),
+          P(w / 2, y0 + 0.02, -2.2),
+          P(-w / 2, y0 + 0.02, -2.2)
+        ],
+        colors.dark,
+        [0, 1, 0],
+        false
+      )
     }
     // El fondo oscuro de la galeria y el atico liso con su cornisa.
-    k.face([P(-w / 2, 0, -2.2), P(w / 2, 0, -2.2), P(w / 2, storey * sh, -2.2), P(-w / 2, storey * sh, -2.2)], colors.dark, [n.x, 0, n.z], false)
-    k.face([P(-w / 2 - 0.01, storey * sh, 0), P(w / 2 + 0.01, storey * sh, 0), P(w / 2 + 0.01, Ho, 0), P(-w / 2 - 0.01, Ho, 0)], colors.stone, [n.x, 0, n.z], false)
+    k.face(
+      [
+        P(-w / 2, 0, -2.2),
+        P(w / 2, 0, -2.2),
+        P(w / 2, storey * sh, -2.2),
+        P(-w / 2, storey * sh, -2.2)
+      ],
+      colors.dark,
+      [n.x, 0, n.z],
+      false
+    )
+    k.face(
+      [
+        P(-w / 2 - 0.01, storey * sh, 0),
+        P(w / 2 + 0.01, storey * sh, 0),
+        P(w / 2 + 0.01, Ho, 0),
+        P(-w / 2 - 0.01, Ho, 0)
+      ],
+      colors.stone,
+      [n.x, 0, n.z],
+      false
+    )
     const [tx2, , tz2] = P(0, 0, 0.1)
-    k.obox(tx2, tz2, t.x, t.z, w + 0.08, 0.32, Ho - 0.05, Ho + 0.22, colors.trim, { grime: false, bottom: true })
+    k.obox(tx2, tz2, t.x, t.z, w + 0.08, 0.32, Ho - 0.05, Ho + 0.22, colors.trim, {
+      grime: false,
+      bottom: true
+    })
     // Un mastil cada tres arcos, con su banderola.
     if (i % 3 === 1) {
       const [mx2, , mz2] = P(0, 0, -0.5)
-      shop.at('wood', mx2, mz2).obox(mx2, mz2, t.x, t.z, 0.14, 0.14, Ho, Ho + 3.4, colors.wood, { grime: false })
-      decor.banners.push({ x: mx2, z: mz2, y: Ho + 3.3, along: [t.x, t.z], size: [1.1, 0.42], pennant: true })
+      shop
+        .at('wood', mx2, mz2)
+        .obox(mx2, mz2, t.x, t.z, 0.14, 0.14, Ho, Ho + 3.4, colors.wood, { grime: false })
+      decor.banners.push({
+        x: mx2,
+        z: mz2,
+        y: Ho + 3.3,
+        along: [t.x, t.z],
+        size: [1.1, 0.42],
+        pennant: true
+      })
     }
   }
 
@@ -2706,7 +3252,17 @@ function amphitheater(shop, plan, style, colors, decor) {
           const z1 = zIn + ((zOut - zIn) * (j + 1)) / steps
           const zm = (z0 + z1) / 2
           const h = heightAt(plan.qOf(x, zm), angleOf(x, zm))
-          if (h > 0) k.face([[x, 0, z0], [x, 0, z1], [x, h, z1], [x, h, z0]], colors.stone, [face, 0, 0])
+          if (h > 0)
+            k.face(
+              [
+                [x, 0, z0],
+                [x, 0, z1],
+                [x, h, z1],
+                [x, h, z0]
+              ],
+              colors.stone,
+              [face, 0, 0]
+            )
         }
       }
       continue
@@ -2724,13 +3280,27 @@ function amphitheater(shop, plan, style, colors, decor) {
       [box.z0, 1],
       [box.z1, -1]
     ]) {
-      k.face([[lo, 0, z], [hi, 0, z], [hi, Hp, z], [lo, Hp, z]], colors.stone, [0, 0, face])
+      k.face(
+        [
+          [lo, 0, z],
+          [hi, 0, z],
+          [hi, Hp, z],
+          [lo, Hp, z]
+        ],
+        colors.stone,
+        [0, 0, face]
+      )
     }
-    k.box(lo, Hp - 0.38, box.z0, hi + 0.05, Hp, box.z1, colors.stone, { bottom: true, top: colors.walk })
+    k.box(lo, Hp - 0.38, box.z0, hi + 0.05, Hp, box.z1, colors.stone, {
+      bottom: true,
+      top: colors.walk
+    })
     // El pasamanos sigue sobre el nicho, del lado del podio.
     const r0 = box.sign > 0 ? xIn : xIn - 0.36
     k.box(r0, Hp, box.z0, r0 + 0.36, Hp + rail, box.z1, colors.stone, { top: colors.trim })
-    shop.at('wood', back, zc).box(back - 0.04, 0, box.z0 + 0.04, back + 0.04, Hp - 0.38, box.z1 - 0.04, colors.wood)
+    shop
+      .at('wood', back, zc)
+      .box(back - 0.04, 0, box.z0 + 0.04, back + 0.04, Hp - 0.38, box.z1 - 0.04, colors.wood)
   }
 
   // Estandartes colgados del pasamanos, mirando a la arena, y braseros entre
@@ -2739,15 +3309,39 @@ function amphitheater(shop, plan, style, colors, decor) {
   for (let i = 0; i < count; i++) {
     const t = ((i + 0.5) / count) * Math.PI * 2
     const p = E(podium(t) - 0.004, t)
-    if (inside(p[0], p[2]) || boxes.some((b) => Math.abs(p[0] - (b.x0 + b.x1) / 2) < 3 && Math.abs(p[2] - (b.z0 + b.z1) / 2) < 3)) continue
+    if (
+      inside(p[0], p[2]) ||
+      boxes.some(
+        (b) => Math.abs(p[0] - (b.x0 + b.x1) / 2) < 3 && Math.abs(p[2] - (b.z0 + b.z1) / 2) < 3
+      )
+    )
+      continue
     const tx = -Math.sin(t) * ax
     const tz = Math.cos(t) * az
     const l = Math.hypot(tx, tz)
     const out = [-Math.cos(t), -Math.sin(t)]
-    decor.banners.push({ x: p[0], z: p[2], y: Hp + rail - 0.06, along: [tx / l, tz / l], size: [0.85, 1.7], out })
+    decor.banners.push({
+      x: p[0],
+      z: p[2],
+      y: Hp + rail - 0.06,
+      along: [tx / l, tz / l],
+      size: [0.85, 1.7],
+      out
+    })
     const tb = t + Math.PI / count
     const f = E(podium(tb) + lip / 2, tb)
-    shop.at('wood', f[0], f[2]).box(f[0] - 0.14, Hp + rail, f[2] - 0.14, f[0] + 0.14, Hp + rail + 0.2, f[2] + 0.14, colors.iron, { bottom: true, grime: false })
+    shop
+      .at('wood', f[0], f[2])
+      .box(
+        f[0] - 0.14,
+        Hp + rail,
+        f[2] - 0.14,
+        f[0] + 0.14,
+        Hp + rail + 0.2,
+        f[2] + 0.14,
+        colors.iron,
+        { bottom: true, grime: false }
+      )
     decor.flames.push([f[0], Hp + rail + 0.38, f[2]])
   }
 }
@@ -2762,7 +3356,9 @@ function crowd(world, s, shop, plan) {
   const stepQ = (qC - qB) / tiers
   const Hp = 2.7
   const rise = (8.2 - Hp - 0.35) / tiers
-  const cloth = [0xb8362a, 0x2f5f9e, 0x3f7a3a, 0xc9a245, 0xe8e0d0, 0x7a3fa0, 0xd87a2a, 0x2a8a8a].map((c) => new THREE.Color(c))
+  const cloth = [
+    0xb8362a, 0x2f5f9e, 0x3f7a3a, 0xc9a245, 0xe8e0d0, 0x7a3fa0, 0xd87a2a, 0x2a8a8a
+  ].map((c) => new THREE.Color(c))
   const skin = [0xe8b896, 0xc68a62, 0x8a5a3a].map((c) => new THREE.Color(c))
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -2771,7 +3367,8 @@ function crowd(world, s, shop, plan) {
       const cz = (y + 0.5) * CZ
       const q = plan.qOf(cx, cz)
       if (q <= qB || q >= qC) continue
-      if (boxes.some((b) => cx > b.x0 - 1 && cx < b.x1 + 1 && cz > b.z0 - 1 && cz < b.z1 + 1)) continue
+      if (boxes.some((b) => cx > b.x0 - 1 && cx < b.x1 + 1 && cz > b.z0 - 1 && cz < b.z1 + 1))
+        continue
       const t = Math.min(tiers - 1, Math.floor((q - qB) / stepQ))
       const angle = Math.atan2((cz - Z0) / az, (cx - X0) / ax)
       const qm = qB + stepQ * (t + 0.55)
@@ -2786,7 +3383,18 @@ function crowd(world, s, shop, plan) {
       k.obox(px, pz, -fz / fl, fx / fl, 0.36, 0.26, h, h + 0.5, tint, { grime: false })
       const hx = px + (fx / fl) * 0.03
       const hz = pz + (fz / fl) * 0.03
-      k.obox(hx, hz, -fz / fl, fx / fl, 0.21, 0.21, h + 0.5, h + 0.72, skin[Math.floor(hash(y, x) * skin.length)], { grime: false })
+      k.obox(
+        hx,
+        hz,
+        -fz / fl,
+        fx / fl,
+        0.21,
+        0.21,
+        h + 0.5,
+        h + 0.72,
+        skin[Math.floor(hash(y, x) * skin.length)],
+        { grime: false }
+      )
     }
   }
 }
@@ -2870,7 +3478,9 @@ function materialsFor(style, look, clock) {
   })
   const glows = style.veins || style.cracks
   if (glows) {
-    rock.emissive = new THREE.Color(style.veins ? look.vein || style.accent : look.glow || style.accent)
+    rock.emissive = new THREE.Color(
+      style.veins ? look.vein || style.accent : look.glow || style.accent
+    )
     rock.emissiveMap = glowTexture(style.veins ? 'veins' : 'cracks')
     rock.emissiveIntensity = style.veins ? 0.85 : 1.6
   }
@@ -2950,7 +3560,12 @@ function keepNames(world, s) {
       }
     }
     if (best.length >= 4) {
-      names.push({ name: best, cells, x: (sx / cells.length + 0.5) * CX, z: (sz / cells.length + 0.5) * CZ })
+      names.push({
+        name: best,
+        cells,
+        x: (sx / cells.length + 0.5) * CX,
+        z: (sz / cells.length + 0.5) * CZ
+      })
     }
   }
   return names
@@ -2984,7 +3599,8 @@ function flankTowers(world, s, gates, style, towers) {
       const [ax, , az] = at(u + side, 0, mid)
       const [bx, , bz] = at(u, 0, mid + out)
       let site = towerSite(world, s, towers, x, z, 2, g.face ? [ax - x, az - z] : [bx - x, bz - z])
-      if (!site) site = towerSite(world, s, towers, x, z, 2, g.face ? [bx - x, bz - z] : [ax - x, az - z])
+      if (!site)
+        site = towerSite(world, s, towers, x, z, 2, g.face ? [bx - x, bz - z] : [ax - x, az - z])
       if (site) towers.push({ ...site, h: g.top + 1.8, gate: g })
     }
   }
@@ -3030,10 +3646,6 @@ export function buildRamparts(world) {
   const towers = []
   flankTowers(world, s, gates, style, towers)
   const turrets = placeTowers(world, s, grid, [...gates, ...porches], style, towers)
-  if (data.id === 'city') {
-    console.warn('DEBUG porches', JSON.stringify(porches.map((g) => [g.along, g.i0, g.i1, g.j0, g.j1, g.at, g.top])))
-    console.warn('DEBUG ghost', grid.gm[(184 + PAD_Z) * grid.GW + 159 + PAD_X], grid.ghost[(184 + PAD_Z) * grid.GW + 159 + PAD_X])
-  }
   const blocked = (x, z) =>
     towers.some((t) => Math.hypot(t.x - x, t.z - z) < t.r + 0.45) ||
     turrets.some((t) => Math.hypot(t.x - x, t.z - z) < t.r + 0.35)
@@ -3117,4 +3729,3 @@ export function buildRamparts(world) {
     }
   }
 }
-
