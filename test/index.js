@@ -159,6 +159,62 @@ test('title screen falls back cleanly in a small terminal', (t) => {
   t.ok(lines.every((line) => line.length === 40))
 })
 
+test('generated hero and helmet previews preserve character creation and equipment controls', (t) => {
+  const options = { realms: REALMS, frame: 0 }
+  const hero = style.stripAnsi(render.newGameScreen(80, 30, 'viajero', 'V', '', options))
+  const rotated = style.stripAnsi(
+    render.newGameScreen(80, 30, 'viajero', 'V', '', { ...options, frame: 6 })
+  )
+  t.not(hero, rotated, 'the generated hero rotates on the creation screen')
+  t.ok(rotated.includes('NOMBRE  viajero'))
+  t.ok(rotated.includes('ENTER  comenzar'))
+  t.ok(rotated.includes('ESC  volver'))
+  const player = new Player({ xp: 60, gold: 100 })
+  const shop = { ...require('../lib/shop.js').browse('armor', player) }
+  shop.items = shop.lines
+  shop.cursor = shop.items.findIndex((item) => item.id === 'iron_helmet')
+  const first = style.stripAnsi(render.shopPane({ ...shop, frame: 0 }, 70, 30))
+  const next = style.stripAnsi(render.shopPane({ ...shop, frame: 6 }, 70, 30))
+  t.not(first, next, 'the selected helmet preview rotates in the shop')
+  t.ok(next.includes('YELMO DE HIERRO'))
+  t.ok(next.includes('75'), 'the existing purchase price remains visible')
+  const model = { items: [CONTENT.items.iron_helmet], cursor: 0, frame: 0 }
+  const inventory = style.stripAnsi(render.inventoryPane(model, 70, 30))
+  t.ok(inventory.includes('YELMO DE HIERRO'))
+  t.ok(inventory.includes('defensa +2'), 'the equipment bonus remains visible')
+})
+
+test('title turntable rotates on ticks without hiding menu controls', (t) => {
+  const game = new Runa({ presence: false })
+  for (const [width, height] of [
+    [80, 44],
+    [80, 30],
+    [80, 24],
+    [40, 10]
+  ]) {
+    game.update({ type: 'resize', width, height })
+    game.animationTick = 0
+    const first = style.stripAnsi(game.view())
+    game.update({ type: 'tick' })
+    game.update({ type: 'tick' })
+    const next = style.stripAnsi(game.view())
+    t.is(next.split('\n').length, height)
+    t.ok(next.split('\n').every((line) => line.length === width))
+    if (height >= 24) {
+      t.not(first, next, 'the precomputed view advances without a keypress')
+      t.ok(next.includes('SALIR'), 'the menu remains visible')
+      t.ok(next.includes('aceptar'), 'the control hint remains visible')
+    }
+  }
+  const menu = { page: 'main', slots: [], frame: 0 }
+  t.is(
+    render.titleScreen(80, 44, '', menu),
+    render.titleScreen(80, 44, '', { ...menu, frame: 24 }),
+    'the landscape wraps after one rotation'
+  )
+  t.ok(style.stripAnsi(render.titleScreen(80, 44, '', { ...menu, frame: 24 })).includes('HEROE'))
+})
+
 test('the controls button opens a complete overlay and returns to the previous state', (t) => {
   const game = new Runa({ presence: false })
   game.update({ type: 'resize', width: 80, height: 24 })
@@ -2074,8 +2130,12 @@ test('the world boss animates powers with real field damage', (t) => {
       25
     )
   )
-  t.ok(warningPane.includes('/___/|.[*].[*].|\\___\\'), 'warnings never overwrite the face')
-  t.ok(warningPane.includes('<***>'), 'warnings never overwrite the exposed core')
+  const tripoBoss = require('../assets/ascii/coloso-field.json').variants[0].frames[6]
+  t.ok(
+    warningPane.includes(tripoBoss[2].trim()),
+    'warnings never overwrite the generated upper body'
+  )
+  t.ok(warningPane.includes(tripoBoss[6].trim()), 'warnings never overwrite the generated torso')
 
   const phased = new WorldBossEvent({ width: 120, height: 36 })
   const close = { x: phased.x - 12, y: phased.y, hp: 20 }
@@ -2114,8 +2174,21 @@ test('the world boss animates powers with real field damage', (t) => {
       25
     )
   )
-  t.ok(pane.includes('[###]---\\_'), 'the camera keeps the complete left arm')
-  t.ok(pane.includes('_/---[###]'), 'the camera keeps the complete right arm')
+  t.ok(pane.includes(tripoBoss[3].trim()), 'the camera keeps the generated shoulders')
+  const camera = require('../lib/world-boss-event.js').bossCamera(
+    snap.player,
+    snap.boss,
+    snap.width,
+    snap.height,
+    64,
+    25
+  )
+  const lowerRow = pane.split('\n')[snap.boss.y - WORLD_BOSS.fieldSprite.anchor.y + 8 - camera.oy]
+  const bossLeft = snap.boss.x - WORLD_BOSS.fieldSprite.anchor.x - camera.ox
+  t.ok(
+    [...tripoBoss[8]].every((glyph, x) => glyph === ' ' || lowerRow[bossLeft + x] === glyph),
+    'the camera keeps the generated lower body with transparent spaces'
+  )
   t.ok(pane.includes('/T\\'), 'the hero remains visible while dodging')
   t.ok(
     pane.split('\n').every((line) => line.length === 64),

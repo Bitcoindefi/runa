@@ -11,6 +11,8 @@
     "lint": "prettier . --check && lunte lib app.js index.js bin.mjs test workers scripts",
     "start": "bare bin.mjs --no-updates",
     "make": "node scripts/make.js",
+    "tripo": "node scripts/tripo-generate.js",
+    "tripo:viewer": "node scripts/tripo-viewer.js",
     "make:darwin-arm64": "bare-build --name runa --standalone --host darwin-arm64 --out ./out/darwin-arm64 bin.mjs",
     "make:darwin-x64": "bare-build --name runa --standalone --host darwin-x64 --out ./out/darwin-x64 bin.mjs",
     "make:linux-arm64": "bare-build --name runa --standalone --host linux-arm64 --out ./out/linux-arm64 bin.mjs",
