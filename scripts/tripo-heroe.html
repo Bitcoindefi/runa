@@ -1992,11 +1992,14 @@
       })
 
       // En el menu de titulo la escena se corre a la derecha (una fraccion del
-      // ancho) para que los botones no tapen al heroe ni al Coloso.
+      // ancho) para que los botones no tapen al heroe ni al Coloso. En una
+      // pantalla vertical los botones ocupan el medio: la escena sube, y el
+      // Coloso y el alba quedan arriba, alrededor del logo.
       let viewShift = 0
       function shiftView() {
         const { clientWidth: w, clientHeight: h } = renderer.domElement
         if (viewShift && w > h) camera.setViewOffset(w, h, -w * viewShift, 0, w, h)
+        else if (viewShift) camera.setViewOffset(w, h, 0, h * 0.18, w, h)
         else camera.clearViewOffset()
       }
 
@@ -2173,7 +2176,8 @@
             loadGlb,
             mapData,
             buildWorld,
-            backdrop: () => backdrop
+            backdrop: () => backdrop,
+            effects
           })
         }
         if (title) title.show(true)
