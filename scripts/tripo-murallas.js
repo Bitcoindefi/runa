@@ -2474,6 +2474,74 @@ function lowWalls(world, s, shop, style, colors) {
   }
 }
 
+// --- Carteles -----------------------------------------------------------------
+
+// Lo que puede haber entre los corchetes de un cartel.
+const SIGN_ART = new Set(['sign', 'body', 'window'])
+
+// Los carteles sueltos del mapa: letras entre corchetes en una fila, como
+// "[ mercado del alba ]". Las letras las sigue subiendo tripo-mundo.js; aca se
+// toman los corchetes y los espacios entre palabras.
+function findSigns(world, s) {
+  const { kinds, inBuilding } = world
+  const { W, H, charAt } = s
+  const art = (x, y) => !inBuilding[y * W + x] && SIGN_ART.has(kinds[y * W + x])
+  const signs = []
+  for (let y = 0; y < H; y++) {
+    let x = 0
+    while (x < W) {
+      if (charAt(x, y) !== '[' || !art(x, y)) {
+        x++
+        continue
+      }
+      let b = x + 1
+      let letters = 0
+      while (b < W && charAt(b, y) !== ']' && art(b, y)) {
+        if (kinds[y * W + b] === 'sign') letters++
+        b++
+      }
+      if (b < W && charAt(b, y) === ']' && art(b, y) && letters) {
+        signs.push({ y, a: x, b })
+        x = b + 1
+      } else x++
+    }
+  }
+  return signs
+}
+
+// Un cartel: los corchetes pasan a ser dos postes de madera con su remate,
+// pegados a las puntas de la tabla, y los espacios entre palabras se rellenan
+// con la misma tabla amarilla de las letras (las cajas de tripo-mundo.js:
+// 1,4 m de alto, casi una celda de ancho y de hondo).
+function signGeometry(world, shop, sign, colors) {
+  const { kinds, CX, CZ } = world
+  const W = world.data.width
+  const { y, a, b } = sign
+  const z0 = y * CZ + 0.01
+  const z1 = (y + 1) * CZ - 0.01
+  const zc = (y + 0.5) * CZ
+  const board = shop.at('paint', a * CX, zc)
+  for (let x = a + 1; x < b; x++) {
+    if (kinds[y * W + x] !== 'body') continue
+    board.box(x * CX + 0.005, 0, z0, (x + 1) * CX - 0.005, 1.4, z1, colors.board, {
+      grime: false
+    })
+  }
+  const wood = shop.at('wood', a * CX, zc)
+  const post = colors.wood.clone().multiplyScalar(0.75)
+  for (const [x0, x1] of [
+    [(a + 1) * CX - 0.2, (a + 1) * CX + 0.01],
+    [b * CX - 0.01, b * CX + 0.2]
+  ]) {
+    wood.box(x0, 0, zc - 0.13, x1, 1.92, zc + 0.13, post)
+    wood.box(x0 - 0.04, 1.92, zc - 0.17, x1 + 0.04, 2, zc + 0.17, post, { bottom: true })
+    const cap = new THREE.ConeGeometry(0.12, 0.22, 4)
+    cap.rotateY(Math.PI / 4)
+    cap.translate((x0 + x1) / 2, 2.11, zc)
+    wood.add(cap, colors.iron, { grime: false })
+  }
+}
+
 // --- Puestos del mercado -----------------------------------------------------
 
 // Lo que puede ser parte del dibujo de un puesto.
@@ -3821,7 +3889,10 @@ function colorsFor(style, look) {
     // La otra raya de los toldos del mercado.
     canvas: c(style.canvas || 0xefe3c8),
     // Las dovelas que alternan con las claras en los arcos de los portones.
-    voussoir: c(style.voussoir || style.stone)
+    voussoir: c(style.voussoir || style.stone),
+    // La tabla de los carteles: el color de las letras (LOOSE.sign en
+    // tripo-mundo.js).
+    board: c(0xe0c060)
   }
 }
 
@@ -4188,8 +4259,10 @@ export function buildRamparts(world) {
   }
   // Los puestos del mercado salen de los cercos bajos: los arma stallGeometry.
   const stalls = findStalls(world, s)
+  // Los carteles sueltos: postes en los corchetes y tabla entre las palabras.
+  const signs = findSigns(world, s)
   const empty = !s.mass.some((v) => v) && !s.low.some((v) => v)
-  if (empty && !monument && !plan && !stalls.length) return null
+  if (empty && !monument && !plan && !stalls.length && !signs.length) return null
   const grid = padded(s)
   const gates = findGates(world, s, style)
   const porches = findOpenings(world, s, style)
@@ -4219,6 +4292,7 @@ export function buildRamparts(world) {
   const castles = castleGates(world, s, shop, colors, decor)
   lowWalls(world, s, shop, style, colors)
   for (const st of stalls) stallGeometry(world, s, shop, st, colors)
+  for (const sign of signs) signGeometry(world, shop, sign, colors)
   if (monument) {
     // Piedra clara y pulida: el pedestal del heroe, con su piso de marmol.
     const marble = { ...colors, stone: colors.trim, walk: colors.trim.clone().multiplyScalar(0.92) }
@@ -4269,6 +4343,12 @@ export function buildRamparts(world) {
   // Del puesto se toma todo menos las letras del cartel, que siguen siendo
   // las de tripo-mundo.js.
   for (const st of stalls) for (const i of st.cells) if (world.kinds[i] !== 'sign') cells[i] = 1
+  for (const { y, a, b } of signs) {
+    for (let x = a; x <= b; x++) {
+      const i = y * s.W + x
+      if (world.kinds[i] !== 'sign') cells[i] = 1
+    }
+  }
   // A que altura va el nombre de cada porton: sobre su bloque y sus torres;
   // en el de un castillo, sobre las almenas.
   const lift = new Map(castles.map((c) => [c.key, c.label]))
