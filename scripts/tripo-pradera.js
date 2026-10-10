@@ -1686,7 +1686,39 @@ function softBlob() {
 }
 
 // ---------------------------------------------------------------------------
-// Numeros y barras: carteles de canvas que miran a la camara.
+// Numeros, barras y chispas: carteles de canvas que miran a la camara.
+
+// Una estrella de cuatro puntas con un halo, blanca: el material le da el color.
+function sparkTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const g = canvas.getContext('2d')
+  const halo = g.createRadialGradient(64, 64, 0, 64, 64, 64)
+  halo.addColorStop(0, 'rgba(255, 255, 255, 1)')
+  halo.addColorStop(0.18, 'rgba(255, 255, 255, 0.7)')
+  halo.addColorStop(0.5, 'rgba(255, 255, 255, 0.12)')
+  halo.addColorStop(1, 'rgba(255, 255, 255, 0)')
+  g.fillStyle = halo
+  g.fillRect(0, 0, 128, 128)
+  g.fillStyle = 'rgba(255, 255, 255, 0.95)'
+  for (const turn of [0, Math.PI / 2]) {
+    g.save()
+    g.translate(64, 64)
+    g.rotate(turn)
+    g.beginPath()
+    g.moveTo(-62, 0)
+    g.lineTo(0, -7)
+    g.lineTo(62, 0)
+    g.lineTo(0, 7)
+    g.closePath()
+    g.fill()
+    g.restore()
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
 
 function textSprite(text, color, size = 40) {
   const canvas = document.createElement('canvas')
@@ -2354,9 +2386,15 @@ class Effects {
         side: THREE.DoubleSide
       })
     // El arco del tajo, el proyectil y la onda del golpe: uno de cada uno.
+    // El tajo no se suma a lo de atras: sobre el pasto claro se perderia.
     this.slash = new THREE.Mesh(
-      new THREE.RingGeometry(0.55, 1.05, 24, 1, -1.1, 2.2).rotateX(-Math.PI / 2),
-      additive(0xfff2c8)
+      new THREE.RingGeometry(0.45, 1.4, 28, 1, -1.05, 2.1).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff6d8,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
     )
     this.bolt = new THREE.Mesh(
       new THREE.BoxGeometry(0.07, 0.07, 0.75),
@@ -2390,6 +2428,27 @@ class Effects {
       mesh.renderOrder = 4
       this.group.add(mesh)
     }
+    // La chispa del impacto: una estrella que se abre y se apaga.
+    this.spark = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: sparkTexture(),
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending
+      })
+    )
+    this.spark.visible = false
+    this.spark.renderOrder = 13
+    this.sparkAt = -10
+    this.group.add(this.spark)
+  }
+
+  // La estrella en un punto, del color del golpe.
+  sparkle(x, y, z, hex, time) {
+    this.sparkAt = time
+    this.spark.position.set(x, y, z)
+    this.spark.material.color.setHex(hex)
   }
 
   fighting() {
@@ -2595,14 +2654,17 @@ class Effects {
       paid = /^cae el .*: \+(\d+) oro, \+(\d+) exp/.exec(String(said[i]))
     }
     if (!paid) return
-    // Sobre el heroe, que es quien cobra, y despues de que cae el monstruo.
+    // Sobre el heroe, que es quien cobra, del lado contrario al monstruo (ahi
+    // todavia sube el numero del ultimo golpe) y despues de que cae.
     const hero = this.ctx.hero.root.position
+    const away = Math.sign(hero.x - spot.x) || -1
+    const x = hero.x + away * 0.9
     const [gold, xp] = [Number(paid[1]), Number(paid[2])]
     if (gold > 0) {
-      this.number(`+${gold} ${L('gold', 'oro')}`, '#f2c94a', hero.x, 3.0, hero.z, at, 0.45)
+      this.number(`+${gold} ${L('gold', 'oro')}`, '#f2c94a', x, 3.1, hero.z, at, 0.5)
     }
     if (xp > 0) {
-      this.number(`+${xp} ${L('XP', 'exp')}`, '#8fc8ff', hero.x, 2.45, hero.z, at, 0.75)
+      this.number(`+${xp} ${L('XP', 'exp')}`, '#8fc8ff', x, 2.55, hero.z, at, 0.8)
     }
   }
 
@@ -2627,7 +2689,7 @@ class Effects {
     let lean = 0
     if (lunge >= 0 && lunge < 0.3) {
       const k = Math.sin((lunge / 0.3) * Math.PI)
-      forward += k * 0.45
+      forward += k * 0.55
       lean += k * 0.3
     }
     if (recoil >= 0 && recoil < 0.3) {
@@ -2641,12 +2703,14 @@ class Effects {
     }
     // El tajo gira y se apaga; el proyectil vuela; la onda se abre.
     const slash = time - this.slashAt
-    this.slash.visible = slash >= 0 && slash < 0.2
+    this.slash.visible = slash >= 0 && slash < 0.28
     if (this.slash.visible) {
-      const k = slash / 0.2
-      this.slash.material.opacity = (1 - k) * 0.9
-      this.slash.rotation.y = this.slashYaw + (k - 0.5) * 1.6 * this.slashSide
-      this.slash.position.set(hero.position.x, 1.15, hero.position.z)
+      // El arco abre hacia +x; girado yaw - 90 grados queda de cara al monstruo
+      // y barre de un lado al otro (el siguiente tajo, al reves).
+      const k = slash / 0.28
+      this.slash.material.opacity = (1 - k * k) * 0.95
+      this.slash.rotation.y = this.slashYaw - Math.PI / 2 + (k - 0.5) * 1.4 * this.slashSide
+      this.slash.position.set(hero.position.x, 1.1, hero.position.z)
     }
     const bolt = time - this.boltAt
     this.bolt.visible = bolt >= 0 && bolt < 0.16
@@ -2660,6 +2724,14 @@ class Effects {
       const k = burst / 0.3
       this.burst.scale.setScalar(1 + k * 3.2)
       this.burst.material.opacity = (1 - k) * 0.9
+    }
+    const spark = time - this.sparkAt
+    this.spark.visible = spark >= 0 && spark < 0.22
+    if (this.spark.visible) {
+      const k = spark / 0.22
+      this.spark.scale.setScalar(0.7 + Math.sin(k * Math.PI * 0.5) * 1.3)
+      this.spark.material.opacity = 1 - k * k
+      this.spark.material.rotation = k * 0.8
     }
     const fighting = this.engaged !== null && !!this.spot
     this.foeRing.visible = fighting
@@ -2730,6 +2802,7 @@ class Effects {
       this.burstAt = time
       this.burst.position.set(spot.x, Math.max(0.3, spot.top * 0.55), spot.z)
       this.burst.material.color.setHex(0xfff0c8)
+      this.sparkle(spot.x, Math.max(0.6, spot.top * 0.6), spot.z, 0xfff0b0, time)
       this.number(`-${item.amount}`, '#fff4e0', spot.x, spot.top + 0.3, spot.z, time)
       this.barHp = item.hp
     } else if (item.kind === 'foe-swing') {
@@ -2746,6 +2819,7 @@ class Effects {
       this.burstAt = time
       this.burst.position.set(hero.x, 1.0, hero.z)
       this.burst.material.color.setHex(0xff5040)
+      this.sparkle(hero.x, 1.3, hero.z, 0xff7050, time)
       this.number(`-${item.amount}`, '#ff6a50', hero.x, 2.6, hero.z, time)
       const flash = this.bits.flash
       flash.hidden = false
@@ -2764,6 +2838,8 @@ class Effects {
       mesh.geometry.dispose()
       mesh.material.dispose()
     }
+    this.spark.material.map.dispose()
+    this.spark.material.dispose()
     for (const child of this.ctx.hero.root.children) {
       child.position.z = 0
       child.rotation.x = 0
