@@ -68,7 +68,8 @@ const MERLON_H = 0.55
 const CRENEL = 0.42
 
 // Cada mapa con su piedra: alto del adarve (curtain), forma de las torres y su
-// techo, el color del estandarte y de la llama, y como son los cercos bajos.
+// techo, el color del estandarte y de la llama, como son los cercos bajos, las
+// dovelas oscuras de los arcos (voussoir) y la otra raya de los toldos (canvas).
 const STYLES = {
   city: {
     stone: 0xdcc8a0,
@@ -81,7 +82,8 @@ const STYLES = {
     banner: 0xb8362a,
     accent: 0xe7b84a,
     flame: [1, 0.72, 0.32],
-    fence: 'stone'
+    fence: 'stone',
+    voussoir: 0xc98e6a
   },
   nox: {
     stone: 0x5a536a,
@@ -96,7 +98,8 @@ const STYLES = {
     flame: [0.45, 1, 0.86],
     veins: true,
     fence: 'iron',
-    canvas: 0x2c6f68
+    canvas: 0x2c6f68,
+    voussoir: 0x3c3450
   },
   castle: {
     stone: 0xc3bcae,
@@ -109,7 +112,8 @@ const STYLES = {
     banner: 0xa32e2a,
     accent: 0xe7b84a,
     flame: [1, 0.72, 0.32],
-    fence: 'stone'
+    fence: 'stone',
+    voussoir: 0x9b948a
   },
   coliseum: {
     stone: 0xdcc9a2,
@@ -122,7 +126,8 @@ const STYLES = {
     banner: 0xb8362a,
     accent: 0xe7b84a,
     flame: [1, 0.72, 0.32],
-    fence: 'stone'
+    fence: 'stone',
+    voussoir: 0xc98e6a
   },
   boss: {
     stone: 0x6a5a52,
@@ -2044,9 +2049,11 @@ function gatehouse(shop, g, style, colors, decor) {
   })
   k.add(place(block), colors.stone)
 
-  // Dovelas: nueve cuñas alrededor del arco, la del medio (la clave) mas alta.
+  // Dovelas: nueve cuñas alrededor del arco, la del medio (la clave) mas alta,
+  // alternando la piedra clara con la del color de cada reino.
   const n = 9
   for (let i = 0; i < n; i++) {
+    const tone = i % 2 ? colors.voussoir : colors.trim
     const a0 = Math.PI - (i / n) * Math.PI - 0.012
     const a1 = Math.PI - ((i + 1) / n) * Math.PI + 0.012
     const r0 = half - 0.05
@@ -2058,7 +2065,7 @@ function gatehouse(shop, g, style, colors, decor) {
     wedge.lineTo(Math.cos(a1) * r0 * flip, spring + Math.sin(a1) * r0)
     wedge.closePath()
     const stone = new THREE.ExtrudeGeometry(wedge, { depth: D + 0.12, bevelEnabled: false })
-    k.add(place(stone, -0.06), colors.trim, { grime: false })
+    k.add(place(stone, -0.06), tone, { grime: false })
   }
   // Jambas: sillares alternados a los dos lados del arco, hasta el arranque.
   for (const side of [-1, 1]) {
@@ -3812,7 +3819,9 @@ function colorsFor(style, look) {
     vein: c(look.vein || style.accent),
     white: c(0xffffff),
     // La otra raya de los toldos del mercado.
-    canvas: c(style.canvas || 0xefe3c8)
+    canvas: c(style.canvas || 0xefe3c8),
+    // Las dovelas que alternan con las claras en los arcos de los portones.
+    voussoir: c(style.voussoir || style.stone)
   }
 }
 
