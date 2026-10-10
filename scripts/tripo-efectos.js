@@ -14,8 +14,9 @@
 //   render(dt, screen)  dibuja el cuadro en vez de renderer.render; screen es la
 //                       pantalla: 'menu' (el titulo), 'play', 'tour' o 'mirror'
 //   setSize(w, h)       el tamano del lienzo en px de CSS, cuando cambia
-//   setQuality(q)       'high': brillo y vineta; 'low': renderer.render solo,
-//                       para celulares y placas de video modestas
+//   setQuality(q)       'high': brillo, rayos de sol, vineta y tono por mapa;
+//                       'low': renderer.render solo, para celulares y placas de
+//                       video modestas
 //   atmosphere(data)    el cielo, la niebla y las luces de un mapa (el JSON de
 //                       /world/<id>.json), o con null los de la vitrina
 //   shafts(direction)   rayos de sol desde esa direccion del mundo (el titulo
@@ -30,13 +31,14 @@
 // arma su cielo con las mismas funciones.
 //
 // En 'high' el cuadro pasa por EffectComposer, como en los ejemplos de
-// three.js: RenderPass dibuja la escena en un buffer de punto flotante,
-// UnrealBloomPass hace brillar lo que pasa del umbral (la lava, las ventanas de
-// NOX de noche, las runas y brasas del titulo) y OutputPass pasa a sRGB. Ese
-// ultimo pase hace tambien el antialias (FXAA), la suma del brillo y el
-// acabado (tono por mapa, vineta, grano), asi el cuadro cuesta dos pases a
-// pantalla completa y el brillo, a un cuarto de resolucion, casi nada.
-// renderer.info cuenta el cuadro entero, con todos los pases.
+// three.js: RenderPass dibuja la escena en un buffer de punto flotante (con
+// MSAA en los mapas), UnrealBloomPass hace brillar lo que pasa del umbral (la
+// lava, las ventanas de NOX de noche, las runas y brasas del titulo), en el
+// titulo los rayos de sol salen de detras del Coloso, y OutputPass pasa a sRGB.
+// Ese ultimo pase hace tambien el FXAA del titulo, la suma del brillo y de los
+// rayos y el acabado (tono por mapa, vineta, grano), asi el cuadro cuesta dos
+// pases a pantalla completa; el brillo y los rayos, a un cuarto de resolucion,
+// casi nada. renderer.info cuenta el cuadro entero, con todos los pases.
 
 import * as THREE from 'three'
 import { Sky } from 'three/addons/objects/Sky.js'
@@ -340,9 +342,9 @@ export function skyDirection(elevation, bearing, target = new THREE.Vector3()) {
 // hemi   [arriba, abajo, intensidad] de la luz de hemisferio
 // light  [color, intensidad] de la direccional; env, cuanto reflejan los PBR
 // post   bloom [fuerza, radio, umbral, rodilla]: brilla lo que pasa del umbral
-//        en su canal mas alto; saturacion, contraste y tinte del acabado. Sin
-//        bloom (de dia) el pase del brillo no corre. msaa, las muestras de la
-//        escena (4 si no se dice; con 0 el antialias es FXAA).
+//        en su canal mas alto (la copia del lienzo llega hasta 1: el umbral va
+//        por debajo); saturacion, contraste y tinte del acabado. Sin bloom (de
+//        dia) el pase del brillo no corre.
 const MOODS = {
   // La ciudad de RUNA a la manana: sol bajo al noreste, aire limpio y nubes
   // altas que todavia toman el dorado del amanecer.
@@ -373,7 +375,7 @@ const MOODS = {
     light: [0xb4c2ff, 1.3],
     env: 0.22,
     post: {
-      bloom: [0.7, 0.5, 0.85, 0.35],
+      bloom: [0.7, 0.5, 0.72, 0.26],
       vignette: 0.3,
       saturation: 1.0,
       contrast: 1.05,
@@ -420,7 +422,7 @@ const MOODS = {
     light: [0xffc6a2, 2.4],
     env: 0.35,
     post: {
-      bloom: [0.75, 0.55, 1.0, 0.5],
+      bloom: [0.75, 0.55, 0.8, 0.2],
       vignette: 0.34,
       saturation: 1.06,
       contrast: 1.06,
@@ -438,10 +440,9 @@ const SHOWCASE = {
   post: { bloom: null, vignette: 0.25 }
 }
 
-// El titulo: un alba con lava; brilla mas que los mapas. Sin MSAA: alcanza el
-// FXAA (ver antialias en createEffects).
+// El titulo: un alba con lava; brilla mas que los mapas. Su escena va en punto
+// flotante: el umbral del brillo puede pasar de 1.
 const TITLE = {
-  msaa: 0,
   bloom: [0.5, 0.5, 0.95, 0.6],
   vignette: 0.26,
   saturation: 1.08,
@@ -451,19 +452,39 @@ const TITLE = {
 
 // --- El postproceso ---------------------------------------------------------
 
+// El vertice de los cuadros de pantalla completa propios.
+const QUAD_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+}
+`
+
 // El bloom de UnrealBloomPass separa lo brillante por luminancia; aca por el
 // canal mas alto, con una rodilla suave. Asi la lava naranja (r de 1,6) brilla y
 // una pared blanca al sol (cerca de 0,9 en todos los canales) no.
 // Como el bloom corre a un cuarto de resolucion, cada pixel promedia cuatro
-// muestras bilineales (16 pixeles de la escena): una brasa chica no titila.
+// muestras bilineales (16 pixeles de la escena): una brasa chica no titila. La
+// copia del lienzo de los mapas viene en sRGB: se pasa a lineal al leerla.
+const SRGB_DECODE = /* glsl */ `
+vec3 srgbToLinear( vec3 c ) {
+  return mix( c * 0.0773993808, pow( c * 0.9478672986 + 0.0521327014, vec3( 2.4 ) ),
+    step( vec3( 0.04045 ), c ) );
+}
+`
+
 const HIGH_PASS = /* glsl */ `
 uniform sampler2D tDiffuse;
 uniform float luminosityThreshold;
 uniform float smoothWidth;
 uniform vec2 sceneTexel;
+uniform float srgbInput;
 varying vec2 vUv;
+${SRGB_DECODE}
 vec3 bright( vec2 uv ) {
   vec3 c = texture2D( tDiffuse, uv ).rgb;
+  if ( srgbInput > 0.5 ) c = srgbToLinear( c );
   float top = max( c.r, max( c.g, c.b ) );
   return c * smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, top );
 }
@@ -478,12 +499,14 @@ void main() {
 // UnrealBloomPass arma su cadena desde la mitad de la resolucion; esta, desde
 // un cuarto: el brillo es suave igual y cuesta la cuarta parte. Tampoco mezcla
 // el brillo sobre la escena (un pase mas a pantalla completa): lo deja en
-// `texture` y lo suma el pase final.
+// `texture` y lo suma el pase final. glow() es el render de UnrealBloomPass
+// (three.js 0.186, que viene copiado en vendor/) sin esa mezcla, y sirve tanto
+// para el buffer del composer como para la copia del lienzo de los mapas.
 class QuarterBloomPass extends UnrealBloomPass {
   constructor() {
     super(new THREE.Vector2(256, 256), 0.4, 0.4, 0.9)
-    this.blendMaterial.visible = false
     this.highPassUniforms.sceneTexel = { value: new THREE.Vector2(1, 1) }
+    this.highPassUniforms.srgbInput = { value: 0 }
     this.materialHighPassFilter.fragmentShader = HIGH_PASS
     this.materialHighPassFilter.needsUpdate = true
   }
@@ -495,6 +518,45 @@ class QuarterBloomPass extends UnrealBloomPass {
   setSize(width, height) {
     super.setSize(Math.round(width / 2), Math.round(height / 2))
     this.highPassUniforms.sceneTexel.value.set(1 / width, 1 / height)
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    this.glow(renderer, readBuffer.texture, false)
+  }
+
+  glow(renderer, source, srgb) {
+    const autoClear = renderer.autoClear
+    renderer.autoClear = false
+    renderer.getClearColor(this._oldClearColor)
+    const clearAlpha = renderer.getClearAlpha()
+    renderer.setClearColor(this.clearColor, 0)
+    const quad = this._fsQuad
+    const pass = (material, target) => {
+      quad.material = material
+      renderer.setRenderTarget(target)
+      renderer.clear()
+      quad.render(renderer)
+    }
+    this.highPassUniforms.tDiffuse.value = source
+    this.highPassUniforms.srgbInput.value = srgb ? 1 : 0
+    this.highPassUniforms.luminosityThreshold.value = this.threshold
+    pass(this.materialHighPassFilter, this.renderTargetBright)
+    let input = this.renderTargetBright
+    for (let i = 0; i < this.nMips; i++) {
+      const blur = this.separableBlurMaterials[i]
+      blur.uniforms.colorTexture.value = input.texture
+      blur.uniforms.direction.value = UnrealBloomPass.BlurDirectionX
+      pass(blur, this.renderTargetsHorizontal[i])
+      blur.uniforms.colorTexture.value = this.renderTargetsHorizontal[i].texture
+      blur.uniforms.direction.value = UnrealBloomPass.BlurDirectionY
+      pass(blur, this.renderTargetsVertical[i])
+      input = this.renderTargetsVertical[i]
+    }
+    this.compositeMaterial.uniforms.bloomStrength.value = this.strength
+    this.compositeMaterial.uniforms.bloomRadius.value = this.radius
+    pass(this.compositeMaterial, this.renderTargetsHorizontal[0])
+    renderer.setClearColor(this._oldClearColor, clearAlpha)
+    renderer.autoClear = autoClear
   }
 }
 
@@ -563,12 +625,7 @@ class ShaftsPass extends Pass {
     this.quad = new FullScreenQuad(
       new THREE.ShaderMaterial({
         uniforms: this.uniforms,
-        vertexShader: /* glsl */ `
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-          }`,
+        vertexShader: QUAD_VERTEX,
         fragmentShader: SHAFTS,
         depthTest: false,
         depthWrite: false
@@ -601,26 +658,50 @@ class ShaftsPass extends Pass {
   }
 }
 
-// El pase final es OutputPass (el paso a sRGB de three.js) con tres cosas mas
-// en el mismo shader, que en los ejemplos son pases aparte: el antialias FXAA
-// (la escena se dibuja sin MSAA, que en una placa integrada costaba mas que
-// el postproceso entero), la suma del brillo y de los rayos y el acabado: tono
-// por mapa, vineta y un grano de medio escalon contra las bandas del cielo.
-const FINISH_PARS = /* glsl */ `
-uniform sampler2D tBloom;
-uniform float bloomOn;
-uniform sampler2D tShafts;
-uniform float shaftsOn;
-uniform vec2 shaftsTexel;
-uniform vec2 texel;
-uniform float fxaaOn;
+// El acabado, igual en el titulo y en los mapas: saturacion, contraste y tinte
+// del clima, vineta y un grano de medio escalon contra las bandas del cielo. Va
+// despues del paso a sRGB.
+const GRADE = /* glsl */ `
 uniform vec3 tint;
 uniform float saturation;
 uniform float contrast;
 uniform float vignette;
 uniform float aspect;
 uniform float seed;
+vec3 grade( vec3 c ) {
+  float luma = dot( c, vec3( 0.299, 0.587, 0.114 ) );
+  c = mix( vec3( luma ), c, saturation );
+  c = ( c - 0.5 ) * contrast + 0.5;
+  c *= tint;
+  vec2 d = ( vUv - 0.5 ) * vec2( min( aspect, 1.6 ), 1.0 );
+  c *= 1.0 - vignette * smoothstep( 0.35, 1.05, length( d ) * 1.25 );
+  float n = fract( sin( dot( gl_FragCoord.xy + seed, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+  return c + ( n - 0.5 ) / 255.0;
+}
+`
+
+function gradeUniforms() {
+  return {
+    tint: { value: new THREE.Vector3(1, 1, 1) },
+    saturation: { value: 1 },
+    contrast: { value: 1 },
+    vignette: { value: 0.25 },
+    aspect: { value: 1 },
+    seed: { value: 0 }
+  }
+}
+
+// El pase final del titulo es OutputPass (el paso a sRGB de three.js) con tres
+// cosas mas en el mismo shader, que en los ejemplos son pases aparte: el
+// antialias FXAA, la suma del brillo y de los rayos y el acabado.
+const FINISH_PARS = /* glsl */ `
+uniform sampler2D tBloom;
+uniform sampler2D tShafts;
+uniform float shaftsOn;
+uniform vec2 shaftsTexel;
+uniform vec2 texel;
 varying vec2 vUv;
+${GRADE}
 
 // El brillo percibido, para buscar bordes: la escena viene lineal.
 float edgeLuma( vec3 c ) {
@@ -630,9 +711,8 @@ float edgeLuma( vec3 c ) {
 // FXAA de Timothy Lottes, con la forma de su version 3.11: la cruz de vecinos
 // dice si hay contraste (donde no, casi toda la pantalla, sale con cinco
 // lecturas); las diagonales dicen hacia donde corre el borde y cuatro lecturas
-// mas lo suavizan a lo largo. Ademas, lo que mide un pixel (la juntura entre
-// dos cajas de un cartel, un punto) se acerca al promedio de sus vecinos, como
-// haria el MSAA: el borde comun casi no se toca.
+// mas lo suavizan a lo largo. Ademas, lo que mide un pixel (un punto, una
+// juntura) se acerca un poco al promedio de sus vecinos.
 vec3 fxaa( vec2 uv ) {
   vec2 tx = vec2( texel.x, 0.0 );
   vec2 ty = vec2( 0.0, texel.y );
@@ -676,8 +756,8 @@ vec3 fxaa( vec2 uv ) {
 }
 
 // Los rayos, suavizados con cuatro lecturas en diagonal: se lleva el ruido con
-// que se corrio el comienzo de cada linea. Con el sol a la vista sumarian mucho
-// y lavarian el cuadro: se comprimen como en Reinhard.
+// que se corrio el comienzo de cada linea. Mucha luz junta se comprime como en
+// Reinhard, asi nunca lava el cuadro.
 vec3 shaftsAt( vec2 uv ) {
   vec2 o = shaftsTexel * 1.25;
   vec3 s = 0.25 * ( texture2D( tShafts, uv + vec2( -o.x, -o.y ) ).rgb +
@@ -689,43 +769,25 @@ vec3 shaftsAt( vec2 uv ) {
 `
 
 const FINISH_READ = /* glsl */ `
-  vec3 light = fxaaOn > 0.5 ? fxaa( vUv ) : texture2D( tDiffuse, vUv ).rgb;
-  light += texture2D( tBloom, vUv ).rgb * bloomOn;
+  vec3 light = fxaa( vUv ) + texture2D( tBloom, vUv ).rgb;
   if ( shaftsOn > 0.0 ) light += shaftsAt( vUv ) * shaftsOn;
   gl_FragColor = vec4( light, 1.0 );
 `
 
 const FINISH_MAIN = /* glsl */ `
-  vec3 c = gl_FragColor.rgb;
-  float luma = dot( c, vec3( 0.299, 0.587, 0.114 ) );
-  c = mix( vec3( luma ), c, saturation );
-  c = ( c - 0.5 ) * contrast + 0.5;
-  c *= tint;
-  vec2 d = ( vUv - 0.5 ) * vec2( min( aspect, 1.6 ), 1.0 );
-  c *= 1.0 - vignette * smoothstep( 0.35, 1.05, length( d ) * 1.25 );
-  float n = fract( sin( dot( gl_FragCoord.xy + seed, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
-  c += ( n - 0.5 ) / 255.0;
-  gl_FragColor.rgb = c;
+  gl_FragColor.rgb = grade( gl_FragColor.rgb );
 }
 `
 
 class FinishPass extends OutputPass {
   constructor(bloom, shafts) {
     super()
-    Object.assign(this.uniforms, {
+    Object.assign(this.uniforms, gradeUniforms(), {
       tBloom: { value: bloom.texture },
-      bloomOn: { value: 1 },
       tShafts: { value: shafts.texture },
       shaftsOn: { value: 0 },
       shaftsTexel: { value: shafts.texel },
-      texel: { value: new THREE.Vector2(1, 1) },
-      fxaaOn: { value: 1 },
-      tint: { value: new THREE.Vector3(1, 1, 1) },
-      saturation: { value: 1 },
-      contrast: { value: 1 },
-      vignette: { value: 0.25 },
-      aspect: { value: 1 },
-      seed: { value: 0 }
+      texel: { value: new THREE.Vector2(1, 1) }
     })
     this.material.fragmentShader = this.material.fragmentShader
       .replace('varying vec2 vUv;', FINISH_PARS)
@@ -739,6 +801,42 @@ class FinishPass extends OutputPass {
   }
 }
 
+// El pase final de los mapas: redibuja el lienzo con la copia de la escena
+// (que viene en sRGB), el brillo y el acabado. Sin FXAA: el lienzo ya tiene MSAA.
+const MAP_FINISH = /* glsl */ `
+uniform sampler2D tScene;
+uniform sampler2D tBloom;
+uniform float bloomOn;
+varying vec2 vUv;
+${SRGB_DECODE}
+${GRADE}
+vec3 linearToSrgb( vec3 c ) {
+  return mix( c * 12.92, pow( c, vec3( 0.4166667 ) ) * 1.055 - 0.055,
+    step( vec3( 0.0031308 ), c ) );
+}
+void main() {
+  vec3 c = texture2D( tScene, vUv ).rgb;
+  if ( bloomOn > 0.5 ) {
+    c = linearToSrgb( srgbToLinear( c ) + texture2D( tBloom, vUv ).rgb );
+  }
+  gl_FragColor = vec4( grade( c ), 1.0 );
+}
+`
+
+// El brillo y el acabado de un clima (o del titulo).
+function glowFor(bloom, look) {
+  ;[bloom.strength, bloom.radius, bloom.threshold] = look.bloom
+  bloom.highPassUniforms.smoothWidth.value = look.bloom[3]
+}
+
+function gradeFor(u, look) {
+  u.tint.value.fromArray(look.tint || [1, 1, 1])
+  u.saturation.value = look.saturation || 1
+  u.contrast.value = look.contrast || 1
+  u.vignette.value = look.vignette
+  u.seed.value = (u.seed.value + 17.13) % 1000
+}
+
 export function createEffects({ renderer, scene, camera, settings = {}, lights = {} }) {
   const sky = createSky()
   sky.visible = false
@@ -746,21 +844,26 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
   // renderer.info cuenta el cuadro entero: se resetea aca, en cada render.
   renderer.info.autoReset = false
   let quality = settings.effects === 'low' ? 'low' : 'high'
-  let post = null
+  // Las dos cadenas de 'high': la del titulo y la de los mapas. Se arman la
+  // primera vez que hacen falta.
+  let titlePost = null
+  let mapPost = null
   let mood = null
   const backColor = new THREE.Color(0x0b0b0c)
   const size = new THREE.Vector2()
+  const drawing = new THREE.Vector2()
   // Hacia donde esta el sol de los rayos (en el mundo), o null sin rayos.
   let shaftsTo = null
   const sunDirection = new THREE.Vector3()
   const sunPoint = new THREE.Vector3()
   const forward = new THREE.Vector3()
 
-  // La escena va a un buffer de punto flotante (lo que pasa de 1, la lava o el
-  // sol, llega entero al brillo), con profundidad: el de EffectComposer.
-  function buildPost() {
-    const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType })
-    const composer = new EffectComposer(renderer, target)
+  // El titulo pasa por EffectComposer. La escena va a un buffer de punto
+  // flotante con profundidad y sin MSAA: lo que pasa de 1 (el sol, la lava)
+  // llega entero al brillo, y el alfa marca el cielo para los rayos. El
+  // antialias es el FXAA del pase final.
+  function buildTitlePost() {
+    const composer = new EffectComposer(renderer)
     const bloom = new QuarterBloomPass()
     const rays = new ShaftsPass()
     const finish = new FinishPass(bloom, rays)
@@ -773,6 +876,52 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     return { composer, bloom, rays, finish, ratio: renderer.getPixelRatio() }
   }
 
+  // Los mapas se dibujan directo en el lienzo, con su MSAA: en una placa
+  // integrada es lo mas barato, y las junturas de un pixel entre las cajas de
+  // los carteles solo las resuelve el muestreo (el MSAA de un buffer de punto
+  // flotante costaba en NOX diez veces mas que todo lo demas). Despues el
+  // lienzo, ya resuelto, se copia a una textura (copyFramebufferToTexture, como
+  // en el ejemplo de three.js), de ahi sale el brillo, y un pase final vuelve a
+  // dibujar el lienzo con el brillo sumado y el acabado.
+  function buildMapPost() {
+    renderer.getDrawingBufferSize(drawing)
+    const copy = new THREE.FramebufferTexture(drawing.x, drawing.y)
+    copy.minFilter = copy.magFilter = THREE.LinearFilter
+    const bloom = new QuarterBloomPass()
+    bloom.setSize(drawing.x, drawing.y)
+    const finish = new FullScreenQuad(
+      new THREE.ShaderMaterial({
+        uniforms: {
+          ...gradeUniforms(),
+          tScene: { value: copy },
+          tBloom: { value: bloom.texture },
+          bloomOn: { value: 0 }
+        },
+        vertexShader: QUAD_VERTEX,
+        fragmentShader: MAP_FINISH,
+        depthTest: false,
+        depthWrite: false
+      })
+    )
+    finish.material.uniforms.aspect.value = drawing.x / Math.max(1, drawing.y)
+    return { copy, bloom, finish, width: drawing.x, height: drawing.y }
+  }
+
+  function freePost() {
+    if (titlePost) {
+      for (const pass of titlePost.composer.passes) if (pass.dispose) pass.dispose()
+      titlePost.composer.dispose()
+      titlePost = null
+    }
+    if (mapPost) {
+      mapPost.copy.dispose()
+      mapPost.bloom.dispose()
+      mapPost.finish.material.dispose()
+      mapPost.finish.dispose()
+      mapPost = null
+    }
+  }
+
   // Los rayos salen del sol si esta adelante de la camara, y se apagan cuando
   // se va de la pantalla. Devuelve cuanto brillan (0 sin rayos).
   function aimShafts() {
@@ -781,64 +930,50 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     camera.getWorldDirection(forward)
     if (forward.dot(shaftsTo) <= 0.05) return 0
     sunPoint.copy(camera.position).addScaledVector(shaftsTo, 500).project(camera)
-    post.rays.uniforms.sun.value.set(sunPoint.x * 0.5 + 0.5, sunPoint.y * 0.5 + 0.5)
+    titlePost.rays.uniforms.sun.value.set(sunPoint.x * 0.5 + 0.5, sunPoint.y * 0.5 + 0.5)
     const away = Math.max(Math.abs(sunPoint.x), Math.abs(sunPoint.y))
     return 1 - THREE.MathUtils.smoothstep(away, 0.9, 1.4)
   }
 
-  function freePost() {
-    if (!post) return
-    for (const pass of post.composer.passes) if (pass.dispose) pass.dispose()
-    post.composer.dispose()
-    post = null
+  function renderTitle(dt) {
+    if (!titlePost) titlePost = buildTitlePost()
+    glowFor(titlePost.bloom, TITLE)
+    gradeFor(titlePost.finish.uniforms, TITLE)
+    const rays = aimShafts()
+    titlePost.rays.enabled = rays > 0
+    titlePost.finish.uniforms.shaftsOn.value = rays
+    titlePost.composer.render(dt)
   }
 
-  // El antialias de la escena: en los mapas, MSAA en el buffer (las junturas
-  // de un pixel entre las cajas de los carteles y las murallas solo las
-  // resuelve el muestreo); en el titulo, que no las tiene y es lo mas caro,
-  // alcanza con el FXAA del pase final.
-  function antialias(samples) {
-    const { composer, finish } = post
-    finish.uniforms.fxaaOn.value = samples ? 0 : 1
-    for (const target of [composer.renderTarget1, composer.renderTarget2]) {
-      if (target.samples === samples) continue
-      target.samples = samples
-      target.dispose()
-    }
-  }
-
-  // El acabado del cuadro segun el mapa o el titulo. Sin bloom (los mapas de
-  // dia) el pase del brillo no corre y el final no lo suma.
-  function dress(look) {
-    const { bloom, finish } = post
-    antialias('msaa' in look ? look.msaa : 4)
-    bloom.enabled = !!look.bloom
-    if (look.bloom) {
-      ;[bloom.strength, bloom.radius, bloom.threshold] = look.bloom
-      bloom.highPassUniforms.smoothWidth.value = look.bloom[3]
-    }
-    const u = finish.uniforms
+  function renderMap(look) {
+    renderer.getDrawingBufferSize(drawing)
+    if (mapPost && (mapPost.width !== drawing.x || mapPost.height !== drawing.y)) freePost()
+    if (!mapPost) mapPost = buildMapPost()
+    const { copy, bloom, finish } = mapPost
+    renderer.setRenderTarget(null)
+    renderer.render(scene, camera)
+    renderer.copyFramebufferToTexture(copy)
+    const u = finish.material.uniforms
     u.bloomOn.value = look.bloom ? 1 : 0
-    u.tint.value.fromArray(look.tint || [1, 1, 1])
-    u.saturation.value = look.saturation || 1
-    u.contrast.value = look.contrast || 1
-    u.vignette.value = look.vignette
-    u.seed.value = (u.seed.value + 17.13) % 1000
+    if (look.bloom) {
+      glowFor(bloom, look)
+      bloom.glow(renderer, copy, true)
+    }
+    gradeFor(u, look)
+    renderer.setRenderTarget(null)
+    // El cuadro tapa todo el lienzo: no hace falta borrarlo antes.
+    const autoClear = renderer.autoClear
+    renderer.autoClear = false
+    finish.render(renderer)
+    renderer.autoClear = autoClear
   }
 
   function render(dt, screen) {
     renderer.info.reset()
     if (sky.visible) sky.material.uniforms.time.value = performance.now() / 1000
-    if (quality === 'low') {
-      renderer.render(scene, camera)
-      return
-    }
-    if (!post) post = buildPost()
-    dress(screen === 'menu' ? TITLE : (mood || SHOWCASE).post)
-    const rays = aimShafts()
-    post.rays.enabled = rays > 0
-    post.finish.uniforms.shaftsOn.value = rays
-    post.composer.render(dt)
+    if (quality === 'low') renderer.render(scene, camera)
+    else if (screen === 'menu') renderTitle(dt)
+    else renderMap((mood || SHOWCASE).post)
   }
 
   // El titulo dice hacia donde esta su sol, cada cuadro; null apaga los rayos.
@@ -848,8 +983,8 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
 
   function setSize(width, height) {
     size.set(width, height)
-    if (post && post.ratio !== renderer.getPixelRatio()) freePost()
-    if (post) post.composer.setSize(width, height)
+    if (titlePost && titlePost.ratio !== renderer.getPixelRatio()) freePost()
+    if (titlePost) titlePost.composer.setSize(width, height)
   }
 
   function setQuality(level) {
@@ -886,7 +1021,7 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     setQuality,
     atmosphere,
     shafts,
-    post: () => post,
+    post: () => ({ title: titlePost, map: mapPost }),
     dispose() {
       freePost()
       scene.remove(sky)
