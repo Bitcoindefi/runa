@@ -2542,6 +2542,42 @@ function signGeometry(world, shop, sign, colors) {
   }
 }
 
+// Los bancos de las plazas: "[====]" en una fila, fuera de los edificios
+// (adentro de uno es una ventana del dibujo).
+function findBenches(world, s) {
+  const { inBuilding } = world
+  const { W, H, charAt } = s
+  const free = (x, y) => !inBuilding[y * W + x]
+  const benches = []
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (charAt(x, y) !== '[' || !free(x, y)) continue
+      let b = x + 1
+      while (b < W && charAt(b, y) === '=' && free(b, y)) b++
+      if (b - x >= 3 && charAt(b, y) === ']' && free(b, y)) benches.push({ y, a: x, b })
+    }
+  }
+  return benches
+}
+
+// Un banco de piedra: patas cada metro y medio y el asiento con su canto
+// claro, mas angosto que la celda.
+function benchGeometry(world, shop, bench, colors) {
+  const { CX, CZ } = world
+  const { y, a, b } = bench
+  const x0 = a * CX + 0.1
+  const x1 = (b + 1) * CX - 0.1
+  const z0 = y * CZ + 0.24
+  const z1 = (y + 1) * CZ - 0.24
+  const k = shop.at('stone', (x0 + x1) / 2, (z0 + z1) / 2)
+  const legs = Math.max(2, Math.round((x1 - x0) / 1.5) + 1)
+  for (let i = 0; i < legs; i++) {
+    const cx = x0 + 0.2 + ((x1 - x0 - 0.4) * i) / (legs - 1)
+    k.box(cx - 0.12, 0, z0 + 0.07, cx + 0.12, 0.4, z1 - 0.07, colors.stone)
+  }
+  k.box(x0, 0.4, z0, x1, 0.5, z1, colors.trim, { bottom: true, grime: false })
+}
+
 // --- Puestos del mercado -----------------------------------------------------
 
 // Lo que puede ser parte del dibujo de un puesto.
@@ -4259,10 +4295,13 @@ export function buildRamparts(world) {
   }
   // Los puestos del mercado salen de los cercos bajos: los arma stallGeometry.
   const stalls = findStalls(world, s)
-  // Los carteles sueltos: postes en los corchetes y tabla entre las palabras.
+  // Los carteles sueltos: postes en los corchetes y tabla entre las palabras;
+  // y los bancos de las plazas.
   const signs = findSigns(world, s)
+  const benches = findBenches(world, s)
   const empty = !s.mass.some((v) => v) && !s.low.some((v) => v)
-  if (empty && !monument && !plan && !stalls.length && !signs.length) return null
+  const extras = stalls.length + signs.length + benches.length
+  if (empty && !monument && !plan && !extras) return null
   const grid = padded(s)
   const gates = findGates(world, s, style)
   const porches = findOpenings(world, s, style)
@@ -4293,6 +4332,7 @@ export function buildRamparts(world) {
   lowWalls(world, s, shop, style, colors)
   for (const st of stalls) stallGeometry(world, s, shop, st, colors)
   for (const sign of signs) signGeometry(world, shop, sign, colors)
+  for (const bench of benches) benchGeometry(world, shop, bench, colors)
   if (monument) {
     // Piedra clara y pulida: el pedestal del heroe, con su piso de marmol.
     const marble = { ...colors, stone: colors.trim, walk: colors.trim.clone().multiplyScalar(0.92) }
@@ -4343,7 +4383,7 @@ export function buildRamparts(world) {
   // Del puesto se toma todo menos las letras del cartel, que siguen siendo
   // las de tripo-mundo.js.
   for (const st of stalls) for (const i of st.cells) if (world.kinds[i] !== 'sign') cells[i] = 1
-  for (const { y, a, b } of signs) {
+  for (const { y, a, b } of [...signs, ...benches]) {
     for (let x = a; x <= b; x++) {
       const i = y * s.W + x
       if (world.kinds[i] !== 'sign') cells[i] = 1
