@@ -128,13 +128,13 @@ function eachArt(width, height, art, point, anchorRow, anchorCol, visit) {
 
 // Cuanto falta, en celdas visuales (una fila vale dos columnas, Y_SCALE), hasta
 // el camino: 0 sobre el camino, hasta `cap` lejos. Sale del suelo del juego, asi
-// no se copia la geometria de los caminos.
+// no se copia la geometria de los caminos: el camino es ':' (la grava '%' del
+// camino queda adentro de esa banda; la suelta del yermo no es camino).
 function roadField(ground, width, height, cap = 6) {
   const far = new Float32Array(width * height).fill(cap)
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const ch = ground[y * width + x]
-      if (ch !== ':' && ch !== '%') continue
+      if (ground[y * width + x] !== ':') continue
       for (let dy = -3; dy <= 3; dy++) {
         const ny = y + dy
         if (ny < 0 || ny >= height) continue
@@ -182,12 +182,12 @@ function meadowMap(kit, field, names) {
     for (let x = 0; x < width; x++) {
       if (rows[y][x] === '%' && away(x, y) > 1.5) rows[y][x] = ','
       const k = Math.min(1, Math.max(0, (x - 96) / 80))
-      if (k > 0 && away(x, y) >= 2.5 && smoothNoise(x, y * 2, 13, 3) > 0.74 - k * 0.14) {
+      if (k > 0 && away(x, y) >= 2.5 && smoothNoise(x, y * 2, 13, 3) > 0.8 - k * 0.12) {
         dry[y * width + x] = 1
       }
     }
   }
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 3; pass++) {
     const was = dry.slice()
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -1867,9 +1867,13 @@ function showFall(box, L) {
   box.replaceChildren(L('You fell in battle', 'Caiste en combate'), note)
   box.hidden = false
   globalThis.clearTimeout(fellTimer)
-  fellTimer = globalThis.setTimeout(() => {
-    box.hidden = true
-  }, 2800)
+  // La pagina arma la ciudad enseguida y eso traba un momento: la cuenta
+  // empieza con el primer cuadro que se ve.
+  globalThis.requestAnimationFrame(() => {
+    fellTimer = globalThis.setTimeout(() => {
+      box.hidden = true
+    }, 2800)
+  })
 }
 
 function escapeHtml(text) {
@@ -2283,6 +2287,11 @@ class Crowd {
     this.ctx.scene.remove(this.group)
     for (const entry of this.kinds.values()) for (const mesh of entry.parts) mesh.dispose()
     for (const state of this.foes.values()) if (state.bar) state.bar.dispose()
+    // Los nombres: cada tipo tiene su textura; los carteles la comparten.
+    for (const template of this.labels.values()) {
+      template.material.map.dispose()
+      template.material.dispose()
+    }
     this.blobs.geometry.dispose()
     this.blobs.material.dispose()
     this.blobs.dispose()
@@ -2519,6 +2528,10 @@ class Effects {
     }
     if (close(meadow.gate, 7, 3)) return L('< or T · back to RUNA', '< o T · volver a RUNA')
     if (close(meadow.nox, 7, 3)) return L('N · cross into NOX', 'N · cruzar a NOX')
+    // Herido y lejos: T vuelve a la ciudad (en la iglesia se cura).
+    if (st.maxhp && st.hp / st.maxhp < 0.4) {
+      return L('Low HP · T: back to RUNA to heal', 'Poca vida · T: volver a RUNA a curarte')
+    }
     return ''
   }
 
@@ -2547,19 +2560,16 @@ class Effects {
     let foeHp = before.foeHp
     for (const event of events) {
       const at = time + delay
-      if (event.who === 'hero' || event.who === 'feint') {
-        this.queue.push({ at, kind: 'swing', weapon: after.weapon, id: before.id })
-        if (event.who === 'hero') {
-          foeHp = Math.max(0, foeHp - event.amount)
-          this.queue.push({
-            at: at + 0.12,
-            kind: 'foe-hit',
-            id: before.id,
-            amount: event.amount,
-            hp: foeHp
-          })
-          blow = delay + 0.12
-        }
+      if (event.who === 'feint') {
+        this.queue.push({ at, kind: 'advance' })
+        delay += 0.2
+      } else if (event.who === 'hero') {
+        foeHp = Math.max(0, foeHp - event.amount)
+        this.queue.push(
+          { at, kind: 'swing', weapon: after.weapon, id: before.id },
+          { at: at + 0.12, kind: 'foe-hit', id: before.id, amount: event.amount, hp: foeHp }
+        )
+        blow = delay + 0.12
         delay += 0.26
       } else if (event.who === 'foe') {
         this.queue.push({ at, kind: 'foe-swing', id: before.id })
@@ -2585,13 +2595,14 @@ class Effects {
       paid = /^cae el .*: \+(\d+) oro, \+(\d+) exp/.exec(String(said[i]))
     }
     if (!paid) return
+    // Sobre el heroe, que es quien cobra, y despues de que cae el monstruo.
+    const hero = this.ctx.hero.root.position
     const [gold, xp] = [Number(paid[1]), Number(paid[2])]
-    const top = spot.top + 0.45
     if (gold > 0) {
-      this.number(`+${gold} ${L('gold', 'oro')}`, '#f2c94a', spot.x, top, spot.z, at, 0.3)
+      this.number(`+${gold} ${L('gold', 'oro')}`, '#f2c94a', hero.x, 3.0, hero.z, at, 0.45)
     }
     if (xp > 0) {
-      this.number(`+${xp} ${L('XP', 'exp')}`, '#8fc8ff', spot.x, top - 0.45, spot.z, at, 0.55)
+      this.number(`+${xp} ${L('XP', 'exp')}`, '#8fc8ff', hero.x, 2.45, hero.z, at, 0.75)
     }
   }
 
@@ -2695,7 +2706,10 @@ class Effects {
   play(item, time) {
     const hero = this.ctx.hero.root.position
     const spot = item.id === undefined ? null : this.crowd.spot(item.id) || this.spot
-    if (item.kind === 'swing') {
+    if (item.kind === 'advance') {
+      // Un turno sin golpe (el heroe se acerca o espera su arma): solo el paso.
+      this.heroLunge = time
+    } else if (item.kind === 'swing') {
       this.heroLunge = time
       const style = WEAPON_STYLE[item.weapon] || 'punch'
       if (style === 'shot' && spot) {
@@ -2773,8 +2787,10 @@ export function createMeadow(ctx) {
   // Los nombres de las puertas y carteles, en el idioma elegido.
   function names() {
     return {
-      runa: L('RUNA gate', 'porton de RUNA'),
-      nox: L('NOX gate', 'porton de NOX'),
+      // Las puertas de los reinos van con su nombre solo: el cartel queda chico y
+      // no se mete en la muralla.
+      runa: 'RUNA',
+      nox: 'NOX',
       crypt: L('the crypt', 'la cripta'),
       portal: L('Colossus portal', 'portal del Coloso'),
       solid: L('a palisade', 'una empalizada'),
@@ -2905,19 +2921,25 @@ export function createMeadow(ctx) {
 
   function leave(mapId) {
     if (mapId !== 'field' || !shown) return
-    // Si la pagina deja la pradera en medio de una pelea, el heroe cayo: el juego
-    // ya lo puso en la iglesia. Se avisa un momento.
-    const fell = fx && fx.fighting()
+    // Si el juego saco al heroe del campo en medio de una pelea, cayo: ya lo
+    // puso en la iglesia. Se avisa un momento. (Cambiar de idioma o salir al
+    // titulo tambien deja el mapa, pero el juego sigue en el campo o termino.)
+    const game = session()
+    const fell = !!fx && fx.fighting() && !!game && !!game.runa && !game.runa.field
     tearDown()
     if (fell && bits) showFall(bits.fell, L)
   }
 
-  // Para medir desde la consola: lo que tarda en armarse y lo que esta pasando.
+  // Para medir y probar desde la consola: lo que tarda en armarse, lo que esta
+  // pasando, el campo que se ve y apagar partes para ver cuanto cuesta cada una.
   globalThis.runaMeadow = () => ({
     ...stats,
     shown: shown ? shown.map : null,
     fight: fx ? fx.debug() : null
   })
+  globalThis.runaMeadowField = () => liveField() || tourField
+  globalThis.runaMeadowRows = (x0, y0, x1, y1) =>
+    shown ? shown.data.rows.slice(y0, y1).map((row) => row.slice(x0, x1)) : null
   globalThis.runaMeadowToggle = (what, on) => {
     if (what === 'places' && places) places.group.visible = on
     if (what === 'crowd' && crowd) crowd.group.visible = on
@@ -2925,11 +2947,6 @@ export function createMeadow(ctx) {
       for (const child of shown.built.group.children) {
         if (!places || child !== places.group) child.visible = on
       }
-    }
-    if (what === 'shadows') {
-      ctx.scene.traverse((o) => {
-        if (o.isDirectionalLight) o.castShadow = on
-      })
     }
     return true
   }
