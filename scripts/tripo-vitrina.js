@@ -1395,8 +1395,9 @@ export function createShowcase(ctx) {
     controls.maxDistance = distance * 1.35
     controls.minAzimuthAngle = theta - 1.1
     controls.maxAzimuthAngle = theta + 1.1
-    controls.minPolarAngle = Math.max(0.25, polar - 0.55)
-    controls.maxPolarAngle = Math.min(Math.PI / 2 + 0.03, polar + 0.3)
+    // Los limites siempre contienen la pose de ahora: si no, la camara saltaria.
+    controls.minPolarAngle = Math.min(polar, Math.max(0.25, polar - 0.55))
+    controls.maxPolarAngle = Math.max(polar, Math.min(Math.PI / 2 + 0.03, polar + 0.3))
     controls.enabled = true
     // La pieza se muestra de frente un rato antes de empezar a girar.
     spinRest = Math.max(spinRest, 3.5)
@@ -1491,8 +1492,7 @@ export function createShowcase(ctx) {
   // Sin nadie que toque nada, la vitrina pasa sola a la pieza siguiente.
   function stepIdle(dt) {
     idle += dt
-    const bag = document.getElementById('bag')
-    if (orbiting || glide || (bag && !bag.hidden)) return
+    if (orbiting || glide || bagShown) return
     if (idle < (autoplay ? DWELL : IDLE)) return
     autoplay = true
     idle = 0
@@ -1652,6 +1652,11 @@ export function createShowcase(ctx) {
     paintTip()
   }
 
+  function clipName(clip) {
+    const doing = { Idle: 'quieto', Walk: 'camina', Run: 'corre' }[clip]
+    return L(clip, doing ? `${doing} (${clip})` : clip)
+  }
+
   // La linea de abajo: el clip del heroe animado, como se usa la vitrina y los
   // botones del probador.
   function paintTip() {
@@ -1660,11 +1665,15 @@ export function createShowcase(ctx) {
     const parts = []
     if (ex.loading) parts.push(text(L('loading the model...', 'cargando el modelo...')))
     if (ex.clip) {
-      // El clip por su nombre en el GLB; en castellano, con lo que hace.
+      // El clip por su nombre en el GLB; en castellano, con lo que hace. Todos
+      // ocupan lo mismo: si la ficha cambiara de alto, la pieza se volveria a
+      // encuadrar con cada clip.
       const now = document.createElement('span')
       const b = document.createElement('b')
-      const doing = { Idle: 'quieto', Walk: 'camina', Run: 'corre' }[ex.clip]
-      b.textContent = L(ex.clip, doing ? `${doing} (${ex.clip})` : ex.clip)
+      const names = ex.cycle.map(({ name }) => clipName(name))
+      b.textContent = clipName(ex.clip)
+      b.style.display = 'inline-block'
+      b.style.minWidth = Math.max(...names.map((name) => name.length)) + 'ch'
       now.append(L('Now: ', 'Ahora: '), b)
       parts.push(now)
     }
