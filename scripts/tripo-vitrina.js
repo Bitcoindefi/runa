@@ -409,7 +409,7 @@ const CSS = `
   align-items: center;
   gap: 12px;
   padding: 10px;
-  background: rgba(11, 11, 12, 0.86);
+  background: rgba(11, 11, 12, 0.93);
   border: 1px solid #3a3a36;
   border-top-color: rgba(224, 192, 96, 0.6);
   color: #d8d8d0;
@@ -432,11 +432,17 @@ const CSS = `
   user-select: none;
   -webkit-user-select: none;
 }
-#vitrina-card button:hover,
 #vitrina-card button:focus-visible {
   border-color: #e0c060;
   color: #e0c060;
   outline: none;
+}
+/* En una pantalla tactil el ultimo boton tocado queda en :hover. */
+@media (hover: hover) {
+  #vitrina-card button:hover {
+    border-color: #e0c060;
+    color: #e0c060;
+  }
 }
 #vitrina-card .nav {
   width: 46px;
