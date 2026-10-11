@@ -432,6 +432,14 @@
         padding: 10px 12px;
         box-sizing: border-box;
       }
+      /* La mision del rey, debajo de la ficha. */
+      #stats .quest {
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid var(--line);
+        color: var(--accent);
+        font-size: 12px;
+      }
       #stats .who {
         color: var(--accent);
       }
@@ -3510,6 +3518,20 @@
         return map ? tr(map.name) : ''
       }
 
+      // La mision del modo historia (st.story, del rey Aldren), en una linea:
+      // a quien ir, el capitulo y su progreso, o volver a cobrar. Los textos
+      // vienen del juego en castellano y se traducen como el resto.
+      function questLine(story) {
+        if (!story || story.status === 'done') return ''
+        const head = `&#128081; ${L('Chapter', 'Capitulo')} ${story.chapter}/${story.chapters}`
+        let text
+        if (story.status === 'available') text = tr('el rey Aldren te espera en el castillo')
+        else if (story.status === 'ready')
+          text = `${tr(story.title)}: ${L('return to ', 'volve con ')}${tr(story.returnTo)}`
+        else text = `${tr(story.title)}: ${tr(story.label)} ${story.progress}/${story.count}`
+        return `<div class="quest">${head} &middot; ${esc(text)}</div>`
+      }
+
       // La ficha se rearma solo si cambio algo de lo que muestra.
       function refreshPlayHud(force = false) {
         if (screen !== 'play' || !live) return
@@ -3526,6 +3548,7 @@
           placeOf(st),
           shownGear,
           st.boss ? [st.boss.hp, st.boss.phase, st.boss.defeated].join() : '',
+          st.story ? [st.story.id, st.story.status, st.story.progress].join() : '',
           st.near ? st.near.kind + (st.near.name || '') : '',
           st.field,
           settings.lang,
@@ -3543,7 +3566,8 @@
           bar('hp', st.hp, st.maxhp, `${L('HP', 'Vida')} ${st.hp}/${st.maxhp}`) +
           bar('xp', st.xp, st.xpneed, `${L('XP', 'Exp')} ${st.xp}/${st.xpneed || '-'}`) +
           `<div class="purse">${L('Gold', 'Oro')} ${st.gold} &middot; ${L('Potions', 'Pociones')} ${st.potions}</div>` +
-          (wornText ? `<div class="worn">${wornText}</div>` : '')
+          (wornText ? `<div class="worn">${wornText}</div>` : '') +
+          questLine(st.story)
         const boss = st.boss
         bossBox.hidden = !boss || boss.defeated
         if (boss && !boss.defeated) {
