@@ -668,3 +668,23 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
   todos los habitantes de la capital.
 - Resultado final: 140/140 pruebas, 1309/1309 aserciones y smoke de mapas limpio.
 - TODO: ninguno para esta primera ampliacion de habitantes ambientales.
+
+## Duelos en red: desconexiones y salida del Coliseo
+
+- Bug 1: al desconectarse alguien en pleno duelo, los dos se anotaban la
+  victoria. `dropPresence` rendia al rival (el que se iba ganaba) y el que se
+  quedaba hacia lo mismo al oir el silencio.
+- Ahora irse a proposito concede: el que deja la sala pierde y lo avisa, y el
+  que se queda gana. El silencio, que en un corte de red escuchan los dos
+  lados, termina el duelo sin ganador.
+- Bug 2: el invitado podia quedar encerrado con la salida `Q` bloqueada. Las
+  causas: la cola de 20 mensajes tiraba pasos, un hueco en la numeracion
+  congelaba al invitado para siempre, nadie leia el `result` del host y el
+  accept no era atomico (el retador podia no entrar y no avisaba).
+- Cola de duelo de 512, hueco detectado como anulacion, `result` del host o de
+  un rival que concede, accept despues de entrar, `decline` que anula un duelo
+  en curso y un plazo de 45 ticks sin pasos para el invitado.
+- Pruebas: 13 regresiones nuevas en `test/net.test.js`; 12 fallan con el
+  codigo anterior (la decimotercera cuida que un invitado no se declare
+  ganador). Resultado: 156/156 pruebas y 1427/1427 aserciones (antes 143 y
+  1362), lint limpio.
