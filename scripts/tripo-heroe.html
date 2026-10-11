@@ -772,7 +772,9 @@
       // (assets/tripo/spear.glb) se usa solo; aca van los alias y sus ajustes.
       const SKINS = {
         // Tripo entrega los modelos mirando hacia +x; el heroe mira hacia +z.
-        iron_helmet: { file: 'yelmo.glb', size: 0.46, yaw: -Math.PI / 2, lift: 0.03 }
+        iron_helmet: { file: 'yelmo.glb', size: 0.46, yaw: -Math.PI / 2, lift: 0.03 },
+        // La espada (sword.glb) ya viene parada y se usa sola; el escudo mira a +x.
+        shield: { file: 'shield.glb', size: 0.62, yaw: -Math.PI / 2 }
       }
       const HERO_FIT = { grow: 1.15, lift: 0.03, back: 0 }
       // Fondos por zona, con modelos de Tripo que ya existen. El del titulo es el
@@ -1257,6 +1259,9 @@
       // Lo que va en la cabeza tambien lo lleva el heroe de Tripo.
       const avatarHead = new THREE.Group()
       avatar.add(avatarHead)
+      // Y lo que va en las manos: un soporte por mano, colgado de su hueso.
+      const avatarHands = { left_hand: new THREE.Group(), right_hand: new THREE.Group() }
+      avatar.add(avatarHands.left_hand, avatarHands.right_hand)
       const headSize = { width: 0.42, depth: 0.42 }
       let avatarBody = null
       let avatarLoading = null
@@ -1300,6 +1305,22 @@
             if (chosen.rigged) {
               const head = object.getObjectByName('Head')
               if (head) head.attach(avatarHead)
+              // Cada soporte se pone en su mano en la pose de reposo, con los ejes del
+              // heroe (+y arriba, la cara hacia +z), y despues se cuelga del hueso:
+              // asi sigue la animacion sin heredar los ejes propios de la mano.
+              avatar.updateMatrixWorld(true)
+              for (const [slot, name] of [
+                ['left_hand', 'LeftHand'],
+                ['right_hand', 'RightHand']
+              ]) {
+                const bone = object.getObjectByName(name)
+                if (!bone) continue
+                const at = avatar.worldToLocal(bone.getWorldPosition(new THREE.Vector3()))
+                avatarHands[slot].position.copy(at)
+                avatarHands[slot].rotation.set(0, 0, 0)
+                avatarHands[slot].updateMatrixWorld(true)
+                bone.attach(avatarHands[slot])
+              }
               mixer = new THREE.AnimationMixer(object)
               for (const name of ['Idle', 'Walk', 'Run']) {
                 const clip = THREE.AnimationClip.findByName(clips, name)
@@ -1565,6 +1586,17 @@
         return BUILD[id] ? BUILD[id]() : part(new THREE.BoxGeometry(0.1, 0.1, 0.1), rune())
       }
 
+      // La pieza en la mano del heroe de Tripo: el arma con la hoja hacia adelante
+      // y un poco abajo (como se lleva al correr), el escudo de frente.
+      async function handPiece(id, slot) {
+        const object = await piece(id, slot)
+        const grip = new THREE.Group()
+        grip.add(object)
+        if (slot === 'left_hand') grip.rotation.x = Math.PI / 2 + 0.3
+        else grip.position.set(-0.05, 0, 0.1)
+        return grip
+      }
+
       async function wear(slot, entry, announce) {
         const id = entry ? entry.id : null
         const token = (tokens[slot] = (tokens[slot] || 0) + 1)
@@ -1575,11 +1607,16 @@
           const socket = slot === 'head' ? hero.headSocket : hero.arms[slot].socket
           const fitting = slot === 'head' ? refitHead(id) : null
           const next = id ? await piece(id, slot) : null
+          const inHand = slot !== 'head' && id ? await handPiece(id, slot) : null
           const onAvatar = await fitting
           if (token !== tokens[slot]) return
           socket.clear()
           if (next) socket.add(next)
-          shown = [next, onAvatar]
+          if (slot !== 'head') {
+            avatarHands[slot].clear()
+            if (inHand) avatarHands[slot].add(inHand)
+          }
+          shown = [next, onAvatar || inHand]
         }
         if (announce && id) {
           pop(shown)

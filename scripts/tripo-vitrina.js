@@ -129,6 +129,34 @@ const PIECES = [
     ]
   },
   {
+    key: 'sword',
+    file: 'sword.glb',
+    size: 1.0,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The rune sword', 'La espada runica'],
+    note: [
+      'Made with Tripo. In the game it is the sword: equip it and the hero carries it.',
+      'Hecho con Tripo. En el juego es la espada: equipala y el heroe la lleva.'
+    ],
+    acts: ['bag']
+  },
+  {
+    key: 'shield',
+    file: 'shield.glb',
+    size: 0.9,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The rune shield', 'El escudo runico'],
+    note: [
+      'Made with Tripo. In the game it is the shield: equip it and the hero carries it.',
+      'Hecho con Tripo. En el juego es el escudo: equipalo y el heroe lo lleva.'
+    ],
+    acts: ['bag']
+  },
+  {
     key: 'helmet',
     file: 'yelmo.glb',
     size: 0.46,
