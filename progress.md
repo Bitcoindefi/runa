@@ -668,3 +668,20 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
   todos los habitantes de la capital.
 - Resultado final: 140/140 pruebas, 1309/1309 aserciones y smoke de mapas limpio.
 - TODO: ninguno para esta primera ampliacion de habitantes ambientales.
+
+## Modo historia del rey
+
+- El rey Aldren entrega tres misiones encadenadas desde el salon del trono:
+  `la prueba del rey` (3 mosquitos), `la horda barbara` (2 saqueadores) y
+  `el despertar del Coloso` (3 golpes al Coloso).
+- Hablarle de nuevo muestra el progreso, paga oro y experiencia una sola vez y
+  entrega el capitulo siguiente; despues del ultimo dice un epilogo.
+- Las misiones pasan a `lib/quests.js` como datos: quien las da, objetivo,
+  textos y cadena. La de sir Cedric conserva sus textos, su guardado y su pago.
+- Saqueadores y Coloso no reaparecen: lo que una partida ya vencio antes de
+  aceptar el capitulo se acredita y la historia no se traba.
+- La ficha suma una fila para el capitulo y la pagina recibe `story` en el
+  estado en vivo; contrato en `docs/story.md` y textos en `lib/locales/en.json`.
+- Partidas sin claves de historia cargan con la historia sin empezar.
+- Resultado final: 154/154 pruebas, 1551/1551 aserciones y lint limpio. Las 11
+  pruebas nuevas estan en `test/story.test.js`.
