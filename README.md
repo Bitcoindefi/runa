@@ -297,6 +297,8 @@ Los espacios internos de todos los sprites son transparentes: el pasto y los cam
 
 Sir Cedric espera junto a la estatua de la plaza. Al hablarle con `E` entrega la misión de eliminar `20` mosquitos. Cada baja real actualiza el contador de la ficha y, al regresar con el objetivo completo, concede `100` de oro y `100` de experiencia. La recompensa solo puede cobrarse una vez y el progreso se conserva en la ranura activa.
 
+El rey Aldren, en el salón del trono, entrega el modo historia: tres misiones encadenadas. La prueba del rey pide eliminar `3` mosquitos, la horda bárbara derrotar `2` saqueadores de los campamentos del este y el despertar del Coloso asestar `3` golpes al Coloso Rúnico. Hablarle de nuevo muestra el progreso, paga cada misión una sola vez y entrega la siguiente; la última cierra con un epílogo. Detalles y estado para la página 2.5D en [docs/story.md](docs/story.md).
+
 ## Combate dentro del mapa
 
 El combate empieza cuando la hitbox del jugador toca la de un monstruo. Los dos personajes permanecen visibles sobre el terreno.

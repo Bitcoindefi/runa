@@ -186,7 +186,11 @@ function live(runa) {
     equipped: wearing(sheet.equipped),
     bag: sheet.items.map(item).filter(Boolean),
     foes: foesOf(field),
-    fight: fightOf(field)
+    fight: fightOf(field),
+    // El capitulo del modo historia, para un rastreador: titulo, objetivo,
+    // progreso y a quien volver. Los textos van en castellano y la pagina los
+    // traduce con tr(). Forma completa en docs/story.md.
+    story: runa.title ? null : runa.storySummary()
   }
 }
 
