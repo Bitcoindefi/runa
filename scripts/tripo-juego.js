@@ -11,12 +11,34 @@
 // de texto cuando el juego abre una pantalla que el mapa 3D no tiene.
 
 const { Program, KeyMsg } = require('bare-tui')
-const { Runa } = require('../lib/game.js')
+const { Runa, TICK_MS } = require('../lib/game.js')
 const { SaveStore } = require('../lib/saves.js')
 const { MAPS } = require('../lib/map.js')
 const { t, withLanguage, mapLabels } = require('../lib/locale.js')
+const field = require('../lib/field.js')
+const CONTENT = require('../lib/content.js')
 const fs = require('bare-fs')
 const estado = require('./tripo-estado.js')
+
+// La pradera para la vista 3D (tripo-pradera.js): el campo del juego tal cual,
+// para armar una sin partida (el recorrido) y para leer el suelo y el arte de
+// cada lugar de la que esta en marcha. Solo se lee: las reglas son las de lib/.
+const meadow = {
+  Field: field.Field,
+  groundAt: field.fieldGroundAt,
+  camp: field.barbarianSettlementArt,
+  art: {
+    runa: field.RUNA_GATE_ART,
+    nox: field.NOX_GATE_ART,
+    crossroads: field.CROSSROADS_ART,
+    ranger: field.RANGER_POST_ART,
+    crypt: field.DUNGEON_ENTRANCE_ART,
+    portal: field.WORLD_BOSS_PORTAL_ART
+  },
+  foes: CONTENT.foes,
+  // Cuantas veces por segundo avanza el campo: lo que tarda un paso de monstruo.
+  tps: 1000 / TICK_MS
+}
 
 // Donde quedan las ranuras dentro de localStorage (bare-fs del navegador).
 const SAVES = '/runa/saves'
@@ -240,5 +262,6 @@ module.exports = {
   signs,
   persistent: () => (typeof fs.persistent === 'function' ? fs.persistent() : false),
   SAVES,
-  MAPS
+  MAPS,
+  meadow
 }
