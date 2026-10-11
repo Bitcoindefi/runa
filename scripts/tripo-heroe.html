@@ -3529,7 +3529,8 @@
         else if (story.status === 'ready')
           text = `${tr(story.title)}: ${L('return to ', 'volve con ')}${tr(story.returnTo)}`
         else text = `${tr(story.title)}: ${tr(story.label)} ${story.progress}/${story.count}`
-        return `<div class="quest">${head} &middot; ${esc(text)}</div>`
+        const shown = text.charAt(0).toUpperCase() + text.slice(1)
+        return `<div class="quest">${head} &middot; ${esc(shown)}</div>`
       }
 
       // La ficha se rearma solo si cambio algo de lo que muestra.
