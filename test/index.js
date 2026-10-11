@@ -2389,6 +2389,17 @@ test('the larger meadow contains three removable barbarian settlements', (t) => 
   field.player.y = first.y
   const events = field.walk(1, 0)
   t.ok(events.some((event) => event.type === 'barbarian-enter' && event.campId === first.id))
+
+  // On foot from the meadow: below the facade, straight up through the gate.
+  t.absent(field.settlementStructureAt(first.x, first.y + 1), 'the gate under the J is open')
+  field.player.x = first.x
+  field.player.y = first.y + 2
+  field.walk(0, -1)
+  const fromOutside = field.walk(0, -1)
+  t.ok(
+    fromOutside.some((event) => event.type === 'barbarian-enter' && event.campId === first.id),
+    'the J is reachable walking in from outside the palisade'
+  )
   t.ok(field.clearSettlement(first.id), 'a conquered settlement can be removed from the meadow')
   t.absent(field.settlementAt(first.x, first.y), 'its entrance disappears after conquest')
 })

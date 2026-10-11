@@ -3060,6 +3060,64 @@
         return [sx, sy, Math.abs(sx) * CX + Math.abs(sy) * CZ]
       }
 
+      // Las puertas y salidas del juego miden una celda (0,5 m) aunque el porton
+      // 3D se vea ancho, y los caminos que llegan son de tres. Si el paso empuja
+      // contra algo que no se cruza y a una o dos celdas al costado hay una puerta
+      // o un paso libre hacia adelante, el heroe se corre hacia ese lado: entrar
+      // no exige apuntar a la celda justa. Las reglas no cambian: solo se elige
+      // que tecla mandar.
+      function cellRules() {
+        const runa = session && session.runa
+        if (!runa) return null
+        const f = runa.field
+        if (f && f.player) {
+          const exits = [f.gate, f.noxGate, f.dungeonEntrance, f.worldBossPortal].filter(Boolean)
+          const inside = (x, y) => x >= 0 && y >= 0 && x < f.width && y < f.height
+          return {
+            x: f.player.x,
+            y: f.player.y,
+            open: (x, y) =>
+              inside(x, y) && !f.settlementStructureAt(x, y) && !(f.boss && f.boss.occupies(x, y)),
+            door: (x, y) => !!f.settlementAt(x, y) || exits.some((e) => e.x === x && e.y === y)
+          }
+        }
+        const w = runa.walker
+        if (!w || typeof w.peek !== 'function') return null
+        return {
+          x: w.x,
+          y: w.y,
+          open: (x, y) => !w.peek(x - w.x, y - w.y).solid,
+          door: (x, y) => !!w.peek(x - w.x, y - w.y).enter
+        }
+      }
+      function nudge(dx, dy) {
+        if (!dx === !dy) return null
+        const c = cellRules()
+        if (!c || c.open(c.x + dx, c.y + dy)) return null
+        // Una puerta a una o dos celdas al costado (o justo delante de esa celda)
+        // gana; si no hay puerta, solo se corrige una celda para doblar una esquina.
+        let best = null
+        for (const k of [1, 2]) {
+          for (const side of [-1, 1]) {
+            const ox = dy ? side : 0
+            const oy = dx ? side : 0
+            let clear = true
+            for (let i = 1; i < k; i++) if (!c.open(c.x + ox * i, c.y + oy * i)) clear = false
+            if (!clear) continue
+            const nx = c.x + ox * k
+            const ny = c.y + oy * k
+            let rank = null
+            if (c.door(nx, ny)) rank = 0
+            else if (c.open(nx, ny) && c.door(nx + dx, ny + dy)) rank = 0
+            else if (k === 1 && c.open(nx, ny) && c.open(nx + dx, ny + dy)) rank = 1
+            if (rank === null) continue
+            if (!best || rank < best.rank || (rank === best.rank && k < best.k))
+              best = { rank, k, ox, oy }
+          }
+        }
+        return best ? [best.ox, best.oy] : null
+      }
+
       function stepGame(dt, st) {
         // Que eje no se movio con el ultimo paso: una pared o un NPC.
         if (mover.last) {
@@ -3084,7 +3142,11 @@
         mover.wait -= dt
         if (mover.wait > 0) return
         if (mover.wait < -0.1) mover.wait = 0
-        const [sx, sy, meters] = nextStep(dx, dy, mover)
+        // Contra un muro con una puerta cerca: el paso va de costado, hacia ella.
+        const side = st.combat ? null : nudge(dx, dy)
+        const [sx, sy, meters] = side
+          ? [side[0], side[1], Math.abs(side[0]) * CX + Math.abs(side[1]) * CZ]
+          : nextStep(dx, dy, mover)
         if (!sx && !sy) {
           mover.wait = 0.05
           return
