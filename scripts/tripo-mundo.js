@@ -234,6 +234,10 @@ function material(spec) {
   return m
 }
 
+// Las etiquetas vivas, para que la pagina las achique de cerca cuando la camara
+// va en tercera persona (estan pensadas para la vista 2.5D, a 44 m).
+export const labels = new Set()
+
 // Una etiqueta que siempre mira a la camara.
 export function label(text, color = '#e0c060') {
   const canvas = document.createElement('canvas')
@@ -257,6 +261,8 @@ export function label(text, color = '#e0c060') {
   sprite.renderOrder = 10
   // Para las capturas sin interfaz (runaView.labels).
   sprite.userData.label = true
+  sprite.userData.size = sprite.scale.clone()
+  labels.add(sprite)
   return sprite
 }
 
