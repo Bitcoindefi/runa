@@ -3361,6 +3361,96 @@ export function buildWorld(data, extras = {}) {
     place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI, (object) => {
       colossus = object
     })
+    sponsors(toWorld(data.boss.x, data.boss.y))
+  }
+
+  // Tripothon en la arena del Coloso, como la publicidad de una cancha: el logo
+  // pintado en el piso frente al Coloso (se lee derecho desde la camara, que
+  // mira al norte), tableros bajos sobre el borde norte, contra la lava, y dos
+  // afiches con la portada de la Demo Day de Sao Paulo en las puntas.
+  function sponsors(boss) {
+    const textures = new THREE.TextureLoader()
+    const texture = (file) => {
+      const t = textures.load(`assets/ui/${file}`)
+      t.colorSpace = THREE.SRGBColorSpace
+      t.anisotropy = 8
+      return t
+    }
+    const logo = texture('tripothon-logo.png')
+    const poster = texture('tripothon-sp.png')
+    const ASPECT = 4.2
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(8.5, 8.5 / ASPECT),
+      new THREE.MeshBasicMaterial({
+        map: logo,
+        color: 0xffe6c0,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      })
+    )
+    floor.rotation.x = -Math.PI / 2
+    // En la franja libre de ruinas (filas 19 a 21), entre el portal y el Coloso.
+    floor.position.set(boss.x - 6.5, 0.05, boss.z - 2.2)
+    floor.renderOrder = 2
+    group.add(floor)
+
+    const frame = new THREE.MeshStandardMaterial({
+      color: 0x15121c,
+      roughness: 0.55,
+      metalness: 0.4
+    })
+    const glow = new THREE.MeshStandardMaterial({
+      color: 0x0d0b14,
+      emissive: 0x2a1f55,
+      emissiveIntensity: 0.6,
+      roughness: 0.4
+    })
+    const face = new THREE.MeshBasicMaterial({ map: logo, transparent: true, depthWrite: false })
+    const posterFace = new THREE.MeshBasicMaterial({ map: poster })
+    const edge = 15.25
+    for (const x of [boss.x - 7, boss.x - 2, boss.x + 3]) {
+      const board = new THREE.Group()
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.15, 0.14), [
+        frame,
+        frame,
+        frame,
+        frame,
+        glow,
+        frame
+      ])
+      panel.position.y = 0.95
+      panel.castShadow = true
+      const words = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7 / ASPECT), face)
+      words.position.set(0, 0.95, 0.075)
+      for (const side of [-1.8, 1.8]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), frame)
+        leg.position.set(side, 0.2, 0)
+        board.add(leg)
+      }
+      board.add(panel, words)
+      board.position.set(x, 0, edge)
+      group.add(board)
+    }
+    for (const x of [boss.x - 12, boss.x + 8]) {
+      const stand = new THREE.Group()
+      const art = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 0.12), [
+        frame,
+        frame,
+        frame,
+        frame,
+        posterFace,
+        frame
+      ])
+      art.position.y = 1.9
+      art.castShadow = true
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.8, 0.16), frame)
+      post.position.y = 0.4
+      stand.add(art, post)
+      stand.position.set(x, 0, edge + 0.4)
+      group.add(stand)
+    }
   }
 
   return {
