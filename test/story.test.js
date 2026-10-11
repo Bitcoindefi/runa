@@ -18,8 +18,7 @@ const {
   STORY_START,
   STORY_HINT,
   questState,
-  questText,
-  goalText
+  questText
 } = require('../lib/quests.js')
 const estado = require('../scripts/tripo-estado.js')
 
@@ -51,20 +50,54 @@ function talkTo(game, npc, mapId) {
 const talkToKing = (game) => talkTo(game, KING, 'castle')
 const talkToKnight = (game) => talkTo(game, CEDRIC, 'city')
 
-// The end of a won fight exactly as syncCombat settles it.
+// The end of a won fight exactly as syncCombat settles it. The hero stays
+// where they stood, so a camp keeps its own state.
 function winFight(game, kind) {
+  const field = game.field
   const world = new World(kind)
   world.over = 'ganaste'
   game.field = { combat: null }
   game.pending = world
   game.earned = { kind }
   game.syncCombat(true)
-  game.field = null
+  game.field = field
 }
 
 function finishChapter(game, kind, count) {
   for (let kill = 0; kill < count; kill++) winFight(game, kind)
   talkToKing(game)
+}
+
+// What the browser page shows: it keeps the last four lines of the log.
+const pageLog = (game) => game.log.slice(-4)
+
+// The first camp of the frontier, entered on foot through its gate.
+function enterCamp(game) {
+  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
+  const settlement = game.field.settlements[0]
+  game.field.player.x = settlement.x - 1
+  game.field.player.y = settlement.y
+  game.move(1, 0)
+}
+
+// A real fight inside the camp: walk into a standing raider and win it.
+function slayRaider(game) {
+  const raider = game.field.foes.find((foe) => foe.kind === RAID.target && !foe.dead)
+  game.field.player.x = raider.x - 1
+  game.field.player.y = raider.y
+  game.move(1, 0)
+  if (!game.field.combat) return false
+  game.field.combat.world.over = 'ganaste'
+  game.advanceCombat()
+  return raider.dead
+}
+
+// Out through the U gate, which writes the camp back into the frontier.
+function leaveCamp(game) {
+  const exit = game.field.layout.exit
+  game.field.player.x = exit.x
+  game.field.player.y = exit.y - 1
+  game.move(0, 1)
 }
 
 function removeSaveFixture(dir) {
@@ -143,6 +176,10 @@ test('King Aldren hands out each chapter, tracks it and pays it once', (t) => {
   t.alike(game.quests.barbarian_raid, { status: 'active', progress: 0 }, 'the next chapter unlocks')
   t.ok(game.log.includes('Aldren: los barbaros saquean el este'))
   t.ok(game.log.includes('mision aceptada: derrota 2 saqueadores (0/2)'))
+  t.ok(
+    pageLog(game).includes('mision completada: +20 oro, +20 exp'),
+    'the reward is still on the page once the next chapter is handed out'
+  )
   t.is(game.storySummary().chapter, 2)
 
   const paid = game.player.gold
@@ -155,31 +192,46 @@ test('raiders killed in a real barbarian camp count for the second chapter', (t)
   const game = new Runa({ presence: false })
   startGame(game)
   talkToKing(game)
-  finishChapter(game, 'mosquito', TRIAL.count)
-  t.is(game.quests.barbarian_raid.status, 'active')
+  const standing = standingBarbarians(RAID.target, game.barbarianState)
 
-  game.field = new Field({ player: game.player, seed: game.fieldSeed() })
-  const settlement = game.field.settlements[0]
-  game.field.player.x = settlement.x - 1
-  game.field.player.y = settlement.y
-  game.move(1, 0)
+  // A raid during the first chapter is not owed to the second one while the
+  // frontier still holds the raiders it asks for.
+  enterCamp(game)
   t.is(game.field.mode, 'barbarian-camp', 'the camp is entered on foot through its gate')
+  t.ok(slayRaider(game), 'walking into a raider starts a real fight')
+  t.is(game.quests.barbarian_raid.status, 'available')
+  leaveCamp(game)
+  t.is(game.field.mode, 'field', 'U leads back to the meadow')
+  t.is(
+    standingBarbarians(RAID.target, game.barbarianState),
+    standing - 1,
+    'the camp keeps its dead'
+  )
+  finishChapter(game, 'mosquito', TRIAL.count)
+  t.alike(
+    game.quests.barbarian_raid,
+    { status: 'active', progress: 0 },
+    'a raider killed before the chapter does not count'
+  )
+  t.ok(game.log.includes('mision aceptada: derrota 2 saqueadores (0/2)'))
 
-  const raider = game.field.foes.find((foe) => foe.kind === RAID.target && !foe.dead)
-  game.field.player.x = raider.x - 1
-  game.field.player.y = raider.y
-  game.move(1, 0)
-  t.ok(game.field.combat, 'walking into a raider starts the fight')
-  game.field.combat.world.over = 'ganaste'
-  game.advanceCombat()
+  enterCamp(game)
+  t.ok(slayRaider(game))
   t.absent(game.field.combat)
   t.is(game.quests.barbarian_raid.progress, 1, 'the camp kill reaches the quest')
   t.ok(game.log.includes('mision la horda barbara: 1/2'))
 
   winFight(game, 'barbarian_thrower')
   t.is(game.quests.barbarian_raid.progress, 1, 'other barbarians do not count')
-  winFight(game, RAID.target)
+  t.is(game.field.mode, 'barbarian-camp', 'the hero is still inside the camp')
+  t.ok(slayRaider(game))
   t.ok(game.log.includes('mision lista: vuelve con el rey Aldren (2/2)'))
+  leaveCamp(game)
+  t.is(
+    standingBarbarians(RAID.target, game.barbarianState),
+    standing - 3,
+    'leaving through U writes every raider killed inside into the frontier'
+  )
 
   const gold = game.player.gold
   talkToKing(game)
@@ -195,10 +247,20 @@ test('a frontier raided before the chapter cannot block the story', (t) => {
   cleared.barbarianState = { cleared: BARBARIAN_SETTLEMENTS.map((camp) => camp.id), camps: {} }
   for (let kill = 0; kill < TRIAL.count; kill++) winFight(cleared, 'mosquito')
   const gold = cleared.player.gold
+  cleared.log.length = 0
   talkToKing(cleared)
   t.is(cleared.quests.barbarian_raid.status, 'completed', 'no raiders left: paid on the spot')
   t.is(cleared.player.gold, gold + TRIAL.reward.gold + RAID.reward.gold)
   t.is(cleared.quests.colossus_awakening.status, 'active', 'and the story moves on')
+  t.ok(
+    pageLog(cleared).includes('mision completada: +80 oro, +80 exp'),
+    'both chapters are paid in one line that stays on the page'
+  )
+  t.absent(
+    cleared.log.includes('Aldren: los barbaros saquean el este'),
+    'a chapter the hero already won is not announced'
+  )
+  t.ok(pageLog(cleared).includes('mision aceptada: asesta 3 golpes al Coloso (0/3)'))
 
   // Every raider down but one: the chapter only asks for the one left.
   const camps = {}
@@ -232,8 +294,20 @@ test('the Colossus chapter counts real hits in the volcanic ruins', (t) => {
   t.ok(game.log.includes('Aldren: el Coloso despierta tras el portal del yermo'))
 
   game.field = new BossZone({ player: game.player })
-  game.field.player.x = game.field.boss.x - 12
-  game.field.player.y = game.field.boss.y
+  const boss = game.field.boss
+  game.field.player.y = boss.y
+  game.field.player.x = boss.x - 40
+  press(game, 'f')
+  t.ok(game.log.includes('el Coloso esta demasiado lejos'), 'f from afar misses')
+  game.field.player.x = boss.x - 20
+  press(game, 'f')
+  t.ok(
+    game.log.some((line) => line.startsWith('el Coloso esta fuera de alcance')),
+    'and so does f out of reach'
+  )
+  t.is(game.quests.colossus_awakening.progress, 0, 'a missed f does not count')
+
+  game.field.player.x = boss.x - 12
   press(game, 'f')
   t.is(game.quests.colossus_awakening.progress, 1, 'f lands a hit and the king counts it')
   t.ok(game.log.includes('mision el despertar del Coloso: 1/3'))
@@ -282,10 +356,12 @@ test('a fallen Colossus completes its chapter instead of blocking it', (t) => {
   finishChapter(fallen, 'mosquito', TRIAL.count)
   for (let kill = 0; kill < RAID.count; kill++) winFight(fallen, RAID.target)
   const gold = fallen.player.gold
+  fallen.log.length = 0
   talkToKing(fallen)
   t.is(fallen.quests.colossus_awakening.status, 'completed', 'beaten before the chapter: paid')
   t.is(fallen.player.gold, gold + RAID.reward.gold + COLOSSUS.reward.gold)
-  t.ok(fallen.log.includes(`Aldren: ${COLOSSUS.epilogue}`))
+  t.ok(pageLog(fallen).includes('mision completada: +160 oro, +160 exp'))
+  t.ok(pageLog(fallen).includes(`Aldren: ${COLOSSUS.epilogue}`))
 })
 
 test('the plaza knight hunt runs beside the story without sharing its state', (t) => {
@@ -345,6 +421,7 @@ test('story progress survives a save slot and older saves start it fresh', (t) =
     t.alike(loaded.quests, game.quests, 'every quest comes back as it was')
     t.alike(loaded.storySummary(), game.storySummary(), 'the tracker shows the same chapter')
     t.alike(loaded.quests.barbarian_raid, { status: 'active', progress: 1 })
+    t.absent(loaded.log.includes(STORY_HINT), 'a hero already in the story is not sent again')
 
     // A slot written before the story existed only knew the knight hunt.
     const raw = JSON.parse(fs.readFileSync(path.join(dir, 'slot-1.json'), 'utf8'))
@@ -360,12 +437,28 @@ test('story progress survives a save slot and older saves start it fresh', (t) =
       t.alike(old.quests[id], { status: 'available', progress: 0 }, `${id} starts fresh`)
     }
     t.is(old.storySummary().chapter, 1)
+    t.alike(
+      old.log.slice(0, 2),
+      ['partida 2 cargada. bienvenido otra vez, Lia.', STORY_HINT],
+      'an older save learns that the king awaits, right after the welcome'
+    )
     talkToKing(old)
     t.is(old.quests.king_trial.status, 'active', 'and the king can start it')
 
     const bare = new Runa({ presence: false, saves })
     t.ok(bare.loadSlot(3), 'a save without any quests loads too')
     t.is(bare.storySummary().status, 'available')
+    t.ok(bare.log.includes(STORY_HINT))
+
+    // NOX does not send its heroes to RUNA's throne on a load either.
+    const nox = new Runa({
+      presence: false,
+      saves: { list: () => [], load: () => ({ ...raw, realm: 'nox' }) }
+    })
+    t.ok(nox.loadSlot(1))
+    t.is(nox.realm, 'nox')
+    t.is(nox.storySummary().status, 'available')
+    t.absent(nox.log.includes(STORY_HINT), 'a hero of NOX is not sent to the king')
   } finally {
     removeSaveFixture(dir)
   }
@@ -398,7 +491,6 @@ test('the browser state exposes the story chapter for a tracker', (t) => {
     chapter: 1,
     chapters: 3,
     title: 'la prueba del rey',
-    goal: 'elimina 3 mosquitos',
     label: 'mosquitos',
     status: 'available',
     progress: 0,
@@ -418,7 +510,7 @@ test('the browser state exposes the story chapter for a tracker', (t) => {
   const second = estado.live(game).story
   t.is(second.id, 'barbarian_raid')
   t.is(second.chapter, 2)
-  t.is(second.goal, 'derrota 2 saqueadores')
+  t.is(second.label, 'saqueadores')
   t.alike(second.giver, giver)
 })
 
@@ -431,27 +523,26 @@ test('story lines are ASCII and read whole in English', (t) => {
     [questText.progress(TRIAL, 1, 'Aldren'), 'Aldren: so far 1/3 mosquitos'],
     [questText.note(TRIAL, 1), "quest the king's trial: 1/3"],
     [questText.ready(TRIAL), 'quest ready: return to King Aldren (3/3)'],
-    [questText.reward(TRIAL), 'quest complete: +20 gold, +20 exp'],
+    [questText.reward(TRIAL.reward), 'quest complete: +20 gold, +20 exp'],
     [`Aldren: ${RAID.intro}`, 'Aldren: barbarians are raiding the east'],
     [questText.accepted(RAID, 1), 'quest accepted: defeat 2 raiders (1/2)'],
     [questText.progress(RAID, 1, 'Aldren'), 'Aldren: so far 1/2 raiders'],
     [questText.note(RAID, 1), 'quest the barbarian horde: 1/2'],
     [questText.ready(RAID), 'quest ready: return to King Aldren (2/2)'],
-    [questText.reward(RAID), 'quest complete: +60 gold, +60 exp'],
+    [questText.reward(RAID.reward), 'quest complete: +60 gold, +60 exp'],
     [`Aldren: ${COLOSSUS.intro}`, 'Aldren: the Colossus stirs beyond the wasteland portal'],
-    [questText.accepted(COLOSSUS), 'quest accepted: land 3 hits on Colossus (0/3)'],
-    [questText.progress(COLOSSUS, 2, 'Aldren'), 'Aldren: so far 2/3 hits on Colossus'],
+    [questText.accepted(COLOSSUS), 'quest accepted: land 3 Colossus hits (0/3)'],
+    [questText.progress(COLOSSUS, 2, 'Aldren'), 'Aldren: so far 2/3 Colossus hits'],
     [questText.note(COLOSSUS, 1), 'quest the Colossus awakens: 1/3'],
     [questText.ready(COLOSSUS), 'quest ready: return to King Aldren (3/3)'],
-    [questText.reward(COLOSSUS), 'quest complete: +100 gold, +100 exp'],
+    [questText.reward(COLOSSUS.reward), 'quest complete: +100 gold, +100 exp'],
+    [questText.reward({ gold: 160, xp: 160 }), 'quest complete: +160 gold, +160 exp'],
     [`Aldren: ${COLOSSUS.epilogue}`, 'Aldren: RUNA owes you its peace; your mark is now legend'],
     [TRIAL.title, "the king's trial"],
     [RAID.title, 'the barbarian horde'],
     [COLOSSUS.title, 'the Colossus awakens'],
-    [goalText(TRIAL), 'defeat 3 mosquitos'],
-    [goalText(RAID), 'defeat 2 raiders'],
-    [goalText(COLOSSUS), 'land 3 hits on Colossus'],
     [TRIAL.returnTo, 'King Aldren'],
+    ['rey: vuelve con Aldren', 'king: return to Aldren'],
     [questText.accepted(KNIGHT), 'quest accepted: defeat 20 mosquitos (0/20)'],
     [questText.ready(KNIGHT), 'quest ready: return to the knight in the square (20/20)']
   ]
@@ -459,13 +550,37 @@ test('story lines are ASCII and read whole in English', (t) => {
     t.ok(/^[\x20-\x7e]+$/.test(spanish), `ASCII: ${spanish}`)
     t.is(en(spanish), english)
   }
+
+  // The tracker label and the sheet row of every chapter are whole keys.
+  const labels = {
+    mosquitos: 'mosquitos',
+    saqueadores: 'raiders',
+    'golpes al Coloso': 'Colossus hits'
+  }
+  for (const id of STORY) {
+    const label = QUESTS[id].label
+    t.ok(/^[\x20-\x7e]+$/.test(label), `ASCII: ${label}`)
+    t.is(en(label), labels[label], `${id} has an English label`)
+    t.is(en(`rey: ${label}`), `king: ${labels[label]}`, `${id} has an English sheet row`)
+  }
+
+  // Story keys carry their context: a line that only shares a word with them
+  // keeps that word, instead of coming out as "the Colossus land un golpe".
+  for (const line of [
+    'el Coloso asesta un golpe',
+    'una derrota que elimina dudas',
+    'el rey: nadie'
+  ]) {
+    t.absent(/\b(land|defeat|king)\b/.test(en(line)), `untouched: ${en(line)}`)
+  }
+
   t.alike(
     [
       questText.accepted(KNIGHT),
       questText.progress(KNIGHT, 5, 'sir Cedric'),
       questText.note(KNIGHT, 5),
       questText.ready(KNIGHT),
-      questText.reward(KNIGHT)
+      questText.reward(KNIGHT.reward)
     ],
     [
       'mision aceptada: elimina 20 mosquitos (0/20)',

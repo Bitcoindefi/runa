@@ -685,3 +685,22 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
 - Partidas sin claves de historia cargan con la historia sin empezar.
 - Resultado final: 154/154 pruebas, 1551/1551 aserciones y lint limpio. Las 11
   pruebas nuevas estan en `test/story.test.js`.
+
+## Revision del modo historia
+
+- Las partidas de RUNA que todavia no hablaron con el rey, incluidas las
+  guardadas antes de la historia, leen `el rey Aldren te espera en el castillo`
+  al cargar, no solo al empezar.
+- Una charla con el rey cabe en las cuatro lineas del registro de la pagina:
+  los capitulos que ya estaban cumplidos al entregarlos se pagan en el acto,
+  sin anunciarse, y todo el pago va en una sola linea.
+- Fuera las claves de una palabra (`elimina`, `derrota`, `asesta`, `rey:`):
+  las nuevas llevan contexto y `story` ya no trae `goal`; el rastreador usa
+  `label` con `progress/count`. En ingles los golpes son `Colossus hits`.
+- Pruebas nuevas: un saqueador muerto antes del capitulo 2 no cuenta, un `F`
+  que no llega tampoco, y el campamento se recorre entero hasta salir por `U`.
+- Sin la rama inalcanzable de campamento en `questSupply`; `docs/story.md`
+  anota que el capitulo 3 lee el Coloso de la ranura hasta que exista el estado
+  global de `docs/world-boss.md`.
+- Resultado final: 154/154 pruebas, 1584/1584 aserciones y lint limpio.
+- TODO: que la pagina muestre `story` como rastreador (area de Codex).
