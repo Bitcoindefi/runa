@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Runa</title>
     <link rel="icon" href="data:," />
     <script type="importmap">
@@ -120,7 +120,6 @@
         pointer-events: auto;
       }
       #places button,
-      #pad button,
       #actions button {
         color: var(--fg);
         background: rgba(11, 11, 12, 0.72);
@@ -143,25 +142,54 @@
       .credits a {
         color: var(--accent);
       }
+      /* El joystick tactil, abajo a la izquierda: la base y la perilla que
+         sigue al pulgar. */
       #pad {
         position: fixed;
-        right: 16px;
-        bottom: 16px;
-        display: grid;
-        grid-template-columns: repeat(3, 52px);
-        grid-template-rows: repeat(3, 52px);
-        gap: 4px;
+        left: calc(18px + env(safe-area-inset-left));
+        bottom: calc(18px + env(safe-area-inset-bottom));
+        width: 148px;
+        height: 148px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(224, 192, 96, 0.12) 0%,
+          rgba(11, 11, 12, 0.55) 70%
+        );
+        border: 2px solid rgba(224, 192, 96, 0.45);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
         touch-action: none;
         z-index: 3;
       }
-      #pad button {
-        font-size: 20px;
-        padding: 0;
+      #pad .knob {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 62px;
+        height: 62px;
+        margin: -31px 0 0 -31px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #f3d273, #b8862e);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+        transition: transform 0.12s;
       }
-      /* Las diagonales, en las esquinas: un poco mas discretas. */
-      #pad .diag {
-        font-size: 18px;
-        color: var(--dim);
+      #pad.held .knob {
+        transition: none;
+      }
+      #rotate {
+        position: fixed;
+        left: 50%;
+        top: calc(10px + env(safe-area-inset-top));
+        transform: translateX(-50%);
+        z-index: 6;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--accent);
+        background: rgba(11, 11, 12, 0.88);
+        color: var(--fg);
+        font-size: 13px;
+        white-space: nowrap;
       }
       #talk {
         position: fixed;
@@ -208,7 +236,6 @@
         cursor: pointer;
       }
       #pad,
-      #pad button,
       #actions button {
         user-select: none;
         -webkit-user-select: none;
@@ -518,20 +545,65 @@
       #hint:empty {
         display: none;
       }
+      /* Los botones tactiles, abajo a la derecha: atacar grande en la esquina,
+         usar y la mochila al lado, y los secundarios mas chicos arriba. */
       #actions {
         position: fixed;
-        left: 16px;
-        bottom: 16px;
+        right: calc(16px + env(safe-area-inset-right));
+        bottom: calc(16px + env(safe-area-inset-bottom));
         display: grid;
-        grid-template-columns: repeat(3, 56px);
-        gap: 6px;
+        grid-template-columns: 58px 58px 74px;
+        grid-template-rows: 40px 58px 74px;
+        grid-template-areas:
+          'peek t menu'
+          'escape i e'
+          'enter gait f';
+        gap: 8px;
         pointer-events: auto;
         z-index: 3;
       }
       #actions button {
-        height: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
         padding: 0;
-        font-size: 13px;
+        border-radius: 50%;
+        border: 2px solid rgba(224, 192, 96, 0.4);
+        background: rgba(11, 11, 12, 0.66);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+        font-size: 21px;
+        line-height: 1;
+        touch-action: manipulation;
+      }
+      #actions button small {
+        font-size: 9px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      #actions button[data-act='f'] {
+        font-size: 30px;
+        color: #1a1409;
+        background: radial-gradient(circle at 35% 30%, #f6dc8f, #c99a36);
+        border-color: #f6dc8f;
+      }
+      #actions button[data-act='f'] small {
+        color: #3a2a0c;
+      }
+      #actions button[data-act='peek'],
+      #actions button[data-act='t'],
+      #actions button[data-act='menu'],
+      #actions button[data-act='gait'] {
+        border-radius: 12px;
+        font-size: 15px;
+      }
+      #actions button[data-act='gait'] {
+        font-size: 12px;
+      }
+      #actions button:active {
+        transform: scale(0.94);
       }
       #actions button[aria-pressed='true'] {
         color: var(--accent);
@@ -696,6 +768,34 @@
           transform: translateX(-50%);
         }
       }
+      /* El celular acostado tiene poca altura: el registro, la ayuda y los
+         avisos bajan al hueco entre el joystick y los botones. */
+      @media (pointer: coarse) and (max-height: 520px) {
+        #log {
+          left: calc(184px + env(safe-area-inset-left));
+          bottom: calc(10px + env(safe-area-inset-bottom));
+          width: calc(100vw - 184px - 260px);
+          font-size: 12px;
+        }
+        #hint {
+          top: auto;
+          bottom: calc(96px + env(safe-area-inset-bottom));
+          left: calc(50% - 38px);
+          font-size: 13px;
+        }
+        #toast,
+        #talk {
+          bottom: calc(132px + env(safe-area-inset-bottom));
+          left: calc(50% - 38px);
+          max-width: calc(100vw - 460px);
+        }
+        #bag {
+          bottom: calc(16px + env(safe-area-inset-bottom));
+          right: calc(260px + env(safe-area-inset-right));
+          max-height: calc(100vh - 32px);
+          overflow-y: auto;
+        }
+      }
       @media (pointer: fine) {
         #actions {
           display: none;
@@ -774,17 +874,8 @@
     <pre id="term" hidden></pre>
     <div id="pause" hidden><div class="sheet"></div></div>
 
-    <div id="pad" hidden>
-      <button class="diag" data-dir="up-left" aria-label="up left">&#8598;</button>
-      <button data-dir="up" aria-label="up">&#9650;</button>
-      <button class="diag" data-dir="up-right" aria-label="up right">&#8599;</button>
-      <button data-dir="left" aria-label="left">&#9664;</button>
-      <span></span>
-      <button data-dir="right" aria-label="right">&#9654;</button>
-      <button class="diag" data-dir="down-left" aria-label="down left">&#8601;</button>
-      <button data-dir="down" aria-label="down">&#9660;</button>
-      <button class="diag" data-dir="down-right" aria-label="down right">&#8600;</button>
-    </div>
+    <div id="pad" hidden aria-label="joystick"><div class="knob"></div></div>
+    <div id="rotate" hidden></div>
     <script type="module">
       import * as THREE from 'three'
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -3470,11 +3561,13 @@
           settings.run ? L('sprint', 'esprintar') : L('run', 'correr')
         }`
         let hint = ''
+        const use = touchPad ? '✋' : 'E'
         if (st.near && st.near.kind === 'npc')
-          hint = L('E · talk to ', 'E · hablar con ') + tr(st.near.name)
-        else if (st.near && st.near.kind === 'ranking') hint = L('E · leaderboard', 'E · ranking')
+          hint = use + L(' · talk to ', ' · hablar con ') + tr(st.near.name)
+        else if (st.near && st.near.kind === 'ranking')
+          hint = use + L(' · leaderboard', ' · ranking')
         else if (st.boss && !st.boss.defeated)
-          hint = L('F · strike the Colossus', 'F · golpear al Coloso')
+          hint = (touchPad ? '⚔' : 'F') + L(' · strike the Colossus', ' · golpear al Coloso')
         hintBox.textContent = hint
         drawLog()
         const gaitButton = actions.querySelector('[data-act="gait"]')
@@ -3843,6 +3936,24 @@
             strategyPage
           )
         )
+        if (touchPad && document.fullscreenEnabled) {
+          pauseSheet.append(
+            button(
+              document.fullscreenElement
+                ? L('Leave fullscreen', 'Salir de pantalla completa')
+                : L('Fullscreen', 'Pantalla completa'),
+              null,
+              () => {
+                const done = document.fullscreenElement
+                  ? document.exitFullscreen()
+                  : document.documentElement.requestFullscreen()
+                Promise.resolve(done)
+                  .catch(() => {})
+                  .then(closePause)
+              }
+            )
+          )
+        }
         pauseSheet.append(
           button(L('Settings', 'Opciones'), null, () => settingsPage(pauseSheet, pauseMain))
         )
@@ -3906,21 +4017,28 @@
         if (actionsReady) return
         actionsReady = true
         const list = [
-          ['e', 'E'],
-          ['i', 'I'],
-          ['f', 'F'],
-          ['escape', 'Esc'],
-          ['enter', 'OK'],
-          ['gait', ''],
-          ['t', 'T'],
-          ['peek', 'Txt'],
-          ['menu', '≡']
+          ['f', '⚔', L('Attack', 'Atacar')],
+          ['e', '✋', L('Use', 'Usar')],
+          ['i', '🎒', L('Bag', 'Mochila')],
+          ['enter', '✔', 'OK'],
+          ['escape', '↩', L('Back', 'Volver')],
+          ['gait', '', ''],
+          ['t', '⌂', L('Town', 'Ciudad')],
+          ['peek', '≣', L('Text', 'Texto')],
+          ['menu', '☰', '']
         ]
-        for (const [act, text] of list) {
+        for (const [act, icon, name] of list) {
           const b = document.createElement('button')
           b.type = 'button'
           b.dataset.act = act
-          b.textContent = text
+          b.style.gridArea = act
+          b.setAttribute('aria-label', name || act)
+          b.textContent = icon
+          if (name && act !== 't' && act !== 'peek') {
+            const small = document.createElement('small')
+            small.textContent = name
+            b.append(small)
+          }
           b.addEventListener('click', () => {
             b.blur()
             if (!session) return
@@ -4374,8 +4492,8 @@
         )
         keysLine.textContent = touchPad
           ? L(
-              'Pad: run. Tap a place. E: talk. I: bag.',
-              'Cruceta: correr. Toca un lugar. E: hablar. I: mochila.'
+              'Joystick: run. Tap a place. ✋: talk. 🎒: bag.',
+              'Joystick: correr. Toca un lugar. ✋: hablar. 🎒: mochila.'
             )
           : L(
               `WASD: run (Shift sprints). E: talk. I: bag. H: Tripo helmet. 1-${PLACES.length}: place. Esc: menu.`,
@@ -4655,40 +4773,103 @@
         }
       })
 
-      // La cruceta manda la flecha que el dedo tiene debajo, asi se puede deslizar
-      // de una a otra sin levantarlo. En una pantalla del juego (una tienda) cada
-      // toque es una tecla, y sostenido se repite.
-      const under = (event) => {
-        const target = document.elementFromPoint(event.clientX, event.clientY)
-        const b = target && target.closest('#pad button')
-        return b ? b.dataset.dir : null
-      }
+      // El joystick: la direccion sale del angulo del pulgar respecto del centro,
+      // en ocho sectores y con una zona muerta. En una pantalla del juego (una
+      // tienda) solo valen cuatro: cada direccion nueva es una tecla, y sostenida
+      // se repite.
+      const SECTORS = [
+        'right',
+        'down-right',
+        'down',
+        'down-left',
+        'left',
+        'up-left',
+        'up',
+        'up-right'
+      ]
+      const knob = pad.querySelector('.knob')
+      let stickId = null
+      let stickDir = null
       let padRepeat = 0
       const fingersNow = () => (screen === 'play' ? mover.fingers : demo.fingers)
-      pad.addEventListener('pointerdown', (event) => {
-        event.preventDefault()
-        const dir = under(event)
-        if (screen === 'play' && session && !exploring(live)) {
-          // En una pantalla del juego (una tienda) solo valen las cuatro flechas.
-          if (!dir || dir.includes('-')) return
+      const inMenu = () => screen === 'play' && session && !exploring(live)
+      function stickAt(event) {
+        const box = pad.getBoundingClientRect()
+        const radius = box.width / 2
+        let dx = event.clientX - (box.left + radius)
+        let dy = event.clientY - (box.top + radius)
+        const dist = Math.hypot(dx, dy)
+        const reach = radius - 22
+        if (dist > reach) {
+          dx *= reach / dist
+          dy *= reach / dist
+        }
+        knob.style.transform = `translate(${dx}px, ${dy}px)`
+        if (dist < 16) return null
+        const turn = Math.atan2(dy, dx)
+        if (inMenu())
+          return ['right', 'down', 'left', 'up'][((Math.round(turn / (Math.PI / 2)) % 4) + 4) % 4]
+        return SECTORS[((Math.round(turn / (Math.PI / 4)) % 8) + 8) % 8]
+      }
+      function stickSet(dir) {
+        if (dir === stickDir) return
+        stickDir = dir
+        clearInterval(padRepeat)
+        if (inMenu()) {
+          if (!dir) return
           session.press(dir)
-          clearInterval(padRepeat)
-          padRepeat = setInterval(() => session && session.press(dir), 140)
+          padRepeat = setInterval(() => session && session.press(dir), 160)
           return
         }
-        fingersNow().set(event.pointerId, dir)
+        if (dir) fingersNow().set(stickId, dir)
+        else fingersNow().delete(stickId)
+      }
+      pad.addEventListener('pointerdown', (event) => {
+        event.preventDefault()
+        if (stickId !== null) return
+        stickId = event.pointerId
+        pad.setPointerCapture(event.pointerId)
+        pad.classList.add('held')
+        stickSet(stickAt(event))
       })
       pad.addEventListener('pointermove', (event) => {
-        const fingers = fingersNow()
-        if (fingers.has(event.pointerId)) fingers.set(event.pointerId, under(event))
+        if (event.pointerId === stickId) stickSet(stickAt(event))
       })
       const lift = (event) => {
+        if (event.pointerId !== stickId) return
         clearInterval(padRepeat)
-        fingersNow().delete(event.pointerId)
+        fingersNow().delete(stickId)
+        stickId = null
+        stickDir = null
+        pad.classList.remove('held')
+        knob.style.transform = ''
       }
       pad.addEventListener('pointerup', lift)
       pad.addEventListener('pointercancel', lift)
+      pad.addEventListener('lostpointercapture', lift)
       pad.addEventListener('contextmenu', (event) => event.preventDefault())
+
+      // En el celular parado el mundo se ve angosto: un aviso que se cierra
+      // tocandolo, mientras se juega o se recorre.
+      const rotate = document.getElementById('rotate')
+      let rotateClosed = false
+      rotate.textContent = L(
+        'Turn your phone sideways for a wider view · tap to hide',
+        'Gira el celular para ver mas · toca para ocultar'
+      )
+      function checkRotate() {
+        rotate.hidden =
+          rotateClosed ||
+          !touchPad ||
+          innerHeight <= innerWidth ||
+          (screen !== 'play' && screen !== 'tour')
+      }
+      rotate.addEventListener('click', () => {
+        rotateClosed = true
+        checkRotate()
+      })
+      addEventListener('resize', checkRotate)
+      setInterval(checkRotate, 1000)
 
       window.runaPage = () => ({
         screen,
