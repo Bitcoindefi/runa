@@ -3271,7 +3271,7 @@ export function buildWorld(data, extras = {}) {
   const loads = []
   // Tripo entrega los modelos mirando hacia +x: yaw los gira hacia donde tienen
   // que mirar.
-  const place = (file, center, size, yaw = 0) => {
+  const place = (file, center, size, yaw = 0, done = null) => {
     if (!extras.glb) return
     loads.push(
       extras
@@ -3294,6 +3294,7 @@ export function buildWorld(data, extras = {}) {
           // Es una copia del GLB en cache: comparte geometria y materiales.
           object.userData.shared = true
           group.add(object)
+          if (done) done(object)
         })
         .catch(() => {})
     )
@@ -3351,12 +3352,19 @@ export function buildWorld(data, extras = {}) {
     group.add(tag)
   }
   for (const mark of monuments) monument(mark.bounds)
-  // El Coloso mira al oeste, hacia el portal por donde llega el heroe.
-  if (data.boss) place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI)
+  // El Coloso mira al oeste, hacia el portal por donde llega el heroe. Queda a
+  // mano para que la pagina lo anime en la pelea (respira, gira, golpea).
+  let colossus = null
+  if (data.boss) {
+    place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI, (object) => {
+      colossus = object
+    })
+  }
 
   return {
     group,
     toWorld,
+    colossus: () => colossus,
     buildings: buildings.length,
     loading: Promise.all(loads),
     // Los NPC respiran: se estiran apenas desde los pies, cada uno a su ritmo.

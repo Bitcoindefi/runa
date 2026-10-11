@@ -1223,7 +1223,8 @@
           yaw: 0,
           rigged: true,
           // Calibrado con runaView.tune en Chrome, como el del heroe original.
-          fits: { iron_helmet: { grow: 1.5, lift: 0.24, back: 0.1 } }
+          // Mas chico que antes: el yelmo tapaba casi toda la cabeza del heroe.
+          fits: { iron_helmet: { grow: 1.28, lift: 0.2, back: 0.09 } }
         },
         {
           file: 'heroe.glb',
@@ -1320,6 +1321,8 @@
                 avatarHands[slot].rotation.set(0, 0, 0)
                 avatarHands[slot].updateMatrixWorld(true)
                 bone.attach(avatarHands[slot])
+                // El giro de reposo, para sumarle el tajo en la pelea.
+                avatarHands[slot].userData.base = avatarHands[slot].quaternion.clone()
               }
               mixer = new THREE.AnimationMixer(object)
               for (const name of ['Idle', 'Walk', 'Run']) {
@@ -1588,8 +1591,17 @@
 
       // La pieza en la mano del heroe de Tripo: el arma con la hoja hacia adelante
       // y un poco abajo (como se lleva al correr), el escudo de frente.
+      // Al tamano del heroe de Tripo (2,1 m y de proporciones gruesas): mas grandes
+      // que en el stickman de la vitrina.
+      const HAND_SIZE = { left_hand: 1.35, right_hand: 0.95 }
       async function handPiece(id, slot) {
-        const object = await piece(id, slot)
+        let object = null
+        try {
+          object = await tripoPiece(id, slot, HAND_SIZE[slot])
+        } catch (error) {
+          console.warn('sin modelo de Tripo para', id, error)
+        }
+        if (!object) object = await piece(id, slot)
         const grip = new THREE.Group()
         grip.add(object)
         if (slot === 'left_hand') grip.rotation.x = Math.PI / 2 + 0.3
@@ -1950,6 +1962,343 @@
       const lateral = new THREE.Vector3()
       const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle))
 
+      // La pelea con el Coloso, que se sienta. Todo sale de lo que dice el juego
+      // (su vida, la del heroe, las celdas que marca y las que queman): no cambia
+      // reglas, solo lo muestra.
+      // - El Coloso respira y gira despacio hacia el heroe.
+      // - Cuando marca un golpe (rojo) se echa atras y se carga de brillo; cuando
+      //   el golpe cae (aparece lo que quema), se vence hacia adelante, tiembla la
+      //   camara y una onda se abre por el piso.
+      // - Cuando lo golpean destella, retrocede, saltan chispas y sube el dano.
+      // - El heroe embiste con un tajo al apretar F o espacio; cuando lo alcanzan
+      //   salta, le saltan chispas rojas y sube su dano en rojo.
+      const fight = {
+        built: null,
+        rig: null,
+        bossHp: null,
+        heroHp: null,
+        warned: 0,
+        burning: 0,
+        windup: 0,
+        slam: 0,
+        hit: 0,
+        hurt: 0,
+        swing: 0,
+        shake: 0,
+        bits: []
+      }
+      const sparkGeo = new THREE.OctahedronGeometry(0.08)
+      const flashColor = new THREE.Color(0xfff0c8)
+      const chargeColor = new THREE.Color(0xff5a10)
+      const swingAxis = new THREE.Vector3(1, 0, 0)
+      const swingTurn = new THREE.Quaternion()
+      const shake = new THREE.Vector3()
+
+      // Arma el Coloso de la arena para animarlo: un pivote en sus pies que lo gira
+      // y otro que lo inclina. Con materiales propios, para que el destello no
+      // toque al Coloso del titulo ni al de la vitrina.
+      function fightRig() {
+        const built = world && world.built
+        if (fight.built !== built) {
+          fightReset()
+          fight.built = built
+        }
+        if (fight.rig || !built || !built.colossus) return fight.rig
+        const object = built.colossus()
+        if (!object || !object.parent) return null
+        object.updateMatrixWorld(true)
+        const box = new THREE.Box3().setFromObject(object)
+        const turn = new THREE.Group()
+        turn.position.set((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2)
+        const lean = new THREE.Group()
+        turn.add(lean)
+        object.parent.add(turn)
+        turn.updateMatrixWorld(true)
+        lean.attach(object)
+        const materials = []
+        object.traverse((child) => {
+          if (!child.isMesh) return
+          const own = [child.material].flat().map((material) => {
+            const copy = material.clone()
+            copy.userData.emissive = copy.emissive ? copy.emissive.clone() : null
+            copy.userData.intensity = copy.emissiveIntensity ?? 1
+            materials.push(copy)
+            return copy
+          })
+          child.material = Array.isArray(child.material) ? own : own[0]
+        })
+        fight.rig = { turn, lean, materials, height: box.max.y - box.min.y }
+        return fight.rig
+      }
+
+      function fightReset() {
+        if (fight.rig) for (const material of fight.rig.materials) material.dispose()
+        for (const bit of fight.bits) {
+          ;(bit.parent || scene).remove(bit.object)
+          if (bit.dispose) bit.dispose()
+        }
+        fight.bits = []
+        fight.rig = null
+        fight.bossHp = fight.heroHp = null
+        fight.warned = fight.burning = 0
+        fight.windup = fight.slam = fight.hit = fight.hurt = fight.swing = fight.shake = 0
+        avatar.position.z = 0
+        const holder = avatarHands.left_hand
+        if (holder.userData.base) holder.quaternion.copy(holder.userData.base)
+      }
+
+      // Un numero que sube y se apaga: el dano.
+      function floater(text, color, at) {
+        const canvas = document.createElement('canvas')
+        canvas.width = 256
+        canvas.height = 128
+        const g = canvas.getContext('2d')
+        g.font = 'bold 84px ui-monospace, Consolas, monospace'
+        g.textAlign = 'center'
+        g.textBaseline = 'middle'
+        g.lineWidth = 12
+        g.strokeStyle = 'rgba(12, 8, 6, 0.9)'
+        g.strokeText(text, 128, 64)
+        g.fillStyle = color
+        g.fillText(text, 128, 64)
+        const texture = new THREE.CanvasTexture(canvas)
+        texture.colorSpace = THREE.SRGBColorSpace
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true
+        })
+        const sprite = new THREE.Sprite(material)
+        sprite.scale.set(2.6, 1.3, 1)
+        sprite.renderOrder = 20
+        sprite.position.copy(at)
+        scene.add(sprite)
+        fight.bits.push({
+          object: sprite,
+          life: 0,
+          span: 1.1,
+          kind: 'number',
+          from: at.clone(),
+          dispose: () => {
+            texture.dispose()
+            material.dispose()
+          }
+        })
+      }
+
+      // Chispas que saltan del golpe.
+      function sparks(at, color) {
+        const material = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+        for (let i = 0; i < 18; i++) {
+          const mesh = new THREE.Mesh(sparkGeo, material)
+          mesh.position.copy(at)
+          const a = Math.random() * Math.PI * 2
+          const out = 2.5 + Math.random() * 4
+          scene.add(mesh)
+          fight.bits.push({
+            object: mesh,
+            life: 0,
+            span: 0.55,
+            kind: 'spark',
+            v: new THREE.Vector3(Math.cos(a) * out, 2 + Math.random() * 5, Math.sin(a) * out),
+            dispose: i === 0 ? () => material.dispose() : null
+          })
+        }
+      }
+
+      // Una onda que se abre por el piso donde cae el golpe.
+      function shockwave(at) {
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xff8a2a,
+          transparent: true,
+          opacity: 0.85,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        })
+        const mesh = new THREE.Mesh(
+          new THREE.RingGeometry(0.7, 1.1, 48).rotateX(-Math.PI / 2),
+          material
+        )
+        mesh.position.set(at.x, 0.15, at.z)
+        scene.add(mesh)
+        fight.bits.push({
+          object: mesh,
+          life: 0,
+          span: 0.7,
+          kind: 'wave',
+          dispose: () => {
+            mesh.geometry.dispose()
+            material.dispose()
+          }
+        })
+      }
+
+      // El tajo del heroe: un arco dorado delante de el, que barre y se apaga.
+      function swingSword() {
+        fight.swing = 1
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xffe08a,
+          transparent: true,
+          opacity: 0.9,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        })
+        // El arco va delante del heroe (+z): centrado en -90 grados antes de
+        // acostarlo, que al girar el plano queda hacia +z.
+        const mesh = new THREE.Mesh(
+          new THREE.RingGeometry(0.9, 1.35, 32, 1, -Math.PI * 0.85, Math.PI * 0.7).rotateX(
+            -Math.PI / 2
+          ),
+          material
+        )
+        mesh.position.set(0, 1.0, 0.2)
+        hero.root.add(mesh)
+        fight.bits.push({
+          object: mesh,
+          parent: hero.root,
+          life: 0,
+          span: 0.24,
+          kind: 'slash',
+          dispose: () => {
+            mesh.geometry.dispose()
+            material.dispose()
+          }
+        })
+      }
+
+      function shakeOffset(dt) {
+        if (fight.shake <= 0.01 || screen !== 'play') return null
+        shake.set(
+          (Math.random() - 0.5) * fight.shake * 0.7,
+          (Math.random() - 0.5) * fight.shake * 0.4,
+          (Math.random() - 0.5) * fight.shake * 0.7
+        )
+        fight.shake = Math.max(0, fight.shake - dt * 2.4)
+        return shake
+      }
+
+      function fightFrame(dt, time, st) {
+        const boss = st && st.boss
+        if (!world || world.map !== 'boss' || !boss) {
+          if (fight.built) {
+            fightReset()
+            fight.built = null
+          }
+          return
+        }
+        const rig = fightRig()
+        const chest = rig
+          ? new THREE.Vector3().setFromMatrixPosition(rig.turn.matrixWorld).setY(rig.height * 0.62)
+          : null
+        // Lo que paso desde el cuadro anterior, en los numeros del juego.
+        if (fight.bossHp !== null && boss.hp < fight.bossHp && chest) {
+          fight.hit = 1
+          fight.shake = Math.max(fight.shake, 0.35)
+          floater('-' + (fight.bossHp - boss.hp), '#ffd27a', chest.clone().setY(rig.height + 0.8))
+          sparks(chest, 0xffb040)
+        }
+        fight.bossHp = boss.hp
+        if (fight.heroHp !== null && st.hp < fight.heroHp) {
+          fight.hurt = 1
+          fight.shake = Math.max(fight.shake, 0.7)
+          hop = performance.now()
+          const at = hero.root.position.clone()
+          floater('-' + (fight.heroHp - st.hp), '#ff6a5a', at.clone().setY(3.1))
+          sparks(at.setY(1.2), 0xff4030)
+        }
+        fight.heroHp = st.hp
+        const warned = (boss.telegraphs || []).length
+        const burning = (boss.hazards || []).length
+        if (burning > fight.burning || (warned === 0 && fight.warned > 0)) {
+          // El golpe cae: donde quema, o donde estaba marcado.
+          const cells = burning ? boss.hazards : []
+          fight.slam = 1
+          fight.shake = Math.max(fight.shake, 1)
+          if (cells.length) {
+            const sum = new THREE.Vector3()
+            for (const cell of cells) sum.add(world.built.toWorld(cell.x, cell.y))
+            shockwave(sum.divideScalar(cells.length))
+          } else if (chest) shockwave(chest)
+        }
+        fight.warned = warned
+        fight.burning = burning
+        fight.windup = warned
+          ? Math.min(1, fight.windup + dt * 1.6)
+          : Math.max(0, fight.windup - dt * 3)
+        fight.slam = Math.max(0, fight.slam - dt * 2.2)
+        fight.hit = Math.max(0, fight.hit - dt * 3.5)
+        fight.hurt = Math.max(0, fight.hurt - dt * 2.5)
+        fight.swing = Math.max(0, fight.swing - dt / 0.3)
+
+        // El tajo: el heroe embiste y la espada baja en arco.
+        const s = fight.swing > 0 ? Math.sin((1 - fight.swing) * Math.PI) : 0
+        avatar.position.z = s * 0.4
+        const holder = avatarHands.left_hand
+        if (holder.userData.base) {
+          holder.quaternion
+            .copy(holder.userData.base)
+            .multiply(swingTurn.setFromAxisAngle(swingAxis, -s * 1.5))
+        }
+
+        // Chispas, numeros, ondas y tajos que siguen vivos.
+        for (let i = fight.bits.length - 1; i >= 0; i--) {
+          const bit = fight.bits[i]
+          bit.life += dt
+          const k = bit.life / bit.span
+          if (k >= 1) {
+            ;(bit.parent || scene).remove(bit.object)
+            if (bit.dispose) bit.dispose()
+            fight.bits.splice(i, 1)
+            continue
+          }
+          if (bit.kind === 'number') {
+            bit.object.position.y = bit.from.y + k * 1.6
+            bit.object.material.opacity = 1 - k * k
+          } else if (bit.kind === 'spark') {
+            bit.v.y -= 14 * dt
+            bit.object.position.addScaledVector(bit.v, dt)
+            bit.object.scale.setScalar(Math.max(0.05, 1 - k))
+          } else if (bit.kind === 'wave') {
+            bit.object.scale.setScalar(1 + k * 7)
+            bit.object.material.opacity = 0.85 * (1 - k)
+          } else if (bit.kind === 'slash') {
+            bit.object.material.opacity = 0.9 * (1 - k)
+            bit.object.rotation.y = -k * 1.4
+          }
+        }
+        if (!rig) return
+
+        // Gira hacia el heroe, despacio. Mira hacia -x en su pivote.
+        const dx = hero.root.position.x - rig.turn.position.x
+        const dz = hero.root.position.z - rig.turn.position.z
+        if (dx * dx + dz * dz > 0.01) {
+          const want = Math.atan2(dz, -dx)
+          rig.turn.rotation.y += wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 1.2)
+        }
+        // Se inclina: atras al cargar, adelante al caer, un poco atras al recibir.
+        // Inclinarse hacia su frente (-x) es girar positivo sobre z.
+        const breathe = Math.sin(time * 1.3)
+        const fall = fight.slam > 0 ? Math.sin(fight.slam * Math.PI) : 0
+        rig.lean.rotation.z = breathe * 0.015 - fight.windup * 0.2 + fall * 0.32 - fight.hit * 0.08
+        rig.lean.position.y = breathe * 0.06 + fight.windup * 0.3 - fall * 0.35
+        // Destello: claro al recibir, naranja al cargar el golpe.
+        const glow = Math.max(fight.hit, fight.windup * 0.6)
+        const tone = fight.hit >= fight.windup * 0.6 ? flashColor : chargeColor
+        for (const material of rig.materials) {
+          if (!material.emissive || !material.userData.emissive) continue
+          material.emissive.copy(material.userData.emissive).lerp(tone, glow)
+          material.emissiveIntensity = material.userData.intensity + glow * 1.6
+        }
+      }
+
       // Hacia donde apuntan las teclas (o los dedos en la cruceta), en el piso:
       // una de 8 direcciones, sin el eje que una pared frena. Null si no se camina.
       function steerDir() {
@@ -2120,7 +2469,11 @@
         if (world && world.built.update) world.built.update(t)
         if (title && screen === 'menu') title.update(t, dt)
         controls.update()
+        // El temblor de la pelea con el Coloso: se suma solo para este cuadro.
+        const shook = shakeOffset(dt)
+        if (shook) camera.position.add(shook)
         effects.render(dt, screen)
+        if (shook) camera.position.sub(shook)
       })
 
       // En el menu de titulo la escena se corre a la derecha (una fraccion del
@@ -2806,6 +3159,7 @@
         }
         dressFrom(st)
         bossMarks(st.boss, time)
+        fightFrame(dt, time, st)
         if (meadow && world && at && world.map === at.map) meadow.update(time, dt, st, world)
         // La pantalla de texto del juego, salvo lo que la pagina ya muestra: el
         // inventario (inventario.js) y el combate en 3D (pradera.js).
@@ -3242,6 +3596,10 @@
           if (roaming && st.world) peek = !peek
           else session.press('tab')
           return
+        }
+        // En la arena del Coloso, F o espacio tambien hacen el tajo del heroe.
+        if ((key === 'f' || event.key === ' ') && world && world.map === 'boss' && st.boss) {
+          swingSword()
         }
         const named = { Enter: 'enter', ' ': 'space', Backspace: 'backspace', Delete: 'delete' }[
           event.key
