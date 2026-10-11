@@ -239,6 +239,46 @@
         color: var(--accent);
         text-shadow: 0 0 28px rgba(224, 192, 96, 0.35);
       }
+      /* El logo de piedra runica (Higgsfield): el texto queda como alt. */
+      .logo img {
+        display: block;
+        width: min(440px, 86vw);
+        height: auto;
+        margin-left: -10px;
+        filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.6));
+      }
+      /* El menu principal en un marco de hierro con remaches y filo dorado
+         (Higgsfield): las esquinas quedan enteras y los lados repiten sus
+         remaches en vez de estirarlos. */
+      #menu-main {
+        border: 30px solid transparent;
+        border-image: url('assets/ui/menu-frame.png') 120 round;
+        background: radial-gradient(ellipse at 50% 0%, rgba(60, 44, 22, 0.55), rgba(10, 9, 8, 0.86))
+          padding-box;
+        padding: 10px 8px;
+        gap: 9px;
+      }
+      #menu-main button {
+        background: linear-gradient(180deg, rgba(34, 29, 22, 0.95), rgba(16, 14, 11, 0.95));
+        border: 1px solid rgba(224, 192, 96, 0.28);
+        border-radius: 3px;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 220, 150, 0.08),
+          0 2px 6px rgba(0, 0, 0, 0.45);
+        letter-spacing: 0.04em;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s,
+          transform 0.15s;
+      }
+      #menu-main button:hover,
+      #menu-main button:focus-visible {
+        border-color: rgba(240, 200, 110, 0.9);
+        box-shadow:
+          inset 0 0 18px rgba(255, 150, 40, 0.18),
+          0 0 14px rgba(255, 150, 40, 0.25);
+        transform: translateX(3px);
+      }
       .tag {
         margin: 6px 0 26px;
         color: var(--dim);
@@ -715,7 +755,7 @@
 
     <section id="menu" hidden>
       <div>
-        <h1 class="logo">RUNA</h1>
+        <h1 class="logo"><img src="assets/ui/logo.png" alt="RUNA" width="900" height="285" /></h1>
         <p class="tag" id="tagline">An ASCII RPG with a 3D world made with Tripo.</p>
       </div>
       <nav id="menu-main" class="choices"></nav>

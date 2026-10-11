@@ -193,6 +193,9 @@ const GLB = /^[\w-]+\.glb$/
 // Los NPC pintados de la vista 2.5D: un PNG por tipo, con el mismo cuidado.
 const NPC_PREFIX = '/assets/npcs/'
 const NPC_PNG = /^[a-z]+\.png$/
+// El arte de la interfaz (el logo y el marco del menu, hechos con Higgsfield).
+const UI_PREFIX = '/assets/ui/'
+const UI_PNG = /^[a-z0-9-]+\.png$/
 // Los modelos libres (CC0) de la escenografia: <pack>/<modelo>.glb o la paleta
 // que esos GLB piden por ruta relativa, <pack>/Textures/<nombre>.png.
 const CC0 = path.join(root, 'assets/cc0')
@@ -631,6 +634,8 @@ function serve() {
       if (GLB.test(name)) return send(res, path.join(MODELS, name), 'model/gltf-binary')
       const art = urlPath.startsWith(NPC_PREFIX) ? urlPath.slice(NPC_PREFIX.length) : ''
       if (NPC_PNG.test(art)) return send(res, path.join(root, 'assets/npcs', art), 'image/png')
+      const ui = urlPath.startsWith(UI_PREFIX) ? urlPath.slice(UI_PREFIX.length) : ''
+      if (UI_PNG.test(ui)) return send(res, path.join(root, 'assets/ui', ui), 'image/png')
       const free = urlPath.startsWith(CC0_PREFIX) ? urlPath.slice(CC0_PREFIX.length) : ''
       if (CC0_FILE.test(free)) {
         const type = free.endsWith('.png') ? 'image/png' : 'model/gltf-binary'

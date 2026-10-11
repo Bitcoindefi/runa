@@ -97,6 +97,11 @@ async function main() {
   for (const name of fs.readdirSync(npcArt).filter((file) => /^[a-z]+\.png$/.test(file))) {
     write(`assets/npcs/${name}`, fs.readFileSync(path.join(npcArt, name)))
   }
+  // El arte de la interfaz: el logo y el marco del menu, hechos con Higgsfield.
+  const ui = path.join(__dirname, '..', 'assets', 'ui')
+  for (const name of fs.readdirSync(ui).filter((file) => /^[a-z0-9-]+\.png$/.test(file))) {
+    write(`assets/ui/${name}`, fs.readFileSync(path.join(ui, name)))
+  }
   // Los modelos libres (CC0) de la escenografia: cada pack con sus GLB, la
   // paleta que piden y su licencia.
   const free = path.join(__dirname, '..', 'assets', 'cc0')
