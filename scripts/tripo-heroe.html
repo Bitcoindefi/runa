@@ -813,8 +813,20 @@
       const SKINS = {
         // Tripo entrega los modelos mirando hacia +x; el heroe mira hacia +z.
         iron_helmet: { file: 'yelmo.glb', size: 0.46, yaw: -Math.PI / 2, lift: 0.03 },
-        // La espada (sword.glb) ya viene parada y se usa sola; el escudo mira a +x.
-        shield: { file: 'shield.glb', size: 0.62, yaw: -Math.PI / 2 }
+        // El escudo mira a +x.
+        shield: { file: 'shield.glb', size: 0.62, yaw: -Math.PI / 2 },
+        // Las armas se paran solas sobre su eje largo (fitWeapon). `size` es el
+        // largo al lado de la espada, `grip` donde la agarra la mano (desde la
+        // base), `tip` hacia donde apunta la punta en el modelo y `down` que lado
+        // va abajo. Las de Tripo Studio llegan inclinadas: la daga con la punta
+        // abajo, la lanza hacia -x. El arco se lleva parado (`hold: 'bow'`) y la
+        // ballesta apuntando derecho (`hold: 'aim'`).
+        sword: { grip: 0.1 },
+        dagger: { size: 0.55, grip: 0.17, tip: [1, -1, 1] },
+        spear: { size: 1.6, grip: 0.36, tip: [-1, 1, -1] },
+        warhammer: { size: 1.05, grip: 0.16 },
+        crossbow: { size: 0.8, grip: 0.3, tip: [1, 0, 0], down: [0, -1, 0], hold: 'aim' },
+        longbow: { size: 1.25, grip: 0.5, flat: 'x', hold: 'bow' }
       }
       const HERO_FIT = { grow: 1.15, lift: 0.03, back: 0 }
       // Fondos por zona, con modelos de Tripo que ya existen. El del titulo es el
@@ -926,18 +938,39 @@
           if (worn.head === id) return refitHead(id)
         },
         head: () => avatarHead.getWorldPosition(new THREE.Vector3()).project(camera),
+        // Para calibrar las armas: equipa solo la figura, sin tocar la partida.
+        wear: (slot, id) => wear(slot, id ? { id } : null),
+        swing: () => swingSword(),
         // Para las capturas: lleva al heroe (solo la figura) a la celda (x, y) del
         // mapa 3D y pone la camara a `dist` metros, a `height` de alto y girada
         // `azimuth` grados desde el sur. La camara lo sigue ahi hasta que se mueva.
-        frame(x, y, { dist = 14, height = 8, azimuth = 0 } = {}) {
+        // `face` gira al heroe (grados, 0 mira al sur) y `look` corre el punto que
+        // mira la camara, en metros desde el heroe.
+        frame(x, y, { dist = 14, height = 8, azimuth = 0, face = null, look = [0, 1, 0] } = {}) {
           if (!world) return false
           const at = world.built.toWorld(x, y)
           heroTarget.copy(at)
           hero.root.position.copy(at)
-          controls.target.set(at.x, 1, at.z)
+          if (face !== null) hero.root.rotation.y = THREE.MathUtils.degToRad(face)
+          framing.set(...look)
+          controls.target.set(at.x + look[0], look[1], at.z + look[2])
           const turn = THREE.MathUtils.degToRad(azimuth)
           camera.position.set(at.x + Math.sin(turn) * dist, height, at.z + Math.cos(turn) * dist)
           return true
+        },
+        // Prende o apaga los carteles flotantes (nombres, salidas), para las
+        // capturas sin interfaz.
+        labels(on) {
+          scene.traverse((object) => {
+            if (object.userData.label) object.visible = on
+          })
+          return true
+        },
+        // Donde quedan una celda y el Coloso en el mundo 3D, en metros.
+        spot: (x, y) => (world ? world.built.toWorld(x, y).toArray() : null),
+        boss() {
+          const colossus = world && world.built.colossus && world.built.colossus()
+          return colossus ? colossus.getWorldPosition(new THREE.Vector3()).toArray() : null
         }
       }
 
@@ -1346,23 +1379,38 @@
             if (chosen.rigged) {
               const head = object.getObjectByName('Head')
               if (head) head.attach(avatarHead)
-              // Cada soporte se pone en su mano en la pose de reposo, con los ejes del
-              // heroe (+y arriba, la cara hacia +z), y despues se cuelga del hueso:
-              // asi sigue la animacion sin heredar los ejes propios de la mano.
+              // Cada soporte se pone en la pose de reposo con los ejes que tiene el
+              // brazo caido: +y hacia el codo (arriba, con el brazo colgando) y +z
+              // al frente del heroe. Despues se cuelga del hueso y sigue la
+              // animacion. El arma va en la palma, pasando la muneca hacia los
+              // dedos (`reach` del antebrazo desde el codo); el escudo, en el medio
+              // del antebrazo.
               avatar.updateMatrixWorld(true)
-              for (const [slot, name] of [
-                ['left_hand', 'LeftHand'],
-                ['right_hand', 'RightHand']
-              ]) {
+              const spot = (name) => {
                 const bone = object.getObjectByName(name)
-                if (!bone) continue
-                const at = avatar.worldToLocal(bone.getWorldPosition(new THREE.Vector3()))
-                avatarHands[slot].position.copy(at)
-                avatarHands[slot].rotation.set(0, 0, 0)
-                avatarHands[slot].updateMatrixWorld(true)
-                bone.attach(avatarHands[slot])
+                return bone && avatar.worldToLocal(bone.getWorldPosition(new THREE.Vector3()))
+              }
+              for (const [slot, elbow, wrist, bone, reach] of [
+                ['left_hand', 'LeftForeArm', 'LeftHand', 'LeftHand', 1.3],
+                ['right_hand', 'RightForeArm', 'RightHand', 'RightForeArm', 0.55]
+              ]) {
+                const from = spot(elbow)
+                const to = spot(wrist)
+                const holder = avatarHands[slot]
+                const host = object.getObjectByName(bone)
+                if (!from || !to || !host) continue
+                const up = from.clone().sub(to).normalize()
+                const front = new THREE.Vector3(0, 0, 1)
+                front.addScaledVector(up, -front.dot(up)).normalize()
+                const side = new THREE.Vector3().crossVectors(up, front)
+                holder.position.copy(from).lerp(to, reach)
+                holder.quaternion.setFromRotationMatrix(
+                  new THREE.Matrix4().makeBasis(side, up, front)
+                )
+                holder.updateMatrixWorld(true)
+                host.attach(holder)
                 // El giro de reposo, para sumarle el tajo en la pelea.
-                avatarHands[slot].userData.base = avatarHands[slot].quaternion.clone()
+                holder.userData.base = holder.quaternion.clone()
               }
               mixer = new THREE.AnimationMixer(object)
               for (const name of ['Idle', 'Walk', 'Run']) {
@@ -1569,38 +1617,136 @@
         }))
       }
 
-      // Lleva un GLB al tamano pedido. Las armas se paran sobre su eje mas largo y
-      // se agarran a un tercio de la base; el resto queda centrado.
-      function fit(object, size, slot) {
+      // Lleva un GLB al tamano pedido, centrado. Las armas van con fitWeapon.
+      function fit(object, size, slot, spec = {}) {
+        if (slot === 'left_hand') return fitWeapon(object, size, spec)
         object.updateMatrixWorld(true)
-        const box = new THREE.Box3().setFromObject(object)
-        const dims = box.getSize(new THREE.Vector3())
-        const weapon = slot === 'left_hand'
-        if (weapon && dims.x > dims.y && dims.x >= dims.z) object.rotation.z = Math.PI / 2
-        if (weapon && dims.z > dims.y && dims.z > dims.x) object.rotation.x = Math.PI / 2
-        object.updateMatrixWorld(true)
-        const turned = new THREE.Box3().setFromObject(object)
-        const longest = Math.max(...turned.getSize(new THREE.Vector3()).toArray())
+        const longest = Math.max(
+          ...new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3()).toArray()
+        )
         const holder = new THREE.Group()
         holder.add(object)
         object.scale.multiplyScalar(size / longest)
         object.updateMatrixWorld(true)
-        const final = new THREE.Box3().setFromObject(object)
-        const center = final.getCenter(new THREE.Vector3())
-        object.position.sub(center)
-        if (weapon) object.position.y += (final.max.y - final.min.y) * 0.2
+        object.position.sub(new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3()))
         object.traverse((child) => {
           if (child.isMesh) child.castShadow = true
         })
         return holder
       }
 
-      async function tripoPiece(id, slot, size) {
-        const spec = SKINS[id] || { file: id + '.glb' }
+      // Un arma parada sobre su eje largo, con la punta hacia +y, la cara ancha
+      // hacia +z (se ve desde la camara, que mira desde arriba) y el origen en el
+      // agarre: `grip` del largo desde la base. El eje sale de los vertices: el
+      // de mayor varianza, afinado entre los centros de sus dos puntas (asi la
+      // cabeza del martillo no lo tuerce). `tip` elige la punta, `flat: 'x'` deja
+      // la cara de costado (el arco) y `down` dice que lado va abajo.
+      function fitWeapon(object, size, spec) {
+        object.updateMatrixWorld(true)
+        const points = []
+        object.traverse((child) => {
+          if (!child.isMesh) return
+          child.castShadow = true
+          const position = child.geometry.attributes.position
+          const step = Math.max(1, Math.floor(position.count / 3000))
+          for (let i = 0; i < position.count; i += step) {
+            points.push(
+              new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(child.matrixWorld)
+            )
+          }
+        })
+        const mean = new THREE.Vector3()
+        for (const p of points) mean.add(p)
+        mean.divideScalar(points.length)
+        const c = [0, 0, 0, 0, 0, 0]
+        for (const p of points) {
+          const x = p.x - mean.x
+          const y = p.y - mean.y
+          const z = p.z - mean.z
+          c[0] += x * x
+          c[1] += x * y
+          c[2] += x * z
+          c[3] += y * y
+          c[4] += y * z
+          c[5] += z * z
+        }
+        const tip = new THREE.Vector3(...(spec.tip || [0, 1, 0])).normalize()
+        const axis = tip.clone()
+        for (let i = 0; i < 60; i++) {
+          axis
+            .set(
+              c[0] * axis.x + c[1] * axis.y + c[2] * axis.z,
+              c[1] * axis.x + c[3] * axis.y + c[4] * axis.z,
+              c[2] * axis.x + c[4] * axis.y + c[5] * axis.z
+            )
+            .normalize()
+        }
+        const along = points.map((p) => axis.dot(p) - axis.dot(mean))
+        let lo = Infinity
+        let hi = -Infinity
+        for (const t of along) {
+          lo = Math.min(lo, t)
+          hi = Math.max(hi, t)
+        }
+        const ends = [new THREE.Vector3(), new THREE.Vector3()]
+        const counts = [0, 0]
+        points.forEach((p, i) => {
+          const k = (along[i] - lo) / (hi - lo)
+          const end = k < 0.12 ? 0 : k > 0.88 ? 1 : -1
+          if (end < 0) return
+          ends[end].add(p)
+          counts[end]++
+        })
+        ends[0].divideScalar(counts[0])
+        ends[1].divideScalar(counts[1])
+        axis.subVectors(ends[1], ends[0]).normalize()
+        if (axis.dot(tip) < 0) axis.negate()
+        const stand = new THREE.Quaternion().setFromUnitVectors(axis, new THREE.Vector3(0, 1, 0))
+        // El giro sobre el eje: la direccion mas angosta (el filo, el grosor del
+        // martillo) se mide en el plano x-z ya parado.
+        let xx = 0
+        let xz = 0
+        let zz = 0
+        const q = new THREE.Vector3()
+        for (const p of points) {
+          q.copy(p).sub(mean).applyQuaternion(stand)
+          xx += q.x * q.x
+          xz += q.x * q.z
+          zz += q.z * q.z
+        }
+        const wide = 0.5 * Math.atan2(2 * xz, xx - zz)
+        let roll = spec.flat === 'x' ? wide - Math.PI / 2 : wide
+        if (spec.down) {
+          const down = new THREE.Vector3(...spec.down)
+            .applyQuaternion(stand)
+            .applyAxisAngle(new THREE.Vector3(0, 1, 0), roll)
+          if (down.z < 0) roll += Math.PI
+        }
+        const turn = new THREE.Quaternion()
+          .setFromAxisAngle(new THREE.Vector3(0, 1, 0), roll)
+          .multiply(stand)
+        object.quaternion.premultiply(turn)
+        object.updateMatrixWorld(true)
+        const box = new THREE.Box3().setFromObject(object)
+        const scale = size / (box.max.y - box.min.y)
+        object.scale.multiplyScalar(scale)
+        // El agarre: sobre la recta entre las dos puntas, a `grip` del largo.
+        const line = ends[0].add(ends[1]).multiplyScalar(0.5).applyQuaternion(turn)
+        const low = box.min.y + (box.max.y - box.min.y) * (spec.grip ?? 0.3)
+        object.position.set(-line.x, -low, -line.z).multiplyScalar(scale)
+        const holder = new THREE.Group()
+        holder.add(object)
+        return holder
+      }
+
+      // `size` fija la medida; si no, la de SKINS por `scale` (la mano del heroe
+      // de Tripo lleva las piezas mas grandes que el stickman).
+      async function tripoPiece(id, slot, size, scale = 1) {
+        const spec = { file: id + '.glb', ...SKINS[id] }
         if (!models.has(spec.file)) return null
         const fitted =
-          size || spec.size || { left_hand: 1, right_hand: 0.62, head: 0.46 }[slot] || 0.5
-        const piece = fit(await loadGlb(spec.file), fitted, slot)
+          size || (spec.size || { left_hand: 1, right_hand: 0.62, head: 0.46 }[slot] || 0.5) * scale
+        const piece = fit(await loadGlb(spec.file), fitted, slot, spec)
         piece.rotation.y = spec.yaw || 0
         piece.position.y += spec.lift || 0
         return piece
@@ -1629,23 +1775,29 @@
         return BUILD[id] ? BUILD[id]() : part(new THREE.BoxGeometry(0.1, 0.1, 0.1), rune())
       }
 
-      // La pieza en la mano del heroe de Tripo: el arma con la hoja hacia adelante
-      // y un poco abajo (como se lleva al correr), el escudo de frente.
+      // La pieza en el brazo del heroe de Tripo. Los soportes tienen los ejes del
+      // brazo caido (+y arriba, +z al frente): el arma apunta al frente y un poco
+      // abajo (como se lleva al correr), la ballesta derecho, el arco parado y el
+      // escudo, sobre el antebrazo, mira hacia afuera y adelante.
       // Al tamano del heroe de Tripo (2,1 m y de proporciones gruesas): mas grandes
       // que en el stickman de la vitrina.
-      const HAND_SIZE = { left_hand: 1.35, right_hand: 0.95 }
+      const HAND_SCALE = { left_hand: 1.35, right_hand: 1.53 }
       async function handPiece(id, slot) {
         let object = null
         try {
-          object = await tripoPiece(id, slot, HAND_SIZE[slot])
+          object = await tripoPiece(id, slot, 0, HAND_SCALE[slot])
         } catch (error) {
           console.warn('sin modelo de Tripo para', id, error)
         }
         if (!object) object = await piece(id, slot)
         const grip = new THREE.Group()
         grip.add(object)
-        if (slot === 'left_hand') grip.rotation.x = Math.PI / 2 + 0.3
-        else grip.position.set(-0.05, 0, 0.1)
+        const hold = (SKINS[id] && SKINS[id].hold) || ''
+        if (slot === 'right_hand') {
+          grip.rotation.y = -0.85
+          grip.position.set(-0.07, 0, 0.05)
+        } else if (hold === 'aim') grip.rotation.x = Math.PI / 2
+        else if (hold !== 'bow') grip.rotation.x = Math.PI / 2 + 0.3
         return grip
       }
 
@@ -1998,6 +2150,9 @@
       const timer = new THREE.Timer()
       const step = new THREE.Vector3()
       const follow = new THREE.Vector3()
+      // Lo que mira la camara respecto del heroe: runaView.frame lo corre para
+      // encuadrar una captura, y vuelve al pecho del heroe cuando camina.
+      const framing = new THREE.Vector3(0, 1, 0)
       const steer = new THREE.Vector3()
       const lateral = new THREE.Vector3()
       const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle))
@@ -2030,7 +2185,9 @@
       const sparkGeo = new THREE.OctahedronGeometry(0.08)
       const flashColor = new THREE.Color(0xfff0c8)
       const chargeColor = new THREE.Color(0xff5a10)
-      const swingAxis = new THREE.Vector3(1, 0, 0)
+      // El tajo barre de costado: gira el soporte de la mano sobre su +y, que con
+      // el brazo caido apunta arriba.
+      const swingAxis = new THREE.Vector3(0, 1, 0)
       const swingTurn = new THREE.Quaternion()
       const shake = new THREE.Vector3()
 
@@ -2421,7 +2578,8 @@
           hero.arms.left_hand.shoulder.rotation.x = -swing * 0.4
           hero.arms.right_hand.shoulder.rotation.x = swing * 0.4
         }
-        follow.set(pos.x, 1, pos.z)
+        if (going) framing.set(0, 1, 0)
+        follow.set(pos.x + framing.x, framing.y, pos.z + framing.z)
         camera.position.add(step.subVectors(follow, controls.target))
         controls.target.copy(follow)
         sun.position.set(pos.x + 12, 22, pos.z + 10)

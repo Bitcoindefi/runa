@@ -255,6 +255,8 @@ export function label(text, color = '#e0c060') {
   )
   sprite.scale.set(canvas.width / 80, canvas.height / 80, 1)
   sprite.renderOrder = 10
+  // Para las capturas sin interfaz (runaView.labels).
+  sprite.userData.label = true
   return sprite
 }
 

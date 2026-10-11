@@ -156,6 +156,78 @@ const PIECES = [
     ],
     acts: ['bag']
   },
+  // Las armas de Tripo Studio: llegan inclinadas, como en su visor, y asi giran
+  // en el pedestal. `size` es su alto, no su largo.
+  {
+    key: 'dagger',
+    file: 'dagger.glb',
+    size: 0.6,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The rune dagger', 'La daga runica'],
+    note: [
+      'Made with Tripo. The cheapest weapon in the shop: equip it and the hero carries it.',
+      'Hecho con Tripo. El arma mas barata de la tienda: equipala y el heroe la lleva.'
+    ],
+    acts: ['bag']
+  },
+  {
+    key: 'spear',
+    file: 'spear.glb',
+    size: 1.6,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The war spear', 'La lanza de guerra'],
+    note: [
+      'Made with Tripo. Reach 6: it hits before the foe gets close.',
+      'Hecho con Tripo. Alcance 6: pega antes de que el enemigo llegue.'
+    ],
+    acts: ['bag']
+  },
+  {
+    key: 'warhammer',
+    file: 'warhammer.glb',
+    size: 1.1,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The war hammer', 'El martillo de guerra'],
+    note: [
+      'Made with Tripo. The heaviest blow in the game, and the slowest.',
+      'Hecho con Tripo. El golpe mas pesado del juego, y el mas lento.'
+    ],
+    acts: ['bag']
+  },
+  {
+    key: 'crossbow',
+    file: 'crossbow.glb',
+    size: 0.62,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The crossbow', 'La ballesta'],
+    note: [
+      'Made with Tripo. Reach 14: it shoots from far away.',
+      'Hecho con Tripo. Alcance 14: dispara de lejos.'
+    ],
+    acts: ['bag']
+  },
+  {
+    key: 'longbow',
+    file: 'longbow.glb',
+    size: 1.5,
+    yaw: -Math.PI / 2,
+    stand: 'plinth',
+    view: 10,
+    name: ['The longbow', 'El arco largo'],
+    note: [
+      'Made with Tripo. Reach 18, the longest of any weapon.',
+      'Hecho con Tripo. Alcance 18, el mas largo de todas las armas.'
+    ],
+    acts: ['bag']
+  },
   {
     key: 'helmet',
     file: 'yelmo.glb',
