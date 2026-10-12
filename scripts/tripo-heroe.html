@@ -90,6 +90,21 @@
         margin: 0;
         text-align: left;
       }
+      /* Un error que de otro modo no se veria: abajo, rojo, se cierra tocandolo. */
+      #failure {
+        position: fixed;
+        left: 8px;
+        right: 8px;
+        bottom: calc(8px + env(safe-area-inset-bottom));
+        z-index: 50;
+        padding: 10px 12px;
+        border: 1px solid #ff6b5a;
+        background: rgba(40, 8, 6, 0.94);
+        color: #ffd2cc;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
       #toast {
         position: fixed;
         left: 50%;
@@ -854,6 +869,24 @@
       <dl id="gear"></dl>
     </header>
     <div id="toast"></div>
+    <div id="failure" hidden></div>
+    <script>
+      // Antes del modulo, para que tambien se vea si el modulo no carga (un
+      // navegador viejo): el primer error, abajo y en rojo. En el celular no hay
+      // consola donde leerlo.
+      ;(() => {
+        const box = document.getElementById('failure')
+        window.runaFailure = (failure) => {
+          const text = failure && (failure.stack || failure.message || String(failure))
+          if (!text || !box.hidden) return
+          box.textContent = 'Runa: ' + String(text).slice(0, 600)
+          box.hidden = false
+        }
+        box.addEventListener('click', () => (box.hidden = true))
+        addEventListener('error', (event) => window.runaFailure(event.error || event.message))
+        addEventListener('unhandledrejection', (event) => window.runaFailure(event.reason))
+      })()
+    </script>
     <div id="talk" hidden></div>
     <aside id="bag" hidden></aside>
     <footer id="links" hidden>
@@ -886,6 +919,7 @@
     <div id="rotate" hidden></div>
     <script type="module">
       import * as THREE from 'three'
+      const showFailure = (failure) => window.runaFailure(failure)
       import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
@@ -3182,7 +3216,13 @@
               name.focus()
               return
             }
-            play({ begin: { name: typed, realm, slot } })
+            try {
+              play({ begin: { name: typed, realm, slot } })
+            } catch (failure) {
+              // Que se vea por que no arranca (en el celular no hay consola).
+              error.textContent = L('Could not start: ', 'No pudo empezar: ') + failure.message
+              showFailure(failure)
+            }
           })
           box.append(form)
           done()
@@ -3807,6 +3847,9 @@
       // Con la camara mirando al norte (la vista 2.5D de siempre) no cambia nada.
       function turnToCamera(dx, dy) {
         if (!dx && !dy) return [0, 0]
+        // Solo en tercera persona y con un mapa 3D: en la cripta, los campamentos
+        // o la pantalla de texto la camara de fondo gira sola y torceria las flechas.
+        if (settings.camera !== 'third' || !world) return [dx, dy]
         const yaw = Math.atan2(
           controls.target.x - camera.position.x,
           camera.position.z - controls.target.z
