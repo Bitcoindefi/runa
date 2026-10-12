@@ -3216,6 +3216,15 @@
               name.focus()
               return
             }
+            if (!juego) {
+              // Sin el juego empaquetado play() no hace nada: que se vea por que.
+              error.textContent =
+                L('The game did not load: ', 'El juego no cargo: ') +
+                (gameError
+                  ? gameError.message
+                  : L('still loading, try again', 'todavia cargando, proba de nuevo'))
+              return
+            }
             try {
               play({ begin: { name: typed, realm, slot } })
             } catch (failure) {
@@ -3443,6 +3452,7 @@
 
       // El juego empaquetado (scripts/build-juego.js). Pesa: se pide al arrancar
       // la pagina, mientras el menu ya se ve, y se reintenta como los mapas.
+      let gameError = null
       async function loadGame() {
         // Un import() que fallo queda guardado como fallido para esa URL: cada
         // reintento pide otra.
@@ -3451,11 +3461,13 @@
             juego = (await import('./juego.js' + (i ? '?retry=' + i : ''))).default
           } catch (error) {
             console.warn('sin el juego todavia', error)
+            gameError = error
             await new Promise((resolve) => setTimeout(resolve, 700 * (i + 1)))
           }
         }
         if (juego) window.runaJuego = juego
-        else
+        else window.runaFailure(gameError)
+        if (!juego)
           say(
             L(
               'Could not load the game. Reload the page to try again.',
