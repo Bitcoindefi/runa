@@ -80,7 +80,8 @@ function locationOf(runa) {
 }
 
 // Lo que tapa el mapa con una pantalla del juego: el inventario, una tienda, el
-// ranking, la wallet, los controles o un desafio. La pagina la muestra entera.
+// ranking, la wallet, los controles o un desafio que llega. La pagina la muestra
+// entera. El desafio que uno mando no tapa nada: se sigue caminando.
 function overlayOf(runa) {
   if (runa.title) return 'title'
   if (runa.controlsOpen) return 'controls'
@@ -88,13 +89,14 @@ function overlayOf(runa) {
   if (runa.walletOpen) return 'wallet'
   if (runa.rankingOpen) return 'ranking'
   if (runa.shop) return 'shop'
-  if (runa.duelInvite) return 'duel'
+  if (runa.duelInvite && runa.duelInvite.direction === 'in') return 'duel'
   return null
 }
 
-// Lo que hay al lado para la tecla E, como lo decide enter() en game.js.
+// Lo que hay al lado para la tecla E, como lo decide enter() en game.js: una
+// salida, un NPC, el ranking y, si no, otro jugador para desafiar.
 function nearOf(runa) {
-  if (runa.title || runa.field) return null
+  if (runa.title || runa.field || (runa.duel && runa.duel.active)) return null
   const action = runa.walker.action()
   if (action) return { kind: action.kind, to: action.to || null, shop: action.shop || null }
   const npc = runa.nearbyNpc()
@@ -103,7 +105,54 @@ function nearOf(runa) {
   if (landmark && landmark.action && landmark.action.kind === 'ranking') {
     return { kind: 'ranking', name: landmark.name }
   }
+  const peer = runa.nearbyPlayer()
+  if (peer) return { kind: 'player', id: peer.id, name: peer.name }
   return null
+}
+
+// El duelo en curso como lo cuenta DuelCombat: los dos combatientes en celdas
+// del Coliseo, con su vida, alcance y recarga. En red lo ordena el host, asi
+// que la pagina dibuja lo que paso y nunca lo que va a pasar.
+function arenaOf(runa) {
+  if (!runa.duel || !runa.duel.active || !runa.duelCombat) return null
+  const snap = runa.duelCombat.snapshot(runa.duel.self)
+  const fighter = (f) => ({
+    id: f.id,
+    name: runa.duelName(f.id),
+    x: f.x,
+    y: f.y,
+    hp: f.hp,
+    maxHp: f.maxHp,
+    reach: f.reach,
+    cooldown: f.cooldown,
+    cooldownLeft: f.cooldownLeft,
+    swinging: f.swinging
+  })
+  const network = runa.duelNetwork
+  return {
+    tick: snap.tick,
+    distance: snap.distance,
+    self: fighter(snap.self),
+    rival: fighter(snap.rival),
+    online: !!network,
+    host: !!(network && runa.presence && network.hostId === runa.presence.id)
+  }
+}
+
+// Los otros jugadores de la sala parados en el mismo mapa, como los dibuja la
+// terminal. El rival de un duelo no va aca: va en arena, que es la que manda.
+function playersOf(runa, arena) {
+  if (runa.title || runa.field) return []
+  const rival = arena ? arena.rival.id : null
+  return runa
+    .others(runa.walker.mapId)
+    .filter((peer) => peer.id && peer.id !== rival)
+    .map(({ id, name, x, y, level }) => ({ id, name, x, y, level }))
+}
+
+function inviteOf(runa) {
+  const invite = runa.duelInvite
+  return invite ? { direction: invite.direction, name: invite.name } : null
 }
 
 // Los monstruos vivos de un campo (la pradera, la cripta, un campamento) y sus
@@ -148,6 +197,16 @@ function live(runa) {
   const field = runa.field
   const boss = field && field.mode === 'boss' && field.boss ? field.boss.snapshot() : null
   const fight = field && field.combat && field.combat.world
+  const arena = arenaOf(runa)
+  // La vida que se juega ahora: la de la pelea, la del duelo (que no toca la
+  // de la ficha) o la de la ficha.
+  let hp = sheet.hp
+  let maxhp = sheet.maxhp
+  if (fight) hp = Math.max(0, Math.ceil(Number(fight.hero.hp) || 0))
+  else if (arena) {
+    hp = arena.self.hp
+    maxhp = arena.self.maxHp
+  }
   return {
     title: !!runa.title,
     naming: !!runa.naming,
@@ -155,8 +214,8 @@ function live(runa) {
     realm: runa.realm,
     slot: runa.activeSlot,
     level: sheet.level,
-    hp: fight ? Math.max(0, Math.ceil(Number(fight.hero.hp) || 0)) : sheet.hp,
-    maxhp: sheet.maxhp,
+    hp,
+    maxhp,
     gold: sheet.gold,
     xp: sheet.xpinto,
     xpneed: sheet.xpneed,
@@ -190,7 +249,12 @@ function live(runa) {
     // El capitulo del modo historia, para un rastreador: titulo, objetivo,
     // progreso y a quien volver. Los textos van en castellano y la pagina los
     // traduce con tr(). Forma completa en docs/story.md.
-    story: runa.title ? null : runa.storySummary()
+    story: runa.title ? null : runa.storySummary(),
+    arena,
+    players: playersOf(runa, arena),
+    invite: inviteOf(runa),
+    pvp: { ...sheet.pvp },
+    lastDuel: runa.lastDuelResult ? { ...runa.lastDuelResult } : null
   }
 }
 
@@ -204,6 +268,9 @@ module.exports = {
   locationOf,
   overlayOf,
   nearOf,
+  arenaOf,
+  playersOf,
+  inviteOf,
   foesOf,
   fightOf,
   live

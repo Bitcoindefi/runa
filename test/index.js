@@ -61,6 +61,7 @@ require('./duel-chain.test.js')
 require('./duel.test.js')
 require('./net.test.js')
 require('./story.test.js')
+require('./red-webrtc.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })

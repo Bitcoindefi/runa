@@ -59,8 +59,27 @@ repeticiones y se descartan si llegan desde otra conexion o para otro peer.
 El peer cuyo id es menor actua como reloj y ordena `intent` en pasos numerados.
 Solo esa secuencia modifica `DuelCombat`; el invitado no predice dano ni
 movimiento. Ticks, desplazamiento, ataque y rendicion cruzan el mismo camino,
-por lo que ambos extremos reproducen el mismo resultado. El silencio de un peer
-libera al otro del Coliseo y lo devuelve a su posicion anterior.
+por lo que ambos extremos reproducen el mismo resultado.
+
+Como termina un duelo que no termina peleando:
+
+- Irse a proposito (salir del juego, dejar la sala o cerrar la pagina) es
+  rendirse: el que se va se anota la derrota y lo avisa al salir, y el que se
+  queda gana. El host concede con un paso ordenado; el invitado manda un
+  `result` que lo nombra perdedor, el unico veredicto que se acepta de el.
+- El silencio no dice quien perdio la linea, y en un corte de red lo escuchan
+  los dos lados: un peer callado por `GONE_MS` termina el duelo sin ganador y
+  devuelve a cada uno a su posicion anterior. Nadie suma dos victorias.
+- Un `decline` despues del accept (el retador no pudo entrar, o cancelo
+  mientras viajaba la aceptacion) anula el duelo en los dos lados. El que
+  acepta entra primero y recien despues promete, asi nunca acepta en falso.
+- El invitado que pasa 45 ticks sin un paso ordenado, o que ve un hueco en la
+  numeracion, anula el duelo y avisa con un `decline`. No avanza el combate:
+  el reloj sigue siendo el del host. El veredicto del host cierra a un
+  invitado que se perdio el paso final.
+
+Asi la salida `Q` bloqueada nunca deja a nadie encerrado: siempre hay un camino
+de vuelta que no depende de que el otro conteste.
 
 El resultado local no paga apuestas por si solo. El contrato Soroban de
 `contracts/duel-arena` recibe revelaciones y declaraciones de ganador, resuelve

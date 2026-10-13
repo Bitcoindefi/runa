@@ -4,11 +4,15 @@
 // el mismo Runa en el mismo Program de bare-tui, con sus reglas, sus guardados y
 // su pantalla de texto. scripts/build-juego.js lo empaqueta para el navegador y
 // solo cambia la plataforma: bare-fs sobre localStorage, la cadena por fetch y
-// sin presencia P2P.
+// la presencia P2P sobre WebRTC.
 //
 // La pagina le manda teclas como KeyMsg, igual que las decodifica la terminal,
 // lee del modelo lo que dibuja en 3D (tripo-estado.js live) y muestra el cuadro
 // de texto cuando el juego abre una pantalla que el mapa 3D no tiene.
+//
+// La red es opcional, como en la terminal: se juega solo hasta entrar a una
+// sala del Coliseo en linea (online). Los de la misma sala se ven y se
+// desafian con E; el duelo lo decide lib/, igual que entre dos terminales.
 
 const { Program, KeyMsg } = require('bare-tui')
 const { Runa, TICK_MS, WALLET } = require('../lib/game.js')
@@ -19,6 +23,7 @@ const field = require('../lib/field.js')
 const CONTENT = require('../lib/content.js')
 const fs = require('bare-fs')
 const estado = require('./tripo-estado.js')
+const red = require('./navegador/red-webrtc.js')
 
 // La pradera para la vista 3D (tripo-pradera.js): el campo del juego tal cual,
 // para armar una sin partida (el recorrido) y para leer el suelo y el arte de
@@ -140,6 +145,23 @@ function start(opts = {}) {
 
   const tr = (text) => withLanguage(runa.language, () => t(String(text)))
 
+  // La sala del Coliseo en linea, si se entro a una: su codigo y su presencia.
+  let arena = null
+  const joined = () => (arena && arena.presence && runa.presence === arena.presence ? arena : null)
+
+  // Salir de la sala. Con un duelo abierto es rendirse (lib/game.js lo concede
+  // y avisa), y el resultado queda guardado enseguida.
+  function leaveRoom() {
+    arena = null
+    if (!runa.presence) return false
+    try {
+      runa.stopPresence()
+      runa.saveCurrent()
+    } catch {}
+    program.send({ type: 'redraw' })
+    return true
+  }
+
   return {
     runa,
     program,
@@ -203,13 +225,98 @@ function start(opts = {}) {
       return true
     },
 
-    // Guardar y salir al menu de la pagina.
+    // Guardar y salir al menu de la pagina. Primero se deja la sala, para que
+    // un rival no espere en el Coliseo a alguien que ya no esta.
     quit() {
+      leaveRoom()
       try {
         runa.saveCurrent()
       } catch {}
       program.quit()
       return done
+    },
+
+    /**
+     * Entrar a la sala `code` del Coliseo en linea (RUNA si falta). Los que
+     * escriben el mismo codigo se ven en el mapa y se desafian con E. Cambiar
+     * de sala en pleno duelo es rendirse en la anterior.
+     *
+     * @returns {boolean} si la sala quedo abierta
+     */
+    online(code) {
+      const room = red.roomCode(code) || red.DEFAULT_ROOM
+      if (!running || runa.title || runa.naming) return false
+      const current = joined()
+      if (current && current.code === room) return true
+      leaveRoom()
+      let presence = null
+      try {
+        presence = new red.Presence({ name: runa.name, room })
+      } catch {
+        return false
+      }
+      runa.attachPresence(presence)
+      runa.startPresence()
+      if (!presence.online) {
+        const error = presence.error
+        leaveRoom()
+        arena = { code: room, presence: null, error }
+        return false
+      }
+      arena = { code: room, presence, error: '' }
+      program.send({ type: 'redraw' })
+      return true
+    },
+
+    offline: leaveRoom,
+    // Rendirse sin salir todavia de la sala: al cerrar la pagina el aviso al
+    // rival tiene que salir antes de que se corten los canales de WebRTC.
+    concede: () => {
+      if (!(runa.duelNetwork && runa.duel && runa.concedeDuel())) return false
+      // La derrota se guarda ya: pagehide llega tarde para escribir.
+      try {
+        runa.saveCurrent()
+      } catch {}
+      return true
+    },
+
+    /**
+     * La sala para la pagina: el codigo, quien mas esta y si esta en el mismo
+     * mapa (solo a esos se los puede desafiar). Null fuera de una sala.
+     */
+    room() {
+      const current = joined()
+      if (!current) return arena && arena.error ? { code: arena.code, error: arena.error } : null
+      const presence = current.presence
+      let all = []
+      try {
+        all = presence.others()
+      } catch {}
+      const here = new Set(runa.field ? [] : runa.others(runa.walker.mapId).map((peer) => peer.id))
+      return {
+        code: current.code,
+        id: presence.id,
+        error: presence.error || '',
+        links: presence.conns.size,
+        players: all.map((peer) => ({
+          id: peer.id,
+          name: peer.name,
+          level: peer.level,
+          wins: peer.wins,
+          losses: peer.losses,
+          here: here.has(peer.id)
+        }))
+      }
+    },
+
+    // Desafiar a alguien de la sala que este en el mismo mapa, sin acercarse.
+    challenge(id) {
+      if (!joined() || runa.field) return false
+      const peer = runa.others(runa.walker.mapId).find((candidate) => candidate.id === id)
+      if (!peer) return false
+      const sent = runa.challengePlayer(peer)
+      program.send({ type: 'redraw' })
+      return sent
     },
 
     // La estrategia de combate (script.txt): el juego la relee sola al cambiar.

@@ -7,9 +7,10 @@
 //   node scripts/build-juego.js [salida.js]   por defecto vendor/runa-juego.js
 //
 // Solo se cambia la plataforma, en el momento de empaquetar: bare-fs pasa a
-// localStorage, bare-path a un join posix, bare-https a fetch, la terminal y la
-// red P2P no existen (el juego ya sabe jugar sin ellas) y Buffer se inyecta para
-// lib/stellar.js. El resto de lib/ entra tal cual.
+// localStorage, bare-path a un join posix, bare-https a fetch, la terminal no
+// existe, la presencia P2P viaja por WebRTC en vez de Hyperswarm (red-webrtc.js,
+// con Trystero de vendor/trystero) y Buffer se inyecta para lib/stellar.js. El
+// resto de lib/ entra tal cual.
 
 const path = require('path')
 
@@ -30,10 +31,12 @@ const PACKAGES = {
   // lo cambian por bare-events bajo la condicion "bare".
   events: require.resolve('bare-events')
 }
-// net.js es la presencia P2P entera: en la pagina se juega solo. Con
+// La presencia de lib/ (la que importa game.js) es la de lib/net.js sobre
+// WebRTC. red-webrtc.js pide el net.js de verdad por su ruta, y ese ve
+// Hyperswarm y bare-crypto ausentes (sin-red.js), como cuando no estan. Con
 // RUNA_SIN_WALLET=1 (la version de Steam, que no admite cripto) stellar.js
 // tambien se reemplaza: sin wallet ni stellar-base en el paquete.
-const LIB = { './net.js': path.join(SHIMS, 'sin-red.js') }
+const LIB = { './net.js': path.join(SHIMS, 'red-webrtc.js') }
 if (process.env.RUNA_SIN_WALLET) LIB['./stellar.js'] = path.join(SHIMS, 'sin-wallet.js')
 
 const platform = {
