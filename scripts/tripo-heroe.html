@@ -2330,11 +2330,59 @@
         if (flat < 0.01) return
         const now = Math.atan2(behind.x, behind.z)
         const facing = hero.root.rotation.y
-        if (Math.abs(wrap(now + Math.PI - facing)) > Math.PI / 3) return
-        const turn = now + wrap(facing + Math.PI - now) * Math.min(1, dt * 2)
+        if (Math.abs(wrap(now + Math.PI - facing)) > (Math.PI * 5) / 12) return
+        const turn = now + wrap(facing + Math.PI - now) * ease(dt, CAM.turn)
         behind.x = Math.sin(turn) * flat
         behind.z = Math.cos(turn) * flat
         camera.position.copy(controls.target).add(behind)
+      }
+
+      // La camara en tercera persona flota detras del heroe en vez de ir pegada:
+      // - el punto que mira persigue al heroe con un retraso que no depende de
+      //   los fps (1 - e^(-velocidad * dt)), como el "camera lag" de un brazo de
+      //   resorte; a la carrera queda un metro y algo atras y lo alcanza al frenar;
+      // - una zona muerta chica: los pasitos no la mueven;
+      // - mira un poco adelante de hacia donde se camina, suavizado;
+      // - se acomoda detras recien despues de medio segundo caminando, despacio,
+      //   y no lo hace por unos segundos si se la giro a mano;
+      // - un salto grande (otro mapa, un portal) la lleva de golpe, sin arrastre.
+      const CAM = {
+        lag: 3.2,
+        lead: 1.1,
+        leadEase: 2.2,
+        dead: 0.3,
+        turn: 0.9,
+        wait: 0.5,
+        hands: 2.5
+      }
+      const ease = (dt, speed) => 1 - Math.exp(-speed * dt)
+      const lead = new THREE.Vector3()
+      const wantLead = new THREE.Vector3()
+      const chase = new THREE.Vector3()
+      let walkingFor = 0
+      let handsUntil = 0
+      controls.addEventListener('start', () => {
+        handsUntil = performance.now() + CAM.hands * 1000
+      })
+      function floatCamera(dt, going) {
+        walkingFor = going ? walkingFor + dt : 0
+        // Adelante de la marcha: hacia donde mira el heroe, solo caminando.
+        if (going) {
+          const facing = hero.root.rotation.y
+          wantLead.set(Math.sin(facing) * CAM.lead, 0, Math.cos(facing) * CAM.lead)
+        } else wantLead.set(0, 0, 0)
+        lead.lerp(wantLead, ease(dt, CAM.leadEase))
+        chase.set(follow.x + lead.x, follow.y, follow.z + lead.z).sub(controls.target)
+        const gap = chase.length()
+        if (gap > 8) {
+          // Otro mapa o un portal: sin arrastre.
+          lead.set(0, 0, 0)
+          chase.set(follow.x, follow.y, follow.z).sub(controls.target)
+        } else if (gap <= CAM.dead) chase.set(0, 0, 0)
+        else chase.multiplyScalar(((gap - CAM.dead) / gap) * ease(dt, CAM.lag))
+        camera.position.add(chase)
+        controls.target.add(chase)
+        if (going && walkingFor > CAM.wait && performance.now() > handsUntil) alignBehind(dt)
       }
       // Lo que mira la camara respecto del heroe: runaView.frame lo corre para
       // encuadrar una captura, y vuelve al pecho del heroe cuando camina.
@@ -2766,9 +2814,11 @@
         }
         if (going) framing.set(0, 1, 0)
         follow.set(pos.x + framing.x, framing.y, pos.z + framing.z)
-        camera.position.add(step.subVectors(follow, controls.target))
-        controls.target.copy(follow)
-        if (going && settings.camera === 'third') alignBehind(dt)
+        if (settings.camera === 'third') floatCamera(dt, going)
+        else {
+          camera.position.add(step.subVectors(follow, controls.target))
+          controls.target.copy(follow)
+        }
         sun.position.set(pos.x + 12, 22, pos.z + 10)
         sun.target.position.set(pos.x, 0, pos.z)
         if (ash.visible) ash.position.set(pos.x, 0, pos.z)
