@@ -30,8 +30,11 @@ const PACKAGES = {
   // lo cambian por bare-events bajo la condicion "bare".
   events: require.resolve('bare-events')
 }
-// net.js es la presencia P2P entera: en la pagina se juega solo.
+// net.js es la presencia P2P entera: en la pagina se juega solo. Con
+// RUNA_SIN_WALLET=1 (la version de Steam, que no admite cripto) stellar.js
+// tambien se reemplaza: sin wallet ni stellar-base en el paquete.
 const LIB = { './net.js': path.join(SHIMS, 'sin-red.js') }
+if (process.env.RUNA_SIN_WALLET) LIB['./stellar.js'] = path.join(SHIMS, 'sin-wallet.js')
 
 const platform = {
   name: 'runa-navegador',
@@ -40,8 +43,8 @@ const platform = {
     build.onResolve({ filter: new RegExp('^(' + names.join('|') + ')$') }, (args) => ({
       path: PACKAGES[args.path]
     }))
-    build.onResolve({ filter: /^\.\/net\.js$/ }, (args) =>
-      path.relative(path.join(root, 'lib'), args.resolveDir) === ''
+    build.onResolve({ filter: /^\.\/(net|stellar)\.js$/ }, (args) =>
+      LIB[args.path] && path.relative(path.join(root, 'lib'), args.resolveDir) === ''
         ? { path: LIB[args.path] }
         : undefined
     )

@@ -11,7 +11,7 @@
 // de texto cuando el juego abre una pantalla que el mapa 3D no tiene.
 
 const { Program, KeyMsg } = require('bare-tui')
-const { Runa, TICK_MS } = require('../lib/game.js')
+const { Runa, TICK_MS, WALLET } = require('../lib/game.js')
 const { SaveStore } = require('../lib/saves.js')
 const { MAPS } = require('../lib/map.js')
 const { t, withLanguage, mapLabels } = require('../lib/locale.js')
@@ -263,5 +263,7 @@ module.exports = {
   persistent: () => (typeof fs.persistent === 'function' ? fs.persistent() : false),
   SAVES,
   MAPS,
-  meadow
+  meadow,
+  // false en la version sin wallet (Steam).
+  wallet: WALLET
 }

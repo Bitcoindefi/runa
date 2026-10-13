@@ -3461,7 +3461,7 @@
           ['I', L('inventory and gear', 'inventario y equipo')],
           ['F', L('attack the Colossus', 'atacar al Coloso')],
           ['T', L('back to town', 'volver a la ciudad')],
-          ['V', L('wallet and PvP', 'wallet y PvP')],
+          ['V', juego && juego.wallet === false ? 'PvP' : L('wallet and PvP', 'wallet y PvP')],
           ['R', L('reload your combat strategy', 'recargar tu estrategia de combate')],
           ['?', L("the game's own help", 'la ayuda del juego')],
           ['Tab', L('show the text screen', 'ver la pantalla de texto')],
