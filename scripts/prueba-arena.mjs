@@ -12,8 +12,13 @@
 //      victoria y sale del Coliseo, y el que se fue tiene la derrota guardada.
 //   3. En pleno duelo se mata el navegador del host, sin despedida: el otro sale
 //      solo del Coliseo, sin ganador (la salida Q sigue bloqueada en el duelo).
+//   4. En pleno duelo cada pagina se congela 5 s, como al armar el Coliseo con
+//      la red lenta o en un telefono: el duelo sigue y termina bien.
 //
-//   node scripts/prueba-arena.mjs [--chrome ruta] [--only 1,2,3] [--keep] [--verbose]
+//   node scripts/prueba-arena.mjs [--chrome ruta] [--only 1,2,3,4] [--keep] [--verbose]
+//   node scripts/prueba-arena.mjs --url https://playruna.vercel.app/jugar
+//
+// Con --url no levanta el visor: los dos Chrome abren esa pagina publicada.
 //
 // Necesita internet: Trystero se encuentra con el otro por trackers publicos
 // de BitTorrent (despues el duelo va directo, navegador a navegador). Sale con
@@ -34,7 +39,8 @@ const option = (name, fallback) => {
 }
 const KEEP = argv.includes('--keep')
 const VERBOSE = argv.includes('--verbose')
-const ONLY = new Set(String(option('only', '1,2,3')).split(','))
+const ONLY = new Set(String(option('only', '1,2,3,4')).split(','))
+const URL_BASE = option('url', null)
 const CHROME = option('chrome', process.env.CHROME || findChrome())
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'runa-arena-'))
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -253,7 +259,8 @@ const KEYS = {
   ArrowLeft: { code: 'ArrowLeft', keyCode: 37 },
   ArrowRight: { code: 'ArrowRight', keyCode: 39 },
   e: { code: 'KeyE', keyCode: 69, text: 'e' },
-  f: { code: 'KeyF', keyCode: 70, text: 'f' }
+  f: { code: 'KeyF', keyCode: 70, text: 'f' },
+  r: { code: 'KeyR', keyCode: 82, text: 'r' }
 }
 
 // Los juegos nuevos arrancan livianos (sin sombras, efectos bajos) y en ingles.
@@ -298,7 +305,7 @@ async function launch(tag, origin) {
   await page.send('Page.addScriptToEvaluateOnNewDocument', {
     source: `try { if (!localStorage.getItem('runa:web:settings')) localStorage.setItem('runa:web:settings', ${JSON.stringify(SETTINGS)}) } catch {}`
   })
-  await page.send('Page.navigate', { url: origin + '/heroe' })
+  await page.send('Page.navigate', { url: origin + (URL_BASE ? '/' : '/heroe') })
   return { tag, child, port, page, origin }
 }
 
@@ -586,10 +593,81 @@ async function runDeparture(how) {
   }
 }
 
+// Cada pagina se congela 5 s en pleno duelo (el hilo principal ocupado, sin
+// latidos ni pasos): primero el invitado, despues el host. Con la ventana de
+// silencio de la terminal (3 s) cualquiera de las dos cortaba el duelo.
+async function runFreeze() {
+  const failures = []
+  const code = roomCode()
+  const [a, b] = await pair(code, ['Gala', 'Hugo'])
+  try {
+    await enterDuel(a, b)
+    const ids = await Promise.all([a, b].map((p) => p.page.eval(`window.runaGame.room().id`)))
+    const [host, guest] = ids[0] < ids[1] ? [a, b] : [b, a]
+    const names = new Map([
+      [a, 'Gala'],
+      [b, 'Hugo']
+    ])
+    const freeze = (player) =>
+      player.page.eval(
+        `(() => { const end = performance.now() + 5000; while (performance.now() < end) {} return true })()`
+      )
+    const both = async () => {
+      await sleep(2000)
+      const [sa, sb] = await Promise.all([a.page.state(), b.page.state()])
+      return !!(sa.live.arena && sb.live.arena)
+    }
+    await freeze(guest)
+    log(`  ${names.get(guest)} (invitado) se congela 5 s`)
+    check(await both(), 'el duelo sigue despues de congelarse el invitado', failures)
+    await freeze(host)
+    log(`  ${names.get(host)} (host) se congela 5 s`)
+    check(await both(), 'el duelo sigue despues de congelarse el host', failures)
+
+    // Y sigue andando: el invitado se rinde con R y los dos coinciden.
+    await guest.page.press('r')
+    await Promise.all(
+      [a, b].map((player) =>
+        player.page.waitFor(
+          `!window.runaPage().live.arena && window.runaPage().map === 'city'`,
+          20000,
+          'volver a la ciudad'
+        )
+      )
+    )
+    const [sa, sb] = await Promise.all([a.page.state(), b.page.state()])
+    const hostId = ids[0] < ids[1] ? ids[0] : ids[1]
+    check(
+      sa.live.lastDuel && sb.live.lastDuel && sa.live.lastDuel.winner === sb.live.lastDuel.winner,
+      'las dos paginas coinciden en el ganador',
+      failures
+    )
+    check(
+      sa.live.lastDuel && sa.live.lastDuel.winner === hostId,
+      'gana el host por la rendicion',
+      failures
+    )
+    return {
+      name: 'cada pagina se congela 5 s',
+      failures,
+      detail: `el duelo sigue y ${names.get(host)} gana cuando ${names.get(guest)} se rinde`
+    }
+  } finally {
+    for (const player of [a, b]) {
+      player.page.close()
+      kill(player.child)
+    }
+  }
+}
+
+// Un archivo cualquiera del mismo origen. Publicado no sirve una ruta que no
+// existe: la pagina 404 de Vercel no deja leer localStorage.
+const SAME_ORIGIN = URL_BASE ? '/models.json' : '/state.json'
+
 // Abre otra pestana en el navegador del que se fue y lee su ranura 1.
 async function savedGame(player) {
   const target = await fetch(
-    `http://127.0.0.1:${player.port}/json/new?${encodeURIComponent(player.origin + '/state.json')}`,
+    `http://127.0.0.1:${player.port}/json/new?${encodeURIComponent(player.origin + SAME_ORIGIN)}`,
     { method: 'PUT' }
   ).then((response) => response.json())
   const page = new Page(player.tag + ' (guardado)', target.webSocketDebuggerUrl)
@@ -610,14 +688,18 @@ if (!fs.existsSync(CHROME)) {
   process.exit(2)
 }
 
-log(`visor y juego desde ${ROOT}`)
-const viewer = await startViewer()
-log(`visor en ${viewer.origin}`)
+if (URL_BASE) log(`juego publicado en ${URL_BASE}`)
+else log(`visor y juego desde ${ROOT}`)
+const viewer = URL_BASE
+  ? { origin: URL_BASE.replace(/\/+$/, ''), child: null }
+  : await startViewer()
+if (!URL_BASE) log(`visor en ${viewer.origin}`)
 const results = []
 const runs = [
   ['1', runFight],
   ['2', () => runDeparture('close')],
-  ['3', () => runDeparture('kill')]
+  ['3', () => runDeparture('kill')],
+  ['4', runFreeze]
 ]
 try {
   for (const [id, run] of runs) {
@@ -634,7 +716,12 @@ try {
   }
 } finally {
   kill(viewer.child)
-  if (!KEEP) fs.rmSync(WORK, { recursive: true, force: true })
+  // Chrome puede tardar en soltar su perfil: se reintenta y, si no, queda en temp.
+  if (!KEEP) {
+    try {
+      fs.rmSync(WORK, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
+    } catch {}
+  }
 }
 
 console.log('\nColiseo en linea, punta a punta:')

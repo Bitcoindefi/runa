@@ -724,3 +724,21 @@ Original prompt: arreglar la escala: los NPC y el jugador son gigantes, tapan el
   codigo anterior (la decimotercera cuida que un invitado no se declare
   ganador). Resultado: 156/156 pruebas y 1427/1427 aserciones (antes 143 y
   1362), lint limpio.
+
+## Coliseo en linea: una pagina congelada ya no corta el duelo
+
+- Probado contra playruna.vercel.app recien publicado, un duelo se corto apenas
+  los dos entraron al Coliseo (la corrida siguiente paso). Causa probable: la
+  presencia daba por ido a un peer callado 3 s, y una pagina que arma el
+  Coliseo con la red lenta (o un telefono que cambia de app) puede quedarse
+  mas que eso sin latir.
+- `Presence` acepta `goneMs`; la de WebRTC usa 10 s y la terminal sigue con
+  3 s. Una pestana cerrada no espera eso (Trystero avisa con `onPeerLeave`);
+  un navegador muerto si: en la corrida 3 el que se queda sale en 11 s en vez
+  de 5.
+- El plazo del invitado sin pasos del host sale de la misma ventana
+  (`duelSilenceTicks`): 45 ticks en la terminal, 150 en la pagina.
+- `prueba-arena.mjs` suma la corrida 4: cada pagina se congela 5 s en pleno
+  duelo. Con la ventana de 3 s fallan los dos chequeos; con 10 s el duelo
+  sigue. Tambien acepta `--url` para correr contra el sitio publicado.
+- Resultado: 173/173 pruebas, lint limpio y las 4 corridas de dos navegadores.

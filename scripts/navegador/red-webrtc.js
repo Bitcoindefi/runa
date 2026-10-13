@@ -26,6 +26,15 @@ const DEFAULT_ROOM = 'RUNA'
 /** Letras y numeros, hasta 8: un codigo que se dicta en voz alta. */
 const ROOM_MAX = 8
 
+/**
+ * El silencio que hace falta para dar por ido a alguien. En la terminal son
+ * tres segundos; una pagina puede quedarse congelada mas que eso mientras arma
+ * un mapa, o un telefono cambiar de app un momento. Una pestana cerrada no
+ * espera esto (sale de la sala y Trystero avisa con onPeerLeave); un navegador
+ * muerto o una red cortada si: el que se queda sale a los diez segundos.
+ */
+const GONE_MS = 10000
+
 /** El nombre de la unica accion de Trystero: cada mensaje es una linea. */
 const LINE = 'line'
 
@@ -52,7 +61,7 @@ class WebRtcPresence extends net.Presence {
    */
   constructor(opts = {}) {
     const room = roomCode(opts.room) || DEFAULT_ROOM
-    super({ ...opts, topic: ROOM_TOPIC + room })
+    super({ goneMs: GONE_MS, ...opts, topic: ROOM_TOPIC + room })
     this.room = room
     this.joinRoom = opts.joinRoom || joinTrystero
     this.channel = null
@@ -168,6 +177,7 @@ module.exports = {
   Presence: WebRtcPresence,
   WebRtcPresence,
   APP_ID,
+  WEB_GONE_MS: GONE_MS,
   ROOM_TOPIC,
   DEFAULT_ROOM,
   ROOM_MAX,

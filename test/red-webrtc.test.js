@@ -1,6 +1,6 @@
 const { test } = require('brittle')
 const red = require('../scripts/navegador/red-webrtc.js')
-const { Runa } = require('../lib/game.js')
+const { Runa, TICK_MS } = require('../lib/game.js')
 
 /**
  * Trystero in memory: rooms by appId and roomId, one action per name, and
@@ -135,7 +135,8 @@ test('quien deja la sala se avisa enseguida y una sola vez', (t) => {
   t.alike(gone, ['Beto'], 'el barrido no lo cuenta otra vez')
 })
 
-test('un duelo por WebRTC: el que cierra la pagina lo pierde y el otro vuelve ganador', (t) => {
+/** Ana desafia a Beto en la misma sala y los dos entran al Coliseo. */
+function duelOverWebRtc(t) {
   const net = fakeTrystero()
   const ana = new Runa({ presence: false, name: 'Ana' })
   const beto = new Runa({ presence: false, name: 'Beto' })
@@ -162,6 +163,11 @@ test('un duelo por WebRTC: el que cierra la pagina lo pierde y el otro vuelve ga
   ana.onTick()
   t.ok(ana.duel && ana.duel.active && beto.duel && beto.duel.active, 'los dos en el Coliseo')
   t.is(ana.walker.mapId, 'coliseum')
+  return { ana, beto, home }
+}
+
+test('un duelo por WebRTC: el que cierra la pagina lo pierde y el otro vuelve ganador', (t) => {
+  const { ana, beto, home } = duelOverWebRtc(t)
 
   // Ana cierra la pagina en pleno duelo.
   ana.stopPresence()
@@ -170,4 +176,42 @@ test('un duelo por WebRTC: el que cierra la pagina lo pierde y el otro vuelve ga
   t.alike({ mapId: beto.walker.mapId, x: beto.walker.x, y: beto.walker.y }, home)
   t.alike(beto.player.snapshot().pvp, { wins: 1, losses: 0 }, 'el que se queda gana')
   t.alike(ana.player.snapshot().pvp, { wins: 0, losses: 1 }, 'el que se va pierde')
+})
+
+test('una pagina congelada unos segundos sigue en la sala', (t) => {
+  const net = fakeTrystero()
+  const ana = presence(net, 'Ana')
+  const beto = presence(net, 'Beto')
+  t.teardown(() => {
+    ana.stop()
+    beto.stop()
+  })
+  ana.start()
+  beto.start()
+  ana.beat()
+  beto.beat()
+  t.is(ana.goneMs, red.WEB_GONE_MS)
+  const gone = []
+  ana.on('peer-leave', (peer) => gone.push(peer.name))
+  const peer = ana.peers.get(beto.id)
+  peer.seen -= 5000
+  ana.reap()
+  t.alike(gone, [], 'cinco segundos sin latir no alcanzan, como al armar el Coliseo')
+  peer.seen -= red.WEB_GONE_MS
+  ana.reap()
+  t.alike(gone, ['Beto'], 'el silencio largo si')
+})
+
+test('en un duelo por WebRTC el invitado espera al host tanto como la sala', (t) => {
+  const { ana, beto } = duelOverWebRtc(t)
+  const guest = ana.duelNetwork.hostId === ana.presence.id ? beto : ana
+  const ticks = Math.round(red.WEB_GONE_MS / TICK_MS)
+  t.is(guest.duelSilenceTicks(), ticks)
+  // El host deja de ordenar pasos: su pagina quedo congelada. Si el invitado es
+  // Ana, ya conto un tick de silencio al entrar.
+  for (let i = guest.duelNetwork.quiet; i < ticks; i++) guest.onTick()
+  t.ok(guest.duel && guest.duel.active, 'diez segundos de margen')
+  guest.onTick()
+  t.absent(guest.duel, 'despues sale del Coliseo')
+  t.alike(guest.player.snapshot().pvp, { wins: 0, losses: 0 }, 'sin ganador')
 })
