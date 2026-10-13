@@ -491,6 +491,25 @@
       #bossbar .bar i {
         background: #ff6a20;
       }
+      /* El rival del duelo en linea, donde va la barra del Coloso. */
+      #rivalbar {
+        position: absolute;
+        left: 50%;
+        top: 16px;
+        transform: translateX(-50%);
+        width: min(520px, calc(100vw - 340px));
+        text-align: center;
+        color: #ff9a8a;
+        text-shadow: 0 1px 3px #000;
+      }
+      #rivalbar .bar i {
+        background: #e0583a;
+      }
+      #stats .room {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--accent);
+      }
       #gait {
         position: absolute;
         right: 16px;
@@ -803,7 +822,8 @@
       }
       @media (max-width: 640px) {
         /* En pantallas angostas la barra del Coloso va debajo de la ficha. */
-        #bossbar {
+        #bossbar,
+        #rivalbar {
           top: 150px;
           width: calc(100vw - 32px);
         }
@@ -866,6 +886,7 @@
     <div id="play" hidden>
       <div id="stats"></div>
       <div id="bossbar" hidden></div>
+      <div id="rivalbar" hidden></div>
       <div id="gait"></div>
       <ol id="log"></ol>
       <div id="hint"></div>
@@ -943,7 +964,9 @@
         run: true,
         camera: 'far',
         shadows: true,
-        effects: matchMedia('(pointer: coarse)').matches ? 'low' : 'high'
+        effects: matchMedia('(pointer: coarse)').matches ? 'low' : 'high',
+        // La ultima sala del Coliseo en linea.
+        room: 'RUNA'
       }
       try {
         Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS) || '{}'))
@@ -2535,8 +2558,34 @@
             .copy(holder.userData.base)
             .multiply(swingTurn.setFromAxisAngle(swingAxis, -s * 1.5))
         }
+        if (!rig) return
 
-        // Chispas, numeros, ondas y tajos que siguen vivos.
+        // Gira hacia el heroe, despacio. Mira hacia -x en su pivote.
+        const dx = hero.root.position.x - rig.turn.position.x
+        const dz = hero.root.position.z - rig.turn.position.z
+        if (dx * dx + dz * dz > 0.01) {
+          const want = Math.atan2(dz, -dx)
+          rig.turn.rotation.y += wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 1.2)
+        }
+        // Se inclina: atras al cargar, adelante al caer, un poco atras al recibir.
+        // Inclinarse hacia su frente (-x) es girar positivo sobre z.
+        const breathe = Math.sin(time * 1.3)
+        const fall = fight.slam > 0 ? Math.sin(fight.slam * Math.PI) : 0
+        rig.lean.rotation.z = breathe * 0.015 - fight.windup * 0.2 + fall * 0.32 - fight.hit * 0.08
+        rig.lean.position.y = breathe * 0.06 + fight.windup * 0.3 - fall * 0.35
+        // Destello: claro al recibir, naranja al cargar el golpe.
+        const glow = Math.max(fight.hit, fight.windup * 0.6)
+        const tone = fight.hit >= fight.windup * 0.6 ? flashColor : chargeColor
+        for (const material of rig.materials) {
+          if (!material.emissive || !material.userData.emissive) continue
+          material.emissive.copy(material.userData.emissive).lerp(tone, glow)
+          material.emissiveIntensity = material.userData.intensity + glow * 1.6
+        }
+      }
+
+      // Chispas, numeros, ondas y tajos que siguen vivos: los de la pelea con el
+      // Coloso y los del duelo en el Coliseo.
+      function tickBits(dt) {
         for (let i = fight.bits.length - 1; i >= 0; i--) {
           const bit = fight.bits[i]
           bit.life += dt
@@ -2562,29 +2611,245 @@
             bit.object.rotation.y = -k * 1.4
           }
         }
-        if (!rig) return
+      }
 
-        // Gira hacia el heroe, despacio. Mira hacia -x en su pivote.
-        const dx = hero.root.position.x - rig.turn.position.x
-        const dz = hero.root.position.z - rig.turn.position.z
-        if (dx * dx + dz * dz > 0.01) {
-          const want = Math.atan2(dz, -dx)
-          rig.turn.rotation.y += wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 1.2)
+      // --- Los otros jugadores de la sala ------------------------------------
+      // En la ciudad cada jugador de la sala es una figura liviana con su nombre,
+      // la de los NPC (comparte geometria y material). En el Coliseo el rival es
+      // el heroe de Tripo clonado y tenido de rojo, con su barra de vida, y sale
+      // del duelo (st.arena, que ordena el host), no de la red: se ve lo que paso.
+      const peers = new Map()
+      const rivalTint = new THREE.Color(1, 0.5, 0.45)
+      // Cuanto se corre la camara hacia el rival durante un duelo.
+      const duelView = new THREE.Vector3()
+      const duelWant = new THREE.Vector3()
+      // Lo ultimo que se vio del heroe en el duelo, para notar golpes y tajos.
+      const duelSelf = { hp: null, swinging: 0 }
+
+      // La barra de vida sobre el rival: se repinta solo si cambia.
+      function hpSprite() {
+        const canvas = document.createElement('canvas')
+        canvas.width = 128
+        canvas.height = 18
+        const texture = new THREE.CanvasTexture(canvas)
+        texture.colorSpace = THREE.SRGBColorSpace
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: texture, depthWrite: false, transparent: true })
+        )
+        sprite.scale.set(1.5, 0.21, 1)
+        sprite.renderOrder = 11
+        let shown = ''
+        return {
+          sprite,
+          set(share) {
+            const key = share.toFixed(3)
+            if (key === shown) return
+            shown = key
+            const g = canvas.getContext('2d')
+            g.clearRect(0, 0, 128, 18)
+            g.fillStyle = 'rgba(10, 8, 8, 0.85)'
+            g.fillRect(0, 0, 128, 18)
+            g.fillStyle = share > 0.5 ? '#e0583a' : share > 0.25 ? '#e8902a' : '#ff3020'
+            g.fillRect(3, 3, Math.max(0, Math.round(122 * share)), 12)
+            g.strokeStyle = 'rgba(255, 235, 200, 0.55)'
+            g.lineWidth = 2
+            g.strokeRect(1, 1, 126, 16)
+            texture.needsUpdate = true
+          },
+          dispose() {
+            texture.dispose()
+            sprite.material.dispose()
+          }
         }
-        // Se inclina: atras al cargar, adelante al caer, un poco atras al recibir.
-        // Inclinarse hacia su frente (-x) es girar positivo sobre z.
-        const breathe = Math.sin(time * 1.3)
-        const fall = fight.slam > 0 ? Math.sin(fight.slam * Math.PI) : 0
-        rig.lean.rotation.z = breathe * 0.015 - fight.windup * 0.2 + fall * 0.32 - fight.hit * 0.08
-        rig.lean.position.y = breathe * 0.06 + fight.windup * 0.3 - fall * 0.35
-        // Destello: claro al recibir, naranja al cargar el golpe.
-        const glow = Math.max(fight.hit, fight.windup * 0.6)
-        const tone = fight.hit >= fight.windup * 0.6 ? flashColor : chargeColor
-        for (const material of rig.materials) {
-          if (!material.emissive || !material.userData.emissive) continue
-          material.emissive.copy(material.userData.emissive).lerp(tone, glow)
-          material.emissiveIntensity = material.userData.intensity + glow * 1.6
+      }
+
+      function addPeer(who, duel) {
+        const root = new THREE.Group()
+        // El cuerpo cuelga de `holder`, que adelanta el tajo del rival.
+        const holder = new THREE.Group()
+        root.add(holder)
+        const entry = {
+          id: who.id,
+          name: who.name,
+          duel,
+          root,
+          holder,
+          body: figure(duel ? 'red' : 'cyan'),
+          mixer: null,
+          clips: {},
+          clip: '',
+          rig: null,
+          materials: [],
+          tag: label(who.name, duel ? '#e07a6a' : '#6fd3e0'),
+          bar: duel ? hpSprite() : null,
+          hp: null,
+          swinging: 0,
+          lunge: 0,
+          placed: false
         }
+        holder.add(entry.body)
+        entry.tag.position.y = duel ? 2.95 : 2.4
+        root.add(entry.tag)
+        if (entry.bar) {
+          entry.bar.sprite.position.y = 2.6
+          root.add(entry.bar.sprite)
+        }
+        scene.add(root)
+        peers.set(who.id, entry)
+        if (duel && avatarBody) dressRival(entry, AVATAR)
+        return entry
+      }
+
+      // El rival con el cuerpo del heroe de Tripo: el GLB ya esta en cache, asi
+      // que no baja nada nuevo. Materiales propios para que el del jugador no
+      // cambie de color; la geometria se comparte y no se libera.
+      function dressRival(entry, spec) {
+        loadRig(spec.file)
+          .then(({ object, clips }) => {
+            if (peers.get(entry.id) !== entry) return
+            object.rotation.y = spec.yaw
+            object.updateMatrixWorld(true)
+            const box = new THREE.Box3().setFromObject(object)
+            object.scale.multiplyScalar(spec.height / box.getSize(new THREE.Vector3()).y)
+            object.updateMatrixWorld(true)
+            const placed = new THREE.Box3().setFromObject(object)
+            const mid = placed.getCenter(new THREE.Vector3())
+            object.position.x -= mid.x
+            object.position.z -= mid.z
+            object.position.y -= placed.min.y
+            object.traverse((child) => {
+              if (!child.isMesh) return
+              child.castShadow = true
+              if (child.isSkinnedMesh) child.frustumCulled = false
+              const own = [child.material].flat().map((material) => {
+                const copy = material.clone()
+                if (copy.color) copy.color.multiply(rivalTint)
+                entry.materials.push(copy)
+                return copy
+              })
+              child.material = Array.isArray(child.material) ? own : own[0]
+            })
+            entry.holder.remove(entry.body)
+            entry.body = object
+            entry.rig = object
+            entry.holder.add(object)
+            if (spec.rigged) {
+              entry.mixer = new THREE.AnimationMixer(object)
+              for (const name of ['Idle', 'Run']) {
+                const clip = THREE.AnimationClip.findByName(clips, name)
+                if (clip) entry.clips[name] = entry.mixer.clipAction(clip)
+              }
+            }
+          })
+          .catch((error) => console.warn('el rival queda con la figura simple', error))
+      }
+
+      function dropPeer(entry) {
+        scene.remove(entry.root)
+        entry.tag.material.map.dispose()
+        entry.tag.material.dispose()
+        if (entry.bar) entry.bar.dispose()
+        for (const material of entry.materials) material.dispose()
+        if (entry.mixer) entry.mixer.stopAllAction()
+        if (entry.rig) {
+          entry.rig.traverse((child) => {
+            if (child.isSkinnedMesh && child.skeleton) child.skeleton.dispose()
+          })
+        }
+        peers.delete(entry.id)
+      }
+
+      // Va hacia su celda al paso de correr, mira hacia donde va (en el duelo,
+      // al heroe) y en el duelo cuenta los golpes que recibe y los tajos que da.
+      function movePeer(entry, who, dt) {
+        const at = world.built.toWorld(who.x, who.y)
+        const pos = entry.root.position
+        const gap = Math.hypot(at.x - pos.x, at.z - pos.z)
+        if (!entry.placed || gap > 6) {
+          pos.set(at.x, 0, at.z)
+          entry.placed = true
+        } else if (gap > 0.004) {
+          const stride = Math.min(gap, (GAITS.run.speed * 1.1 + gap * 3) * dt)
+          pos.x += ((at.x - pos.x) / gap) * stride
+          pos.z += ((at.z - pos.z) / gap) * stride
+        }
+        const moving = gap > 0.05
+        let yaw = null
+        if (moving) yaw = Math.atan2(at.x - pos.x, at.z - pos.z)
+        else if (entry.duel) {
+          yaw = Math.atan2(hero.root.position.x - pos.x, hero.root.position.z - pos.z)
+        }
+        if (yaw !== null) {
+          entry.root.rotation.y += wrap(yaw - entry.root.rotation.y) * Math.min(1, dt * 10)
+        }
+        if (entry.mixer) {
+          const name = moving && entry.clips.Run ? 'Run' : 'Idle'
+          if (entry.clip !== name && entry.clips[name]) {
+            entry.clips[name].reset().fadeIn(0.15).play()
+            if (entry.clips[entry.clip]) entry.clips[entry.clip].fadeOut(0.15)
+            entry.clip = name
+          }
+          entry.mixer.update(dt)
+        }
+        if (!entry.duel) return
+        entry.bar.set(who.maxHp > 0 ? Math.max(0, who.hp) / who.maxHp : 0)
+        if (entry.hp !== null && who.hp < entry.hp) {
+          floater('-' + (entry.hp - who.hp), '#ffd27a', pos.clone().setY(3.4))
+          sparks(pos.clone().setY(1.2), 0xffb040)
+        }
+        entry.hp = who.hp
+        if (who.swinging > entry.swinging) entry.lunge = 1
+        entry.swinging = who.swinging
+        entry.lunge = Math.max(0, entry.lunge - dt / 0.3)
+        entry.holder.position.z = Math.sin(entry.lunge * Math.PI) * 0.4
+      }
+
+      // Cada cuadro: quien de la sala esta en este mapa, o el rival del duelo.
+      function othersFrame(dt, st) {
+        const arena = st && st.arena
+        const want = new Map()
+        if (world && arena && world.map === 'coliseum') {
+          want.set(arena.rival.id, { ...arena.rival, duel: true })
+        } else if (world && st && !arena && st.location && world.map === st.location.mapId) {
+          for (const player of st.players || []) want.set(player.id, { ...player, duel: false })
+        }
+        for (const entry of [...peers.values()]) {
+          const who = want.get(entry.id)
+          if (!who || who.duel !== entry.duel) dropPeer(entry)
+        }
+        for (const who of want.values())
+          movePeer(peers.get(who.id) || addPeer(who, who.duel), who, dt)
+
+        const rival = arena && peers.get(arena.rival.id)
+        if (!rival) {
+          duelView.set(0, 0, 0)
+          duelSelf.hp = null
+          duelSelf.swinging = 0
+          return
+        }
+        duelWant
+          .subVectors(rival.root.position, hero.root.position)
+          .setY(0)
+          .multiplyScalar(0.5)
+          .clampLength(0, 12)
+        duelView.lerp(duelWant, Math.min(1, dt * 3))
+        // Quieto, el heroe mira al rival.
+        if (velocity < 0.3) {
+          const yaw = Math.atan2(duelWant.x, duelWant.z)
+          if (duelWant.lengthSq() > 0.01) {
+            hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 8)
+          }
+        }
+        // Lo que le pasa al heroe, en los numeros del duelo.
+        if (duelSelf.hp !== null && arena.self.hp < duelSelf.hp) {
+          const at = hero.root.position.clone()
+          floater('-' + (duelSelf.hp - arena.self.hp), '#ff6a5a', at.clone().setY(3.1))
+          sparks(at.setY(1.2), 0xff4030)
+          hop = performance.now()
+        }
+        duelSelf.hp = arena.self.hp
+        if (arena.self.swinging > duelSelf.swinging) swingSword()
+        duelSelf.swinging = arena.self.swinging
       }
 
       // Hacia donde apuntan las teclas (o los dedos en la cruceta), en el piso:
@@ -2670,7 +2935,8 @@
           hero.arms.right_hand.shoulder.rotation.x = swing * 0.4
         }
         if (going) framing.set(0, 1, 0)
-        follow.set(pos.x + framing.x, framing.y, pos.z + framing.z)
+        // En un duelo la camara mira entre los dos, para que el rival entre en cuadro.
+        follow.set(pos.x + framing.x + duelView.x, framing.y, pos.z + framing.z + duelView.z)
         camera.position.add(step.subVectors(follow, controls.target))
         controls.target.copy(follow)
         sun.position.set(pos.x + 12, 22, pos.z + 10)
@@ -2804,6 +3070,7 @@
       const playBox = document.getElementById('play')
       const statsBox = document.getElementById('stats')
       const bossBox = document.getElementById('bossbar')
+      const rivalBox = document.getElementById('rivalbar')
       const gaitBox = document.getElementById('gait')
       const logBox = document.getElementById('log')
       const hintBox = document.getElementById('hint')
@@ -3293,12 +3560,22 @@
         const rows = [
           ['WASD', L('move (arrows too)', 'moverse (tambien las flechas)')],
           ['Shift', settings.run ? L('sprint', 'esprintar') : L('run', 'correr')],
-          ['E', L('talk, use, enter', 'hablar, usar, entrar')],
+          [
+            'E',
+            L('talk, use, enter, challenge a player', 'hablar, usar, entrar, desafiar a un jugador')
+          ],
           ['I', L('inventory and gear', 'inventario y equipo')],
-          ['F', L('attack the Colossus', 'atacar al Coloso')],
+          ['F', L('attack the Colossus or your rival', 'atacar al Coloso o a tu rival')],
           ['T', L('back to town', 'volver a la ciudad')],
           ['V', L('wallet and PvP', 'wallet y PvP')],
-          ['R', L('reload your combat strategy', 'recargar tu estrategia de combate')],
+          [
+            'R',
+            L(
+              'surrender a duel; otherwise reload your combat strategy',
+              'rendirte en un duelo; si no, recargar tu estrategia de combate'
+            )
+          ],
+          ['Enter / N', L('accept or decline a challenge', 'aceptar o rechazar un desafio')],
           ['?', L("the game's own help", 'la ayuda del juego')],
           ['Tab', L('show the text screen', 'ver la pantalla de texto')],
           ['Esc', L('menu, or back', 'menu, o volver')]
@@ -3414,11 +3691,16 @@
           return
         }
         if (how.begin) session.begin(how.begin)
+        // Con ?room=CODIGO en la direccion, la partida entra sola a esa sala.
+        roomLink = linkedRoom()
         setupActions()
         fitTerm()
       }
 
       function stopPlay() {
+        for (const entry of [...peers.values()]) dropPeer(entry)
+        duelView.set(0, 0, 0)
+        roomJoining = ''
         if (!session) return
         const ending = session
         session = null
@@ -3449,6 +3731,13 @@
         dressFrom(st)
         bossMarks(st.boss, time)
         fightFrame(dt, time, st)
+        othersFrame(dt, st)
+        tickBits(dt)
+        if (roomLink && !st.title && !st.naming) {
+          const code = roomLink
+          roomLink = ''
+          joinRoom(code)
+        }
         if (meadow && world && at && world.map === at.map) meadow.update(time, dt, st, world)
         // La pantalla de texto del juego, salvo lo que la pagina ya muestra: el
         // inventario (inventario.js) y el combate en 3D (pradera.js).
@@ -3514,6 +3803,8 @@
       function refreshPlayHud(force = false) {
         if (screen !== 'play' || !live) return
         const st = live
+        const roomLine = roomText(roomOf())
+        const arena = st.arena
         const key = [
           st.name,
           st.level,
@@ -3529,7 +3820,19 @@
           st.near ? st.near.kind + (st.near.name || '') : '',
           st.field,
           settings.lang,
-          gaitName()
+          gaitName(),
+          roomLine,
+          arena
+            ? [
+                arena.rival.name,
+                arena.rival.hp,
+                arena.rival.maxHp,
+                arena.distance,
+                arena.self.reach,
+                arena.self.cooldownLeft > 0
+              ].join()
+            : '',
+          st.invite ? st.invite.direction + st.invite.name : ''
         ].join('|')
         if (key === hudKey && !force) return
         hudKey = key
@@ -3543,13 +3846,20 @@
           bar('hp', st.hp, st.maxhp, `${L('HP', 'Vida')} ${st.hp}/${st.maxhp}`) +
           bar('xp', st.xp, st.xpneed, `${L('XP', 'Exp')} ${st.xp}/${st.xpneed || '-'}`) +
           `<div class="purse">${L('Gold', 'Oro')} ${st.gold} &middot; ${L('Potions', 'Pociones')} ${st.potions}</div>` +
-          (wornText ? `<div class="worn">${wornText}</div>` : '')
+          (wornText ? `<div class="worn">${wornText}</div>` : '') +
+          (roomLine ? `<div class="room">${esc(roomLine)}</div>` : '')
         const boss = st.boss
         bossBox.hidden = !boss || boss.defeated
         if (boss && !boss.defeated) {
           bossBox.innerHTML =
             `${L('The Runic Colossus', 'El Coloso runico')}` +
             bar('', boss.hp, boss.maxhp, `${boss.hp}/${boss.maxhp}`)
+        }
+        rivalBox.hidden = !arena
+        if (arena) {
+          rivalBox.innerHTML =
+            esc(arena.rival.name) +
+            bar('', arena.rival.hp, arena.rival.maxHp, `${arena.rival.hp}/${arena.rival.maxHp}`)
         }
         const mode = gaitName()
         const names = {
@@ -3562,7 +3872,25 @@
         }`
         let hint = ''
         const use = touchPad ? '✋' : 'E'
-        if (st.near && st.near.kind === 'npc')
+        if (arena) {
+          // Lo mismo que la linea COLISEO de la terminal: alcance y recarga.
+          const ready =
+            arena.self.cooldownLeft > 0 ? L('reloading', 'recargando') : L('ready', 'listo')
+          hint =
+            (touchPad ? '⚔ ' : 'F ') +
+            L('attack', 'atacar') +
+            (touchPad ? ' · ☰ ' : ' · R ') +
+            L('surrender', 'rendirse') +
+            ` · ${L('reach', 'alcance')} ${arena.distance}/${arena.self.reach} · ${ready}`
+        } else if (st.invite && st.invite.direction === 'out')
+          hint =
+            L('Waiting for ', 'Esperando a ') +
+            st.invite.name +
+            (touchPad ? ' · ↩' : ' · N') +
+            L(' cancels', ' cancela')
+        else if (st.near && st.near.kind === 'player')
+          hint = use + L(' · challenge ', ' · desafiar a ') + st.near.name
+        else if (st.near && st.near.kind === 'npc')
           hint = use + L(' · talk to ', ' · hablar con ') + tr(st.near.name)
         else if (st.near && st.near.kind === 'ranking')
           hint = use + L(' · leaderboard', ' · ranking')
@@ -3805,7 +4133,9 @@
         if (mover.last) {
           const now = performance.now()
           const loc = st.location
-          if (loc && placeOfCell(st) === mover.last.place) {
+          // En un duelo en linea el paso vuelve despues, ordenado por el host: que
+          // la celda no haya cambiado todavia no es una pared.
+          if (loc && placeOfCell(st) === mover.last.place && !st.duel) {
             if (mover.last.sx && loc.x === mover.last.x) mover.blockedX = now + 450
             if (mover.last.sy && loc.y === mover.last.y) mover.blockedY = now + 450
           }
@@ -3825,7 +4155,7 @@
         if (mover.wait > 0) return
         if (mover.wait < -0.1) mover.wait = 0
         // Contra un muro con una puerta cerca: el paso va de costado, hacia ella.
-        const side = st.combat ? null : nudge(dx, dy)
+        const side = st.combat || st.duel ? null : nudge(dx, dy)
         const [sx, sy, meters] = side
           ? [side[0], side[1], Math.abs(side[0]) * CX + Math.abs(side[1]) * CZ]
           : nextStep(dx, dy, mover)
@@ -3878,7 +4208,8 @@
         if (event.key === 'Escape') {
           event.preventDefault()
           if (peek) peek = false
-          else if (roaming && !st.duel) openPause()
+          // En un duelo tambien abre el menu: rendirse es R, no un Esc al pasar.
+          else if (roaming) openPause()
           else session.press('escape')
           return
         }
@@ -3907,9 +4238,188 @@
         }
       }
 
+      // --- El Coliseo en linea ------------------------------------------------
+      // Una sala es un codigo corto: los que escriben el mismo se ven en la
+      // ciudad, se desafian con E y pelean en el Coliseo (juego.js online, sobre
+      // WebRTC). Sin sala se juega solo, como siempre.
+
+      const roomCodeOf = (value) =>
+        String(value || '')
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '')
+          .slice(0, 8)
+      // La sala de la direccion (?room=CODIGO): la partida entra sola.
+      function linkedRoom() {
+        const params = new URLSearchParams(location.search)
+        return roomCodeOf(params.get('room') || params.get('sala'))
+      }
+      let roomLink = ''
+      let roomJoining = ''
+      const roomOf = () => (session && session.room ? session.room() : null)
+
+      // La sala en una linea: el codigo y cuantos hay, contando a quien mira.
+      function roomText(room) {
+        if (roomJoining) return L('Joining room ', 'Entrando a la sala ') + roomJoining + '...'
+        if (!room) return ''
+        if (!room.id)
+          return `${L('Room', 'Sala')} ${room.code}: ${L('no connection', 'sin conexion')}`
+        const count = room.players.length + 1
+        const who = count === 1 ? L('player', 'jugador') : L('players', 'jugadores')
+        return `${L('Room', 'Sala')} ${room.code} · ${count} ${who}`
+      }
+
+      function linkRoom(code) {
+        const url = new URL(location.href)
+        if (code) url.searchParams.set('room', code)
+        else url.searchParams.delete('room')
+        url.searchParams.delete('sala')
+        history.replaceState(null, '', url)
+      }
+
+      function joinRoom(value) {
+        if (!session) return
+        const code = roomCodeOf(value) || 'RUNA'
+        settings.room = code
+        keepSettings()
+        roomJoining = code
+        refreshPlayHud(true)
+        // El primer RTCPeerConnection de la pagina la congela un par de segundos:
+        // se pinta el aviso y recien despues se entra, con la pausa ya pagada.
+        setTimeout(() => {
+          if (!session) return
+          try {
+            new RTCPeerConnection().close()
+          } catch {
+            // Sin WebRTC no hay sala: lo dice el juego al intentar.
+          }
+          const ok = session.online(code)
+          roomJoining = ''
+          if (ok) linkRoom(code)
+          else {
+            const room = roomOf()
+            say(
+              L('Could not join the room', 'No pude entrar a la sala') +
+                (room && room.error ? ': ' + room.error : '')
+            )
+          }
+          refreshPlayHud(true)
+          if (pausePage === 'room') roomPage()
+        }, 60)
+      }
+
+      function leaveRoom() {
+        if (!session) return
+        session.offline()
+        linkRoom('')
+        refreshPlayHud(true)
+      }
+
+      let roomTimer = 0
+      function roomPage() {
+        pausePage = 'room'
+        clearInterval(roomTimer)
+        const done = sheet(pauseSheet, L('Online duel', 'Duelo en linea'), pauseMain)
+        line(
+          pauseSheet,
+          L(
+            'Players who type the same room code meet in the city. Walk up to one and press E, or challenge from this list; the duel is fought in the Coliseum.',
+            'Los que escriben el mismo codigo de sala se encuentran en la ciudad. Acercate a uno y pulsa E, o desafialo desde esta lista; el duelo se pelea en el Coliseo.'
+          )
+        )
+        const room = roomOf()
+        const form = document.createElement('form')
+        form.className = 'sheet'
+        const input = document.createElement('input')
+        input.type = 'text'
+        input.maxLength = 8
+        input.autocomplete = 'off'
+        input.spellcheck = false
+        input.value = (room && room.code) || settings.room || 'RUNA'
+        const label = document.createElement('label')
+        label.append(L('Room code', 'Codigo de sala'), input)
+        form.append(label)
+        const join = document.createElement('button')
+        join.type = 'submit'
+        join.textContent =
+          room && room.id
+            ? L('Switch room', 'Cambiar de sala')
+            : L('Join the room', 'Entrar a la sala')
+        form.append(join)
+        form.addEventListener('submit', (event) => {
+          event.preventDefault()
+          joinRoom(input.value)
+          roomPage()
+        })
+        pauseSheet.append(form)
+        const status = line(pauseSheet, '')
+        const list = document.createElement('div')
+        list.className = 'sheet'
+        pauseSheet.append(list)
+        let shown = null
+        const paint = () => {
+          const now = roomOf()
+          status.textContent =
+            roomText(now) || L('Not in a room: you play alone.', 'Sin sala: jugas solo.')
+          const busy = !!(live && (live.duel || live.invite))
+          const players = now && now.id ? now.players : []
+          const key = JSON.stringify([players, busy, settings.lang])
+          if (key === shown) return
+          shown = key
+          list.replaceChildren()
+          if (now && now.id && !players.length) {
+            line(
+              list,
+              L('Nobody else yet: share the code.', 'Todavia nadie mas: comparti el codigo.')
+            )
+          }
+          for (const peer of players) {
+            const note =
+              `${L('level', 'nivel')} ${peer.level} · ${peer.wins}-${peer.losses}` +
+              (peer.here ? '' : ' · ' + L('somewhere else', 'en otro lugar'))
+            list.append(
+              button(
+                L('Challenge ', 'Desafiar a ') + peer.name,
+                note,
+                () => {
+                  closePause()
+                  if (session) session.challenge(peer.id)
+                },
+                !peer.here || busy
+              )
+            )
+          }
+        }
+        paint()
+        if (room && room.id) {
+          pauseSheet.append(
+            button(
+              L('Leave the room', 'Salir de la sala'),
+              live && live.duel
+                ? L(
+                    'You are in a duel: leaving concedes it',
+                    'Estas en un duelo: salir es rendirse'
+                  )
+                : null,
+              () => {
+                leaveRoom()
+                roomPage()
+              }
+            )
+          )
+        }
+        done()
+        input.focus()
+        roomTimer = setInterval(() => {
+          if (pausePage !== 'room' || pause.hidden) clearInterval(roomTimer)
+          else paint()
+        }, 1000)
+      }
+
       // --- El menu de la partida ---------------------------------------------
 
       const pauseSheet = pause.querySelector('.sheet')
+      // La hoja abierta del menu: la de la sala se refresca sola mientras esta.
+      let pausePage = ''
       function openPause() {
         paused = true
         mover.held.clear()
@@ -3920,11 +4430,29 @@
       function closePause() {
         paused = false
         pause.hidden = true
+        pausePage = ''
       }
       function pauseMain() {
+        pausePage = 'main'
         const done = sheet(pauseSheet, L('Menu', 'Menu'), closePause)
         pauseSheet.append(
           button(L('Back to the game', 'Volver al juego'), L('Esc', 'Esc'), closePause)
+        )
+        if (live && live.duel) {
+          pauseSheet.append(
+            button(L('Surrender the duel', 'Rendirse en el duelo'), 'R', () => {
+              closePause()
+              if (session) session.press('r')
+            })
+          )
+        }
+        pauseSheet.append(
+          button(
+            L('Online duel', 'Duelo en linea'),
+            roomText(roomOf()) ||
+              L('Play someone with a room code', 'Juga con alguien con un codigo de sala'),
+            roomPage
+          )
         )
         pauseSheet.append(
           button(
@@ -4052,6 +4580,8 @@
               peek = !peek
               return
             }
+            // En un duelo, volver abre el menu: rendirse se elige, no se toca al pasar.
+            if (act === 'escape' && live && live.duel && !paused) return openPause()
             session.press(act)
           })
           actions.append(b)
@@ -4765,7 +5295,41 @@
         mover.fingers.clear()
         shiftHeld = false
       })
+      // Cerrar la pagina es dejar la sala: con un duelo abierto, rendirse y
+      // avisarle al rival, que se queda con la victoria y vuelve a la ciudad.
+      // Va en beforeunload, que corre antes de que Trystero corte sus canales,
+      // y otra vez en pagehide por los navegadores que se saltan el primero.
+      // Primero la rendicion, y la sala se deja un momento despues: channel.leave()
+      // corta los canales enseguida y el aviso se perdia en el camino (el rival
+      // salia sin ganador).
+      let leaving = 0
+      function leaveOnExit() {
+        let conceded = false
+        try {
+          conceded = !!(session && session.concede())
+        } catch {
+          // El rival lo nota igual por el silencio.
+        }
+        // Cerrar la pestana no espera a WebRTC: con una rendicion recien enviada se
+        // retiene la pagina 200 ms para que el aviso llegue a salir por la red.
+        if (conceded) {
+          const until = performance.now() + 200
+          while (performance.now() < until) {
+            // espera activa a proposito
+          }
+        }
+        clearTimeout(leaving)
+        leaving = setTimeout(() => {
+          try {
+            if (session) session.offline()
+          } catch {
+            // La pagina ya se esta cerrando.
+          }
+        }, 400)
+      }
+      window.addEventListener('beforeunload', leaveOnExit)
       window.addEventListener('pagehide', () => {
+        leaveOnExit()
         try {
           if (session) session.runa.saveCurrent()
         } catch {
@@ -4881,7 +5445,17 @@
         gait: gaitClip,
         timeScale: gait ? gait.timeScale : 0,
         speed: pace().speed,
-        map: world ? world.map : null
+        map: world ? world.map : null,
+        // La sala del Coliseo en linea y las figuras de los otros jugadores.
+        room: roomOf(),
+        figures: [...peers.values()].map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          duel: entry.duel,
+          rig: !!entry.rig,
+          hp: entry.hp,
+          at: entry.root.position.toArray().map((n) => Number(n.toFixed(2)))
+        }))
       })
 
       // La lista de modelos se reintenta antes de arrancar: sin ella no aparece

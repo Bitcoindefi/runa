@@ -378,12 +378,13 @@ function terminalSaves() {
 }
 
 // El juego empaquetado para la pagina. Se rearma si cambio algo de lo que entra
-// (lib/ y los scripts del navegador): el visor sirve siempre el juego actual.
+// (lib/, los scripts del navegador y Trystero): el visor sirve el juego actual.
 const GAME_DIRS = [
   path.join(root, 'lib'),
   path.join(root, 'lib', 'locales'),
   path.join(root, 'assets', 'ascii'),
-  path.join(__dirname, 'navegador')
+  path.join(__dirname, 'navegador'),
+  path.join(root, 'vendor', 'trystero')
 ]
 const GAME_FILES = ['tripo-juego.js', 'tripo-estado.js', 'build-juego.js'].map((name) =>
   path.join(__dirname, name)

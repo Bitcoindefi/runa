@@ -1,6 +1,7 @@
 'use strict'
 
-// Lo que en el navegador no existe: Hyperswarm (la presencia P2P), bare-crypto
-// (nativo) y net.js entero. Fallar al cargar es lo que el juego ya espera de una
-// red que no esta: game.js y net.js lo atrapan y se juega solo.
-throw new Error('sin red P2P en el navegador: se juega solo')
+// Lo que en el navegador no existe: Hyperswarm y bare-crypto (nativos). Fallar
+// al cargar es lo que net.js ya espera de una red que no esta: lo atrapa y su
+// presencia queda sin swarm. En la pagina la presencia viaja por WebRTC
+// (red-webrtc.js), que no los necesita.
+throw new Error('sin Hyperswarm en el navegador: la presencia va por WebRTC')
