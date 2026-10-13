@@ -3782,10 +3782,13 @@
       let gameError = null
       async function loadGame() {
         // Un import() que fallo queda guardado como fallido para esa URL: cada
-        // reintento pide otra.
+        // reintento pide otra. La URL va armada a mano: Safari (WebKit) ignora
+        // el <base> en un import() de un script en linea y en /jugar pedia
+        // /juego.js, un 404.
         for (let i = 0; i < 4 && !juego; i++) {
           try {
-            juego = (await import('./juego.js' + (i ? '?retry=' + i : ''))).default
+            const url = new URL('./juego.js' + (i ? '?retry=' + i : ''), document.baseURI)
+            juego = (await import(url.href)).default
           } catch (error) {
             console.warn('sin el juego todavia', error)
             gameError = error
