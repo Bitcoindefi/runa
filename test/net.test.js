@@ -346,3 +346,270 @@ test('sin presencia, un desafio encolado no rompe el tick', (t) => {
   s.accepter.dropPresence()
   t.execution(() => s.accepter.onTick())
 })
+
+// --- Lote 2: endurecer la red y publicar la posicion real --------------------
+
+const net = require('../lib/net.js')
+const { Field } = require('../lib/field.js')
+const { awayMapId, CHALLENGE_COOLDOWN_MS } = require('../lib/game.js')
+
+/** Un reloj que solo avanza cuando la prueba lo pide. */
+function clock(start = 1000000) {
+  const c = { at: start, now: () => c.at }
+  return c
+}
+
+/** Una conexion que anota cada linea escrita y no la entrega a nadie. */
+function spyConn(peerId = null) {
+  const conn = fakeConn()
+  conn.peerId = peerId
+  conn.lines = []
+  conn.write = (value) => conn.lines.push(String(value))
+  return conn
+}
+
+test('una linea de estado con el id de otro peer se ignora', (t) => {
+  const ana = new Presence({ name: 'ana', offline: true })
+  const beto = new Presence({ name: 'beto', offline: true })
+  const [, betoConn] = connect(ana, beto)
+  t.is(betoConn.peerId, ana.id, 'la primera linea ata la conexion a ana')
+
+  ana.update('city', 5, 5)
+  ana.beat()
+  const spoof = { ...ana.self, id: 'intruso', name: 'intruso', x: 1, y: 1 }
+  beto.receive(JSON.stringify(spoof), betoConn)
+  t.absent(beto.peers.has('intruso'), 'ana no puede inventar un tercer peer')
+
+  // Un tercero que se hace pasar por ana desde su propia conexion.
+  const evil = fakeConn()
+  evil.peerId = null
+  beto.onConnection(evil)
+  beto.receive(JSON.stringify({ ...ana.self, x: 99, y: 99 }), evil)
+  t.is(beto.peers.get(ana.id).x, 5, 'la posicion de ana no se mueve desde otra conexion')
+  t.is(evil.peerId, null, 'la conexion impostora no queda atada a ana')
+})
+
+test('cada conexion tiene un cupo de 30 lineas de estado por segundo', (t) => {
+  const c = clock()
+  const beto = new Presence({ name: 'beto', offline: true, now: c.now })
+  const conn = fakeConn()
+  beto.onConnection(conn)
+  const line = (x) => JSON.stringify({ id: 'ana1', name: 'ana', mapId: 'city', x, y: 0 })
+  for (let i = 0; i < 40; i++) beto.receive(line(i), conn)
+  t.is(net.RATE_LINES, 30)
+  t.is(beto.peers.get('ana1').x, 29, 'las diez de mas se tiran sin leerlas')
+
+  // Las lineas de duelo tienen su propio cupo: una inundacion de estado no
+  // corta un duelo en curso.
+  const duels = []
+  beto.on('duel', (message) => duels.push(message))
+  const duel = {
+    type: 'duel',
+    kind: 'challenge',
+    messageId: 'm1',
+    from: 'ana1',
+    fromName: 'ana',
+    to: beto.id,
+    duelId: 'd1'
+  }
+  beto.receive(JSON.stringify(duel), conn)
+  t.is(duels.length, 1, 'el duelo pasa aunque el estado este agotado')
+
+  c.at += net.RATE_WINDOW_MS
+  beto.receive(line(77), conn)
+  t.is(beto.peers.get('ana1').x, 77, 'al segundo siguiente vuelve a escuchar')
+})
+
+test('el cupo de duelo cubre de una vez todo el silencio tolerado', (t) => {
+  const c = clock()
+  const beto = new Presence({ name: 'beto', offline: true, now: c.now, goneMs: 10000 })
+  const conn = fakeConn()
+  beto.onConnection(conn)
+  const burst = net.duelBurst(10000)
+  t.is(burst, net.RATE_DUEL_LINES * 11, 'diez segundos de silencio y uno de margen')
+  let admitted = 0
+  for (let i = 0; i < burst + 50; i++) if (beto.admit(conn, true)) admitted++
+  t.is(admitted, burst, 'la rafaga entera entra y lo que sobra se tira')
+  t.absent(beto.admit(conn, true), 'agotado, no entra nada mas')
+  c.at += net.RATE_WINDOW_MS / 2
+  admitted = 0
+  for (let i = 0; i < net.RATE_DUEL_LINES; i++) if (beto.admit(conn, true)) admitted++
+  t.is(admitted, net.RATE_DUEL_LINES / 2, 'se recarga al ritmo sostenido')
+  c.at -= 5000
+  t.absent(beto.admit(conn, true), 'un reloj que vuelve atras no recarga')
+})
+
+test('un invitado congelado casi diez segundos recibe todos los pasos y sigue en el duelo', (t) => {
+  const c = clock()
+  const opts = { offline: true, now: c.now, goneMs: 10000 }
+  const ana = new Runa({ presence: false, name: 'Ana', now: c.now })
+  const beto = new Runa({ presence: false, name: 'Beto', now: c.now })
+  ana.title = false
+  beto.title = false
+  const pa = new Presence({ name: 'Ana', ...opts })
+  const pb = new Presence({ name: 'Beto', ...opts })
+  ana.attachPresence(pa)
+  beto.attachPresence(pb)
+  ana.presenceStarted = true
+  beto.presenceStarted = true
+  pa.update('city', ana.walker.x, ana.walker.y)
+  pb.update('city', beto.walker.x + 1, beto.walker.y)
+  connect(pa, pb)
+  const challenger = pa.id < pb.id ? ana : beto
+  const accepter = challenger === ana ? beto : ana
+  challenger.challengePlayer(challenger.others('city').find((p) => p.id !== challenger.presence.id))
+  accepter.onTick()
+  accepter.answerDuel(true)
+  challenger.onTick()
+  const host = challenger
+  const guest = accepter
+  t.is(host.duelNetwork.hostId, host.presence.id)
+
+  // El invitado no corre ni un tick: todo lo que ordena el host llega junto,
+  // en el mismo instante del reloj, como al despertar una pagina congelada.
+  const ticks = guest.duelSilenceTicks() - 5
+  for (let i = 0; i < ticks; i++) {
+    if (i % 5 === 0) host.sendDuelInput({ dx: 0, dy: i % 10 === 0 ? 1 : -1 })
+    host.onTick()
+  }
+  t.ok(ticks + ticks / 5 > 150, 'mas de 150 pasos ordenados en una rafaga')
+  guest.onTick()
+  t.ok(guest.duel && guest.duel.active, 'el duelo sigue')
+  t.is(guest.duelNetwork.expectedOrder, host.duelNetwork.nextOrder + 1, 'no se perdio ningun paso')
+  t.is(guest.duelCombat.tickCount, host.duelCombat.tickCount)
+})
+
+test('un duelo sale solo por la conexion de su destinatario', (t) => {
+  const ana = new Presence({ name: 'ana', offline: true })
+  const toBeto = spyConn('beto1')
+  const toCele = spyConn('cele1')
+  ana.conns.add(toBeto)
+  ana.conns.add(toCele)
+  t.ok(ana.sendDuel('challenge', 'beto1', { duelId: 'd1' }))
+  t.is(toBeto.lines.length, 1, 'beto recibe su desafio')
+  t.is(toCele.lines.length, 0, 'cele no ve un duelo ajeno')
+
+  t.ok(ana.sendDuel('challenge', 'nadie', { duelId: 'd2' }))
+  t.is(toBeto.lines.length, 2, 'un destinatario sin conexion conocida sale por todas')
+  t.is(toCele.lines.length, 1)
+})
+
+test('others expone mapa, region y posicion de cada peer', (t) => {
+  t.is(net.regionOf('city'), 'town')
+  t.is(net.regionOf('coliseum'), 'town')
+  t.is(net.regionOf('field'), 'field')
+  t.is(net.regionOf('crypt2'), 'crypt')
+  t.is(net.regionOf('camp-colmillo-rojo'), 'camp')
+  t.is(net.regionOf('boss'), 'boss')
+
+  const ana = new Presence({ name: 'ana', offline: true })
+  const beto = new Presence({ name: 'beto', offline: true })
+  ana.update('camp-colmillo-rojo', 12, 34)
+  connect(ana, beto)
+  const seen = beto.others().find((peer) => peer.id === ana.id)
+  t.is(seen.mapId, 'camp-colmillo-rojo', 'un id de asentamiento largo no se corta')
+  t.is(seen.region, 'camp')
+  t.is(seen.x, 12)
+  t.is(seen.y, 34)
+})
+
+/** Dos partidas enlazadas en la ciudad, una al lado de la otra, con un reloj comun. */
+function linkedGames() {
+  const c = clock()
+  const ana = new Runa({ presence: false, name: 'Ana', now: c.now })
+  const beto = new Runa({ presence: false, name: 'Beto', now: c.now })
+  ana.title = false
+  beto.title = false
+  const pa = new Presence({ name: 'Ana', offline: true, now: c.now })
+  const pb = new Presence({ name: 'Beto', offline: true, now: c.now })
+  ana.attachPresence(pa)
+  beto.attachPresence(pb)
+  ana.presenceStarted = true
+  beto.presenceStarted = true
+  ana.announce()
+  pb.update('city', ana.walker.x + 1, ana.walker.y)
+  connect(pa, pb)
+  return { c, ana, beto, pa, pb }
+}
+
+test('el campo anuncia la region y las coordenadas del campo, a 4 Hz', (t) => {
+  const { c, ana, beto, pa, pb } = linkedGames()
+  beto.field = new Field({ player: beto.player, seed: 27 })
+  beto.field.player.x = 42
+  beto.field.player.y = 17
+  beto.stepField()
+  t.is(pb.self.mapId, 'field')
+  t.is(pb.self.x, beto.field.player.x, 'la x es la del campo, no la de la ciudad')
+  t.is(pb.self.y, beto.field.player.y)
+
+  const x = beto.field.player.x
+  beto.field.player.x = x + 3
+  c.at += 100
+  beto.stepField()
+  t.is(pb.self.x, x, 'dentro de 250 ms no se vuelve a anunciar')
+  c.at += 150
+  beto.stepField()
+  t.is(pb.self.x, beto.field.player.x, 'a los 250 ms sale la posicion nueva')
+
+  pb.beat()
+  const seen = ana.others().find((peer) => peer.id === pb.id)
+  t.is(seen.region, 'field')
+  t.is(seen.mapId, 'field')
+  t.is(seen.x, beto.field.player.x)
+  t.is(pa.others('city').length, 0, 'en la ciudad ya no se lo dibuja')
+})
+
+test('cada zona fuera de la ciudad tiene su mapa anunciado', (t) => {
+  t.is(awayMapId({ mode: 'field' }), 'field')
+  t.is(awayMapId({ mode: 'dungeon', floor: 2 }), 'crypt2')
+  t.is(awayMapId({ mode: 'barbarian-camp', camp: { id: 'hachas-negras' } }), 'camp-hachas-negras')
+  t.is(awayMapId({ mode: 'boss' }), 'boss', 'el jefe ya no se anuncia como field')
+})
+
+test('a un peer en el campo no se lo puede desafiar desde la ciudad', (t) => {
+  const { ana, beto, pb } = linkedGames()
+  t.ok(ana.nearbyPlayer(), 'en la ciudad, al lado, si se puede')
+  beto.field = new Field({ player: beto.player, seed: 27 })
+  // Parado en el campo justo sobre las coordenadas de ana en la ciudad.
+  beto.field.player.x = ana.walker.x
+  beto.field.player.y = ana.walker.y
+  beto.announce()
+  pb.beat()
+  t.absent(ana.nearbyPlayer(), 'el del campo no esta cerca')
+  t.absent(ana.challengePlayer(), 'y no hay a quien desafiar')
+  t.absent(beto.duelInvite)
+})
+
+test('volver a desafiar al mismo peer espera 20 segundos', (t) => {
+  const { c, ana, beto } = linkedGames()
+  const peer = () => ana.others('city')[0]
+  t.ok(ana.challengePlayer(peer()))
+  beto.onTick()
+  beto.answerDuel(false)
+  ana.onTick()
+  t.absent(ana.duelInvite, 'el rechazo libera al retador')
+
+  c.at += CHALLENGE_COOLDOWN_MS - 1000
+  t.absent(ana.challengePlayer(peer()), 'antes de los 20 s no sale')
+  t.ok(ana.log.some((line) => String(line).includes('para volver a desafiar')))
+  c.at += 1000
+  t.ok(ana.challengePlayer(peer()), 'a los 20 s ya se puede')
+})
+
+test('mas de tres desafios por minuto del mismo peer se rechazan solos', (t) => {
+  const { c, ana, pa, pb } = linkedGames()
+  const declines = []
+  pb.on('duel', (message) => message.kind === 'decline' && declines.push(message.reason))
+  for (let i = 1; i <= 4; i++) {
+    pb.sendDuel('challenge', pa.id, { duelId: 'spam-' + i, stats: {} })
+    ana.onTick()
+    if (ana.duelInvite) ana.answerDuel(false)
+  }
+  t.alike(declines, ['rechazado', 'rechazado', 'rechazado', 'demasiados desafios'])
+  t.absent(ana.duelInvite, 'el cuarto no abre cartel')
+
+  c.at += 60000
+  pb.sendDuel('challenge', pa.id, { duelId: 'spam-5', stats: {} })
+  ana.onTick()
+  t.ok(ana.duelInvite, 'pasado el minuto vuelve a llegar')
+})

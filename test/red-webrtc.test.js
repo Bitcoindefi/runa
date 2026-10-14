@@ -312,3 +312,111 @@ test('nueve recien llegados en RUNA1 terminan en 8 y 1', (t) => {
   t.is(moved[0].others().length + 1, 1, 'RUNA2 con 1')
   t.is(moved[0].room, 'RUNA2')
 })
+
+test('una sala privada no pasa de 12: el que sobra queda afuera con room full', (t) => {
+  const net = fakeTrystero()
+  const all = []
+  t.teardown(() => {
+    for (const p of all) p.stop()
+  })
+  for (let i = 0; i < red.PRIVATE_CAP; i++) {
+    const p = presence(net, 'P' + i, 'AMIGOS')
+    all.push(p)
+    p.start()
+  }
+  for (const p of all) p.beat()
+  t.ok(
+    all.every((p) => p.others().length === red.PRIVATE_CAP - 1),
+    'los doce se ven entre todos'
+  )
+
+  // Uno de adentro al que el barrido le borro a todos (una pagina congelada)
+  // sigue siendo de la sala: no se declara el que sobra.
+  all[0].peers.clear()
+
+  const key = red.APP_ID + '/' + red.ROOM_TOPIC + 'AMIGOS'
+  const late = presence(net, 'Tarde', 'AMIGOS')
+  const full = []
+  late.on('full', (info) => full.push(info))
+  t.ok(late.start(), 'la sala se abre igual')
+  const lateId = late.channel.selfId
+  for (const p of all.concat(late)) p.beat()
+  t.absent(late.full, 'no decide en el momento del enlace de mas')
+  t.ok(late.fullTimer, 'espera a ver si alguien le habla')
+  t.ok(late.checkFull(), 'nadie le hablo: es el que sobra')
+  t.is(late.error, red.ROOM_FULL)
+  t.is(late.error, 'room full')
+  t.ok(late.full)
+  t.is(full.length, 1, 'avisa una sola vez')
+  t.is(late.others().length, 0, 'no ve a nadie')
+  t.is(late.links.size, 0, 'y no queda enlazado a nadie')
+  t.absent(late.online, 'queda fuera de linea')
+  t.absent(late.channel, 'y fuera de la sala de Trystero')
+  t.is(net.rooms.get(key).size, red.PRIVATE_CAP, 'la malla sigue de doce')
+  t.ok(
+    [...net.rooms.get(key)].every((room) => !room.peers.has(lateId)),
+    'ninguno de adentro conserva una conexion con el que sobra'
+  )
+  t.ok(
+    all.every((p) => p.links.size === red.PRIVATE_CAP - 1 && !p.error && !p.full),
+    'los de adentro siguen igual y sin error'
+  )
+  t.absent(late.checkFull(), 'una segunda vez no hace nada')
+  t.is(full.length, 1)
+  all.push(late)
+})
+
+test('un recien llegado al que alguien le hablo no se declara afuera', (t) => {
+  const net = fakeTrystero()
+  const all = []
+  t.teardown(() => {
+    for (const p of all) p.stop()
+  })
+  for (let i = 0; i < red.PRIVATE_CAP; i++) {
+    const p = presence(net, 'P' + i, 'MEZCLA')
+    all.push(p)
+    p.start()
+  }
+  for (const p of all) p.beat()
+  // P0 hace de pagina vieja, sin tope: acepta al que llega y le habla.
+  all[0].room = red.publicCode(1)
+
+  const late = presence(net, 'Tarde', 'MEZCLA')
+  all.push(late)
+  late.start()
+  for (const p of all) p.beat()
+  t.ok(late.heard)
+  t.absent(late.checkFull(), 'alguien lo acepto: se queda')
+  t.absent(late.full)
+  t.is(late.error, '')
+  t.ok(late.online)
+  t.alike(
+    late.others().map((peer) => peer.name),
+    ['P0'],
+    'malla parcial con la pagina vieja, tolerada'
+  )
+})
+
+test('la sala llena se anota en el registro del juego', (t) => {
+  const game = new Runa({ presence: false, name: 'Tarde' })
+  const fake = new (require('bare-events'))()
+  game.attachPresence(fake)
+  fake.emit('full', { room: 'AMIGOS', cap: 12 })
+  game.onTick()
+  t.ok(game.log.some((line) => String(line).includes('la sala esta llena')))
+})
+
+test('el tope de 12 no toca las salas publicas', (t) => {
+  const net = fakeTrystero()
+  const all = []
+  t.teardown(() => {
+    for (const p of all) p.stop()
+  })
+  for (let i = 0; i < red.PRIVATE_CAP + 1; i++) {
+    const p = presence(net, 'P' + i, red.publicCode(7))
+    all.push(p)
+    p.start()
+  }
+  for (const p of all) p.beat()
+  t.ok(all.every((p) => !p.full && p.others().length === red.PRIVATE_CAP))
+})
