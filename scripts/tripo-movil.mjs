@@ -69,6 +69,9 @@ export function createBackGuard(win, { wanted, onBack }) {
   const history = win.history
   // Atras pedidos por la propia pagina para sacar la guardia: no son del jugador.
   let releasing = 0
+  // La ultima direccion que puso la pagina (la sala privada). La entrada de
+  // abajo de la guardia tiene la de antes: al volver a ella se corrige.
+  let href = ''
   // Al recargar en pleno juego la entrada sigue marcada, pero su guardia era
   // del documento anterior: se desmarca para que arm() ponga una propia.
   if (guarded(history)) {
@@ -88,12 +91,31 @@ export function createBackGuard(win, { wanted, onBack }) {
       // Sin historial (un iframe con sandbox) no hay guardia: el atras sale.
     }
   }
+  // Cambia la direccion de la entrada actual y la recuerda para las demas.
+  function setUrl(url) {
+    href = String(url)
+    try {
+      history.replaceState(history.state, '', href)
+    } catch {
+      // Sin historial la direccion queda como estaba.
+    }
+  }
+  // Tras un atras o un adelante la entrada nueva puede tener otra sala.
+  function syncUrl() {
+    if (!href || !win.location || win.location.href === href) return
+    try {
+      history.replaceState(history.state, '', href)
+    } catch {
+      // Sin historial la direccion queda como estaba.
+    }
+  }
   function release() {
     if (!guarded(history)) return
     releasing++
     history.back()
   }
   function onPop(event) {
+    syncUrl()
     // Adelante hacia una guardia vieja: no hay nada que atender.
     if (event.state && event.state[GUARD_KEY]) return
     if (releasing) {
@@ -106,7 +128,7 @@ export function createBackGuard(win, { wanted, onBack }) {
     if (onBack()) arm()
   }
   win.addEventListener('popstate', onPop)
-  return { arm, release, onPop }
+  return { arm, release, onPop, setUrl }
 }
 
 /**
@@ -133,6 +155,9 @@ export function typing(input, { hint = 'go', caps = 'none' } = {}) {
  *  - save(): guarda la partida si hay una;
  *  - say(text): el aviso de la pagina;
  *  - lostText: el aviso al perder el contexto;
+ *  - busy(): si hay un duelo o una pelea con el jefe, que recargar perderia;
+ *  - busyText: el aviso cuando la recarga espera a que termine esa pelea;
+ *  - lostWait: cuanto se espera a que el navegador devuelva el contexto;
  *  - wanted / onBack: los de createBackGuard.
  */
 export function createMobile({
@@ -141,6 +166,9 @@ export function createMobile({
   save,
   say,
   lostText,
+  busy = () => false,
+  busyText = lostText,
+  lostWait = 6000,
   wanted,
   onBack
 }) {
@@ -162,6 +190,11 @@ export function createMobile({
   }
   doc.addEventListener('visibilitychange', () => {
     if (doc.visibilityState === 'hidden') keep()
+    // Se perdio la grafica en segundo plano: al volver se avisa y se recarga.
+    else if (lost && !lostTimer) {
+      say(lostText)
+      lostTimer = setTimeout(reload, lostWait)
+    }
   })
   // Chrome congela las pestanas de fondo: el aviso llega antes.
   doc.addEventListener('freeze', keep)
@@ -169,22 +202,37 @@ export function createMobile({
   // El contexto de WebGL perdido: sin preventDefault no vuelve nunca.
   let lost = false
   let lostTimer = 0
+  let waiting = false
+  // Recargar en pleno duelo es rendirse (beforeunload) y deja la pelea con el
+  // jefe: la recarga espera a que termine, el estado del juego sigue en JS.
+  function reload() {
+    lostTimer = 0
+    if (doc.visibilityState !== 'visible') return
+    if (busy()) {
+      if (!waiting) say(busyText)
+      waiting = true
+      lostTimer = setTimeout(reload, Math.min(1000, lostWait))
+      return
+    }
+    keep()
+    win.location.reload()
+  }
   if (canvas) {
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault()
       lost = true
       keep()
       say(lostText)
-      // Si el navegador no lo devuelve con la pagina a la vista, se recarga igual.
+      // Si el navegador no lo devuelve, se recarga igual. Oculta, la pagina
+      // espera a volver a la vista (visibilitychange).
       clearTimeout(lostTimer)
-      lostTimer = setTimeout(() => {
-        if (lost && doc.visibilityState === 'visible') win.location.reload()
-      }, 6000)
+      lostTimer = setTimeout(reload, lostWait)
     })
     canvas.addEventListener('webglcontextrestored', () => {
       clearTimeout(lostTimer)
+      lostTimer = 0
       keep()
-      win.location.reload()
+      if (doc.visibilityState === 'visible') reload()
     })
   }
 
@@ -205,6 +253,7 @@ export function createMobile({
   return {
     arm: guard.arm,
     release: guard.release,
+    setUrl: guard.setUrl,
     lost: () => lost,
     typing
   }

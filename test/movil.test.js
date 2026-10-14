@@ -2,38 +2,108 @@ const { test } = require('brittle')
 const movil = require('../scripts/tripo-movil.mjs')
 
 // Un historial de mentira con pushState, replaceState y back como el del
-// navegador: back dispara popstate con el estado de la entrada anterior.
-function fakeWindow(state = null) {
+// navegador: back dispara popstate con el estado de la entrada anterior, y cada
+// entrada tiene su direccion (pushState sin direccion copia la actual).
+function fakeWindow(state = null, href = 'https://runa.test/jugar') {
   const listeners = []
-  const entries = [state]
+  const entries = [{ state, href }]
   let at = 0
   const win = {
     addEventListener(name, fn) {
       if (name === 'popstate') listeners.push(fn)
     },
+    location: {
+      get href() {
+        return entries[at].href
+      }
+    },
     history: {
       get state() {
-        return entries[at]
+        return entries[at].state
       },
       get length() {
         return entries.length
       },
-      pushState(next) {
+      pushState(next, title, url) {
         entries.length = at + 1
-        entries.push(next)
+        entries.push({ state: next, href: url ? String(url) : entries[at].href })
         at++
       },
-      replaceState(next) {
-        entries[at] = next
+      replaceState(next, title, url) {
+        entries[at] = { state: next, href: url ? String(url) : entries[at].href }
       },
       back() {
         if (at === 0) return
         at--
-        for (const fn of listeners) fn({ state: entries[at] })
+        for (const fn of listeners) fn({ state: entries[at].state })
       }
     }
   }
   return win
+}
+
+// Una pagina de mentira para createMobile: visibilidad, eventos y recarga.
+function fakePage() {
+  const win = fakeWindow()
+  const on = {}
+  const canvasOn = {}
+  const doc = {
+    visibilityState: 'visible',
+    head: { append() {} },
+    createElement: () => ({}),
+    addEventListener(name, fn) {
+      on[name] = fn
+    }
+  }
+  win.document = doc
+  win.reloads = 0
+  const href = win.location
+  win.location = {
+    get href() {
+      return href.href
+    },
+    reload() {
+      win.reloads++
+    }
+  }
+  const canvas = {
+    addEventListener(name, fn) {
+      canvasOn[name] = fn
+    }
+  }
+  const page = {
+    win,
+    canvas,
+    said: [],
+    hide() {
+      doc.visibilityState = 'hidden'
+      on.visibilitychange()
+    },
+    show() {
+      doc.visibilityState = 'visible'
+      on.visibilitychange()
+    },
+    lose: () => canvasOn.webglcontextlost({ preventDefault() {} }),
+    restore: () => canvasOn.webglcontextrestored({})
+  }
+  return page
+}
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function mobileOn(page, opts = {}) {
+  return movil.createMobile({
+    win: page.win,
+    canvas: page.canvas,
+    save() {},
+    say: (text) => page.said.push(text),
+    lostText: 'perdida',
+    busyText: 'al terminar',
+    lostWait: 20,
+    wanted: () => true,
+    onBack: () => true,
+    ...opts
+  })
 }
 
 test('movil: el atras decide segun la pantalla', (t) => {
@@ -123,4 +193,68 @@ test('movil: los campos piden la tecla Enter y las mayusculas', (t) => {
   t.is(attrs.autocorrect, 'off')
   t.is(input.enterKeyHint, 'go')
   t.ok(/font-size: 16px/.test(movil.MOBILE_CSS), 'los campos a 16 px: iOS no acerca la pagina')
+})
+
+test('movil: el atras no le saca la sala privada a la direccion', (t) => {
+  const win = fakeWindow()
+  const guard = movil.createBackGuard(win, { wanted: () => true, onBack: () => true })
+  guard.arm()
+  // linkRoom de la pagina: la sala va sobre la entrada de guardia.
+  guard.setUrl('https://runa.test/jugar?room=VPROBE7')
+  win.history.back()
+  t.ok(win.history.state && win.history.state.runa, 'la guardia volvio')
+  t.is(win.location.href, 'https://runa.test/jugar?room=VPROBE7', 'y la sala sigue')
+  win.history.back()
+  t.is(win.location.href, 'https://runa.test/jugar?room=VPROBE7', 'tambien al segundo atras')
+})
+
+test('movil: el atras no trae de vuelta la sala que se dejo', (t) => {
+  const win = fakeWindow(null, 'https://runa.test/jugar?room=ABC')
+  let screen = 'play'
+  const guard = movil.createBackGuard(win, { wanted: () => screen === 'play', onBack: () => true })
+  guard.arm()
+  // Se paso a una sala publica: la direccion pierde la privada.
+  guard.setUrl('https://runa.test/jugar')
+  win.history.back()
+  t.is(win.location.href, 'https://runa.test/jugar', 'el atras no la repone')
+  // Guardar y salir al titulo saca la guardia con un atras de la pagina.
+  screen = 'menu'
+  guard.release()
+  t.is(win.history.state, null)
+  t.is(win.location.href, 'https://runa.test/jugar', 'ni al salir al titulo')
+})
+
+test('movil: la grafica perdida en segundo plano recarga al volver', async (t) => {
+  const page = fakePage()
+  const mobile = mobileOn(page)
+  page.hide()
+  page.lose()
+  t.ok(mobile.lost())
+  await wait(40)
+  t.is(page.win.reloads, 0, 'oculta no recarga')
+  page.show()
+  t.is(page.said.at(-1), 'perdida', 'al volver se avisa otra vez')
+  await wait(40)
+  t.is(page.win.reloads, 1, 'y se recarga')
+})
+
+test('movil: la grafica devuelta en pleno duelo espera a que termine', async (t) => {
+  const page = fakePage()
+  let fighting = true
+  mobileOn(page, { busy: () => fighting })
+  page.lose()
+  page.restore()
+  t.is(page.win.reloads, 0, 'no recarga: seria rendirse')
+  t.is(page.said.at(-1), 'al terminar')
+  fighting = false
+  await wait(60)
+  t.is(page.win.reloads, 1, 'termino la pelea y recarga')
+})
+
+test('movil: la grafica devuelta fuera de una pelea recarga enseguida', (t) => {
+  const page = fakePage()
+  mobileOn(page)
+  page.lose()
+  page.restore()
+  t.is(page.win.reloads, 1)
 })

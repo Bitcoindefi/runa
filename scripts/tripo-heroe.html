@@ -3964,6 +3964,12 @@
           'The graphics were reset. Reloading the game...',
           'Se reinicio la grafica. Recargando el juego...'
         ),
+        // Un duelo o el jefe: recargar seria rendirse o dejar la pelea.
+        busy: () => !!((live && live.duel) || (world && world.map === 'boss')),
+        busyText: L(
+          'The graphics were reset. The game reloads when this fight ends.',
+          'Se reinicio la grafica. El juego se recarga al terminar esta pelea.'
+        ),
         wanted: () => screen === 'play' || screen === 'tour',
         onBack: backPressed
       })
@@ -4869,6 +4875,9 @@
         if (screen !== 'play' || !live) return
         const st = live
         const room = roomOf()
+        // Una sala llena no queda en la direccion: al recargar se volveria a ella.
+        if (room && room.full && new URL(location.href).searchParams.get('room') === room.code)
+          linkRoom('')
         const onlineLine = netLine(room)
         const onlineState = netState(room)
         const arena = st.arena
@@ -5554,8 +5563,9 @@
         else url.searchParams.delete('room')
         url.searchParams.delete('sala')
         url.searchParams.delete('online')
-        // Sin perder la marca de la guardia del boton atras (movil.js).
-        history.replaceState(history.state, '', url)
+        // Sin perder la marca de la guardia del boton atras, y recordada para
+        // que un atras no traiga la direccion de la entrada de abajo (movil.js).
+        mobile.setUrl(url)
       }
 
       function joinRoom(code, opts = {}) {

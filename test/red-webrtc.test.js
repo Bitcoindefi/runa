@@ -397,6 +397,41 @@ test('un recien llegado al que alguien le hablo no se declara afuera', (t) => {
   )
 })
 
+test('la pagina ve la sala llena por el camino real del juego', async (t) => {
+  const net = fakeTrystero()
+  const all = []
+  const os = require('bare-os')
+  const path = require('bare-path')
+  const bfs = require('bare-fs')
+  const dir = path.join(os.tmpdir(), 'runa-sala-llena-' + Date.now())
+  const juego = require('../scripts/tripo-juego.js')
+  const game = juego.start({ saves: dir, joinRoom: net.joinRoom })
+  t.teardown(async () => {
+    for (const p of all) p.stop()
+    await game.quit()
+    bfs.rmSync(dir, { recursive: true, force: true })
+  })
+  for (let i = 0; i < red.PRIVATE_CAP; i++) {
+    const p = presence(net, 'P' + i, 'LLENA')
+    all.push(p)
+    p.start()
+  }
+  t.ok(game.begin({ name: 'Tarde' }))
+  for (let i = 0; i < 50 && (game.runa.title || game.runa.naming); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  t.absent(game.runa.title, 'la partida empezo')
+  t.ok(game.online('LLENA'), 'la sala se abre igual')
+  const late = game.runa.presence
+  for (const p of all.concat(late)) p.beat()
+  t.absent(game.room().full, 'todavia no sabe si sobra')
+  t.ok(late.checkFull(), 'nadie le hablo: es el que sobra')
+  const room = game.room()
+  t.ok(room && room.full, 'la pagina la ve llena')
+  t.is(room.code, 'LLENA')
+  t.is(room.error, red.ROOM_FULL)
+})
+
 test('la sala llena se anota en el registro del juego', (t) => {
   const game = new Runa({ presence: false, name: 'Tarde' })
   const fake = new (require('bare-events'))()

@@ -100,15 +100,18 @@ function printable(name) {
  * @param {(view: string) => void} [opts.onFrame] - cada cuadro que dibuja el juego
  * @param {(line: string) => void} [opts.onSay] - cada linea nueva del registro
  * @param {(error?: Error) => void} [opts.onExit] - el juego termino
+ * @param {string} [opts.saves] - la carpeta de guardados (las pruebas usan otra)
+ * @param {Function} [opts.joinRoom] - el joinRoom de Trystero (uno falso en pruebas)
  */
 function start(opts = {}) {
   const onFrame = opts.onFrame || (() => {})
   const onSay = opts.onSay || (() => {})
   const onExit = opts.onExit || (() => {})
+  const joinRoom = opts.joinRoom
   const runa = new Runa({
     presence: false,
     language: opts.language || 'en',
-    saves: new SaveStore(SAVES)
+    saves: new SaveStore(opts.saves || SAVES)
   })
   // Cada linea del registro tambien sale para la pagina: el registro del juego
   // guarda las ultimas 40 y corre, asi que contarlas no alcanza.
@@ -255,7 +258,7 @@ function start(opts = {}) {
       leaveRoom()
       let presence = null
       try {
-        presence = new red.Presence({ name: runa.name, room, fresh: !!opts.fresh })
+        presence = new red.Presence({ name: runa.name, room, fresh: !!opts.fresh, joinRoom })
       } catch {
         return false
       }
