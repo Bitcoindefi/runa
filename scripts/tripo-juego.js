@@ -318,6 +318,11 @@ function start(opts = {}) {
           wins: peer.wins,
           losses: peer.losses,
           fresh: peer.fresh,
+          // Donde anda: el mapa, su region gruesa y la posicion en ese mapa.
+          mapId: peer.mapId,
+          region: peer.region,
+          x: peer.x,
+          y: peer.y,
           here: here.has(peer.id)
         }))
       }
