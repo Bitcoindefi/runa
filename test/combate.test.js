@@ -277,3 +277,13 @@ test('fightOf manda el turno del juego y la recarga de los dos', (t) => {
   t.is(after.heroCd, items.sword.cooldown, 'recien pego')
   t.ok(after.swinging > 0)
 })
+
+test('combate: the duel reach box covers reach plus the bodies', (t) => {
+  const arena = { distance: 2, gap: 5, self: { reach: 1 } }
+  const box = combate.reachBox(arena, 0.5, 1)
+  t.is(box.hx, 3.25, 'half width in meters: (1 + 5 + 0.5) cells of 0.5')
+  t.is(box.hz, 6.5, 'half depth: cells of 1')
+  t.absent(box.inside, 'two cells away with reach 1: out')
+  t.ok(combate.reachBox({ ...arena, distance: 1 }, 0.5, 1).inside, 'at reach: in')
+  t.is(combate.reachBox(null, 0.5, 1), null, 'no duel, no box')
+})

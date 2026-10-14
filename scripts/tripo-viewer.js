@@ -57,6 +57,9 @@ const MODULES = {
   // Los otros jugadores entre una pose y la siguiente: .mjs para que las
   // pruebas lo carguen en Bare.
   'jugadores.js': path.join(__dirname, 'tripo-jugadores.mjs'),
+  // Los sonidos sintetizados y la vibracion: .mjs para que las pruebas lo
+  // carguen en Bare.
+  'sonido.js': path.join(__dirname, 'tripo-sonido.mjs'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra

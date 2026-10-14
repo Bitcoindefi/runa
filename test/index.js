@@ -67,6 +67,7 @@ require('./movil.test.js')
 require('./combate.test.js')
 require('./atlas-estado.test.js')
 require('./jugadores.test.js')
+require('./sonido.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })

@@ -208,6 +208,8 @@ class Page {
         map: page.map,
         room: page.room,
         figures: page.figures,
+        duelFeel: page.duelFeel,
+        sound: page.sound,
         live: s && {
           title: s.title,
           location: s.location,
@@ -442,6 +444,23 @@ async function runFight() {
     check(rivalFigure && rivalFigure.name === 'Beto', 'Ana ve a Beto en el Coliseo', failures)
 
     const arena = first.live.arena
+    // El invitado ve su tajo al apretar, sin esperar al host (solo se ve: el
+    // host ordena y decide el dano). Lejos todavia: el tajo no llega a nadie.
+    const guest = ids[0] < ids[1] ? b : a
+    const host = guest === a ? b : a
+    const ahead = (await guest.page.state()).live.arena
+    await guest.page.press('f')
+    await sleep(120)
+    const [gs, hs] = await Promise.all([guest.page.state(), host.page.state()])
+    check(gs.duelFeel.predicted > 0, 'el invitado ve su tajo al apretar', failures)
+    check(!(hs.duelFeel.predicted > 0), 'el host no predice: ordena', failures)
+    check(
+      gs.live.arena.rival.hp === ahead.rival.hp && gs.live.arena.self.hp === ahead.self.hp,
+      'el tajo predicho no hace dano',
+      failures
+    )
+    await sleep(500)
+
     // En tercera persona la camara va detras del heroe mirando al rival: arriba
     // camina hacia el y los costados lo rodean. En 2.5D la pantalla no gira.
     const third = await a.page.eval(
@@ -457,6 +476,19 @@ async function runFight() {
     )
     await a.page.key(toward, 'keyUp')
     log(`  Ana camina hasta Beto en ${seconds(walk)}`)
+
+    // El alcance en el piso, en las dos paginas; Ana ya llega a Beto.
+    const feel = await Promise.all([a, b].map((player) => player.page.state()))
+    check(
+      feel.every((state) => state.duelFeel && state.duelFeel.reach),
+      'el alcance se dibuja en las dos paginas',
+      failures
+    )
+    check(
+      feel[0].duelFeel && feel[0].duelFeel.inside,
+      'Ana ve a Beto dentro de su alcance',
+      failures
+    )
 
     // La vida de Beto como la ve cada pagina, sin repetidos: tienen que contar lo
     // mismo, porque las dos aplican los mismos pasos ordenados por el host.
@@ -475,6 +507,8 @@ async function runFight() {
       await sleep(350)
     }
     log(`  F de Ana: vida de Beto en la pagina de Ana ${byAna}, en la de Beto ${byBeto}`)
+    const heard = await Promise.all([a, b].map((player) => player.page.state()))
+    log(`  sonido: Ana ${JSON.stringify(heard[0].sound)}, Beto ${JSON.stringify(heard[1].sound)}`)
 
     await Promise.all(
       [a, b].map((player) =>

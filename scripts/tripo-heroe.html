@@ -4,7 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Runa</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" href="assets/ui/icon-192.png" />
+    <!-- Como app: el color de la barra, el icono de la pantalla de inicio y sin
+         la barra del navegador al abrirla desde ahi (el manifest lo pone el sitio). -->
+    <meta name="theme-color" content="#14110d" />
+    <link rel="apple-touch-icon" href="assets/ui/icon-192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Runa" />
     <script type="importmap">
       {
         "imports": {
@@ -607,6 +615,16 @@
           opacity: 0.2;
         }
       }
+      /* En iOS, una vez: como agregarla a la pantalla de inicio. */
+      #menu-main .home-hint {
+        margin: 2px 0 0;
+        padding: 8px 10px;
+        border: 1px dashed rgba(224, 192, 96, 0.4);
+        border-radius: 3px;
+        color: var(--fg);
+        font-size: 13px;
+        line-height: 1.35;
+      }
       /* Jugar en linea, en el menu de titulo: borde de oro como lo principal. */
       #menu-main button.online {
         border-color: var(--ui-edge);
@@ -1144,9 +1162,52 @@
         body:has(#rivalbar:not([hidden])) #stats {
           top: calc(var(--sat) + var(--gut) + 44px);
         }
+        /* La ficha en un renglon: nombre, vida y la insignia en linea (solo el
+           punto), al lado del minimapa. Lo demas esta en el inventario y el mapa. */
+        #stats {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: auto;
+          max-width: calc(100vw - var(--sal) - var(--sar) - 2 * var(--gut) - 104px - var(--gap));
+          padding: 4px 8px;
+        }
+        #stats .who {
+          flex: none;
+          max-width: 9em;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 13px;
+        }
+        #stats .bar.hp {
+          flex: 1 1 96px;
+          min-width: 72px;
+          margin-top: 0;
+        }
+        #stats .bar.hp span {
+          white-space: nowrap;
+        }
+        #stats .where,
+        #stats .bar.xp,
+        #stats .purse,
+        #stats .worn,
+        #stats .quest {
+          display: none;
+        }
+        #stats .online {
+          flex: none;
+          width: 32px;
+          height: 32px;
+          min-height: 32px;
+          margin: 0;
+          padding: 0;
+          justify-content: center;
+          font-size: 0;
+        }
         /* En una pelea, la ficha corta: nombre y vida, sin tapar al heroe. */
         #stats.fighting {
-          width: min(200px, calc(100vw - 32px));
+          width: auto;
         }
         #stats.fighting .where,
         #stats.fighting .bar.xp,
@@ -1305,8 +1366,20 @@
       import { createMeadow } from './pradera.js'
       import { createInventory } from './inventario.js'
       import { createShowcase } from './vitrina.js'
-      import { createMobile, backStep, typing } from './movil.js'
-      import { readout, towardFoe } from './combate.js'
+      import {
+        createMobile,
+        backStep,
+        typing,
+        isIos,
+        isStandalone,
+        canFullscreen,
+        fullscreenOf,
+        goFullscreen,
+        leaveFullscreen,
+        createInstall
+      } from './movil.js'
+      import { readout, towardFoe, hitStopMs, HitStop, reachBox } from './combate.js'
+      import { createSound } from './sonido.js'
       import { createAtlas } from './atlas.js'
       import { createTrack, placeOf as peerPlace, nearest, RIGS, CLIPS } from './jugadores.js'
 
@@ -1371,7 +1444,12 @@
         // Si ya se mostro el aviso de la primera vez en linea (la IP se ve).
         netNoticed: false,
         // La ultima sala privada del Coliseo en linea.
-        room: ''
+        room: '',
+        // El sonido de los golpes y la vibracion (esta solo en Android).
+        sound: true,
+        vibrate: true,
+        // Si ya se mostro en iOS como agregarla a la pantalla de inicio.
+        homeNoticed: false
       }
       try {
         Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS) || '{}'))
@@ -1407,6 +1485,20 @@
       }
       const L = (en, es) => (settings.lang === 'es' ? es : en)
       const pick = (pair) => pair[settings.lang === 'es' ? 1 : 0]
+
+      // El sonido y la vibracion (sonido.js): suenan despues del primer toque o
+      // tecla. Instalar como app (movil.js): el aviso de Chrome se guarda para
+      // el boton del titulo, que se rehace cuando aparece.
+      const sound = createSound({
+        win: window,
+        sound: () => settings.sound !== false,
+        vibrate: () => settings.vibrate !== false
+      })
+      const cue = (kind, share) => sound.cue(kind, share)
+      const install = createInstall(window)
+      // El aviso de iOS (agregar a inicio) se ve durante esta visita al titulo;
+      // la proxima ya no.
+      const homeHint = !settings.homeNoticed
 
       const who = document.getElementById('who')
       const mode = document.getElementById('mode')
@@ -3280,6 +3372,7 @@
       // El tajo del heroe: un arco dorado delante de el, que barre y se apaga.
       function swingSword() {
         fight.swing = 1
+        cue('whiff')
         const material = new THREE.MeshBasicMaterial({
           color: 0xffe08a,
           transparent: true,
@@ -3352,6 +3445,7 @@
         bossLift += (wantLift - bossLift) * Math.min(1, dt * 2)
         // Lo que paso desde el cuadro anterior, en los numeros del juego.
         if (fight.bossHp !== null && boss.hp < fight.bossHp && chest) {
+          cue(boss.hp <= 0 ? 'kill' : 'hit', (fight.bossHp - boss.hp) / (boss.maxhp || 1))
           fight.hit = 1
           fight.shake = Math.max(fight.shake, 0.35)
           floater('-' + (fight.bossHp - boss.hp), '#ffd27a', chest.clone().setY(rig.height + 0.8))
@@ -3359,6 +3453,7 @@
         }
         fight.bossHp = boss.hp
         if (fight.heroHp !== null && st.hp < fight.heroHp) {
+          cue('hurt', (fight.heroHp - st.hp) / (st.maxhp || 1))
           fight.hurt = 1
           fight.shake = Math.max(fight.shake, 0.7)
           hop = performance.now()
@@ -3380,6 +3475,8 @@
             shockwave(sum.divideScalar(cells.length))
           } else if (chest) shockwave(chest)
         }
+        // El Coloso marca donde va a caer: el aviso suena una vez por golpe.
+        if (warned > 0 && fight.warned === 0) cue('telegraph')
         fight.warned = warned
         fight.burning = burning
         fight.windup = warned
@@ -3488,7 +3585,66 @@
       const duelWant = new THREE.Vector3()
       const duelToward = new THREE.Vector3()
       // Lo ultimo que se vio del heroe en el duelo, para notar golpes y tajos.
-      const duelSelf = { hp: null, swinging: 0 }
+      // predicted: cuando el invitado mostro su tajo al apretar, antes de que el
+      // host lo ordene (solo se ve; el dano lo decide el host).
+      const duelSelf = { hp: null, swinging: 0, predicted: -Infinity }
+      // Lo que tarda un tick del juego (lib/game.js TICK_MS): la recarga del
+      // duelo se cuenta en ticks.
+      const DUEL_TICK_MS = 1000 / 15
+      // Un tajo propio que llega del host hasta este tiempo despues del
+      // predicho es el mismo: no se repite.
+      const PREDICT_MS = 700
+      // La pausa del golpe del duelo (hit stop): frena las animaciones de los dos.
+      const duelStop = new HitStop()
+      function duelImpact(kind, share) {
+        cue(kind, share)
+        duelStop.kick(hitStopMs(share), performance.now() / 1000)
+        fight.shake = Math.max(fight.shake, kind === 'hurt' ? 0.5 : 0.3)
+      }
+      // El alcance del heroe en el duelo: un rectangulo en el piso alrededor de
+      // su celda (el duelo mide en celdas), dorado si el rival esta adentro.
+      const reachMat = new THREE.MeshBasicMaterial({
+        color: 0xffd27a,
+        transparent: true,
+        opacity: 0.3,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+      const reachRing = new THREE.Mesh(new THREE.BufferGeometry(), reachMat)
+      reachRing.visible = false
+      reachRing.renderOrder = 2
+      scene.add(reachRing)
+      let reachKey = ''
+      function reachFrame(box, at) {
+        if (!box) {
+          reachRing.visible = false
+          return
+        }
+        const key = box.hx.toFixed(3) + ',' + box.hz.toFixed(3)
+        if (key !== reachKey) {
+          reachKey = key
+          const w = 0.1
+          const shape = new THREE.Shape()
+          shape.moveTo(-box.hx, -box.hz)
+          shape.lineTo(box.hx, -box.hz)
+          shape.lineTo(box.hx, box.hz)
+          shape.lineTo(-box.hx, box.hz)
+          shape.closePath()
+          const hole = new THREE.Path()
+          hole.moveTo(-box.hx + w, -box.hz + w)
+          hole.lineTo(-box.hx + w, box.hz - w)
+          hole.lineTo(box.hx - w, box.hz - w)
+          hole.lineTo(box.hx - w, -box.hz + w)
+          hole.closePath()
+          shape.holes.push(hole)
+          reachRing.geometry.dispose()
+          reachRing.geometry = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2)
+        }
+        reachRing.position.set(at.x, 0.04, at.z)
+        reachMat.color.setHex(box.inside ? 0xffd27a : 0xd8d8d0)
+        reachMat.opacity = box.inside ? 0.7 : 0.3
+        reachRing.visible = true
+      }
 
       // La barra de vida sobre el rival: se repinta solo si cambia.
       function hpSprite() {
@@ -3784,13 +3940,15 @@
             if (entry.clips[entry.clip]) entry.clips[entry.clip].fadeOut(0.15)
             entry.clip = name
           }
-          entry.mixer.update(dt)
+          // La pausa del golpe del duelo frena tambien al rival.
+          entry.mixer.update(dt * duelStop.scale(performance.now() / 1000))
           boundRig(entry)
         }
         entry.bar.set(who.maxHp > 0 ? Math.max(0, who.hp) / who.maxHp : 0)
         if (entry.hp !== null && who.hp < entry.hp) {
           floater('-' + (entry.hp - who.hp), '#ffd27a', pos.clone().setY(3.4))
           sparks(pos.clone().setY(1.2), 0xffb040)
+          duelImpact(who.hp <= 0 ? 'kill' : 'hit', (entry.hp - who.hp) / (who.maxHp || 1))
         }
         entry.hp = who.hp
         if (who.swinging > entry.swinging) entry.lunge = 1
@@ -3879,12 +4037,19 @@
 
         const rival = arena && peers.get(arena.rival.id)
         if (!rival) {
+          // El duelo termino por vida y el heroe sigue en pie: gano (el ultimo
+          // golpe cierra el duelo antes de que se vea la vida del rival en 0).
+          const won = duelSelf.hp > 0 && st && st.lastDuel && st.lastDuel.reason === 'vida'
+          if (!arena && duelSelf.hp !== null && won) cue('kill')
           duelView.set(0, 0, 0)
           duelAim = null
           duelSelf.hp = null
           duelSelf.swinging = 0
+          duelSelf.predicted = -Infinity
+          reachFrame(null)
           return
         }
+        reachFrame(reachBox(arena, CX, CZ), world.built.toWorld(arena.self.x, arena.self.y))
         // En 2.5D la camara mira entre los dos; en tercera persona va detras del
         // heroe, sobre la linea hacia el rival, asi el rival queda adelante.
         duelToward.subVectors(rival.root.position, hero.root.position).setY(0)
@@ -3910,9 +4075,16 @@
           floater('-' + (duelSelf.hp - arena.self.hp), '#ff6a5a', at.clone().setY(3.1))
           sparks(at.setY(1.2), 0xff4030)
           hop = performance.now()
+          duelImpact('hurt', (duelSelf.hp - arena.self.hp) / (arena.self.maxHp || 1))
         }
         duelSelf.hp = arena.self.hp
-        if (arena.self.swinging > duelSelf.swinging) swingSword()
+        // El tajo que ordeno el host: si el invitado ya lo mostro al apretar, no
+        // se repite.
+        if (
+          arena.self.swinging > duelSelf.swinging &&
+          performance.now() - duelSelf.predicted > PREDICT_MS
+        )
+          swingSword()
         duelSelf.swinging = arena.self.swinging
       }
 
@@ -4057,7 +4229,9 @@
         // El temblor de los golpes en el campo: el mismo que el del Coloso.
         shake: (amount) => {
           fight.shake = Math.max(fight.shake, amount)
-        }
+        },
+        // El sonido y la vibracion de los golpes en el campo.
+        cue
       })
       const inventory = createInventory({
         tr: (name) => tr(name),
@@ -4127,7 +4301,14 @@
         if (world) walk(dt)
         else if (mixer && screen === 'menu') setGait('Idle', 1)
         // La pausa de un golpe en el campo (hit stop) tambien frena al heroe.
-        if (mixer && avatar.visible) mixer.update(dt * (meadow ? meadow.timeScale() : 1))
+        // La del duelo tambien.
+        if (mixer && avatar.visible) {
+          const slow = Math.min(
+            meadow ? meadow.timeScale() : 1,
+            duelStop.scale(performance.now() / 1000)
+          )
+          mixer.update(dt * slow)
+        }
         // El mundo puede tener movimiento propio: viento, agua, NPC.
         if (world && world.built.update) world.built.update(t)
         if (title && screen === 'menu') title.update(t, dt)
@@ -4516,6 +4697,7 @@
             startTour
           )
         )
+        appMenu(latest)
         menuMain.append(button(L('Settings', 'Opciones'), null, () => subPage(settingsPage)))
         menuMain.append(button(L('Controls', 'Controles'), null, () => subPage(controlsPage)))
         const gallery = button(L('The Tripo models', 'Los modelos de Tripo'), null, () => {
@@ -4527,6 +4709,60 @@
           link && !online.disabled ? online : menuMain.querySelector('button:not([disabled])')
         first.focus()
       }
+
+      // Lo de app en el titulo: jugar a pantalla completa (acostado en Android),
+      // instalar (el aviso de Chrome) y, en iOS, una vez, como agregarla a la
+      // pantalla de inicio (Safari no deja la pantalla completa en el iPhone).
+      function appMenu(latest) {
+        const app = isStandalone(window)
+        if (touchPad && !app && canFullscreen(document) && !fullscreenOf(document)) {
+          menuMain.append(
+            button(
+              L('Play fullscreen', 'Jugar a pantalla completa'),
+              L('Landscape, without the browser bar', 'Acostado, sin la barra del navegador'),
+              () => {
+                goFullscreen(window).then(() => {
+                  if (screen !== 'menu') return
+                  if (latest) play({ load: latest.slot })
+                  else newGamePage()
+                })
+              },
+              !juego
+            )
+          )
+        }
+        if (!app && install.available()) {
+          menuMain.append(
+            button(
+              L('Install Runa', 'Instalar Runa'),
+              L('As an app on this device', 'Como app en este dispositivo'),
+              () => {
+                install.prompt().then(() => {
+                  if (screen === 'menu' && !menuMain.hidden) mainMenu()
+                })
+              }
+            )
+          )
+        }
+        if (!app && touchPad && isIos(navigator) && homeHint) {
+          settings.homeNoticed = true
+          keepSettings()
+          const note = line(
+            menuMain,
+            L(
+              'Fullscreen on iPhone: tap Share, then Add to Home Screen.',
+              'Pantalla completa en el iPhone: toca Compartir y despues Agregar a inicio.'
+            ),
+            'home-hint'
+          )
+          note.setAttribute('role', 'note')
+        }
+      }
+      // El aviso de Chrome llega cuando quiere: el titulo se rehace para mostrar
+      // el boton.
+      install.setOnChange(() => {
+        if (screen === 'menu' && !menuMain.hidden && juego) mainMenu()
+      })
 
       function subPage(build) {
         menuMain.hidden = true
@@ -4768,6 +5004,43 @@
             again()
           }
         )
+        line(box, L('Sound', 'Sonido'))
+        choice(
+          box,
+          [
+            [true, L('On', 'Si')],
+            [false, L('Off', 'No')]
+          ],
+          settings.sound !== false,
+          (value) => {
+            settings.sound = value
+            keepSettings()
+            // Prenderlo es un toque: el audio ya queda destrabado y suena.
+            if (value) {
+              sound.unlock()
+              sound.play('hit', 0.2)
+            }
+            again()
+          }
+        )
+        // Vibrar solo donde se puede (Android).
+        if (sound.vibrates) {
+          line(box, L('Vibration', 'Vibracion'))
+          choice(
+            box,
+            [
+              [true, L('On', 'Si')],
+              [false, L('Off', 'No')]
+            ],
+            settings.vibrate !== false,
+            (value) => {
+              settings.vibrate = value
+              keepSettings()
+              if (value) sound.buzz('hit')
+              again()
+            }
+          )
+        }
         line(box, L('Online', 'En linea'))
         choice(
           box,
@@ -5614,6 +5887,21 @@
       // El tajo del heroe contra el Coloso: el mismo con F, espacio o el boton.
       function strikeFx(st) {
         if (world && world.map === 'boss' && st && st.boss) swingSword()
+        else predictSwing(st)
+      }
+
+      // El invitado de un duelo en linea ve su tajo al apretar, sin esperar al
+      // host: solo la animacion y el sonido, nunca el dano (el host ordena y
+      // decide; si lo rechaza, no pasa nada mas). El host ya lo ve al instante.
+      function predictSwing(st) {
+        const arena = st && st.arena
+        if (!arena || !arena.online || arena.host || !world || world.map !== 'coliseum') return
+        const self = arena.self
+        if (self.cooldownLeft > 0 || self.swinging > 0) return
+        const now = performance.now()
+        if (now - duelSelf.predicted < Math.max(300, (self.cooldown || 0) * DUEL_TICK_MS)) return
+        duelSelf.predicted = now
+        swingSword()
       }
 
       const STRIKE_KEYS = new Set(['f', ' ', 'Enter'])
@@ -6195,17 +6483,16 @@
             strategyPage
           )
         )
-        if (touchPad && document.fullscreenEnabled) {
+        if (touchPad && canFullscreen(document)) {
           pauseSheet.append(
             button(
-              document.fullscreenElement
+              fullscreenOf(document)
                 ? L('Leave fullscreen', 'Salir de pantalla completa')
                 : L('Fullscreen', 'Pantalla completa'),
               null,
               () => {
-                const done = document.fullscreenElement
-                  ? document.exitFullscreen()
-                  : document.documentElement.requestFullscreen()
+                // A pantalla completa el telefono queda acostado (Android).
+                const done = fullscreenOf(document) ? leaveFullscreen(window) : goFullscreen(window)
                 Promise.resolve(done)
                   .catch(() => {})
                   .then(closePause)
@@ -7486,6 +7773,16 @@
         speed: pace().speed,
         map: world ? world.map : null,
         atlas: atlas.debug(),
+        // El sonido, la pantalla completa y lo que se siente en el duelo.
+        sound: sound.state(),
+        fullscreen: !!fullscreenOf(document),
+        installable: install.available(),
+        duelFeel: {
+          reach: reachRing.visible,
+          inside: reachRing.visible && reachMat.opacity > 0.4,
+          predicted: duelSelf.predicted,
+          stopped: duelStop.scale(performance.now() / 1000) < 1
+        },
         // La sala del Coliseo en linea y las figuras de los otros jugadores.
         room: roomOf(),
         figures: [...peers.values()].map((entry) => ({

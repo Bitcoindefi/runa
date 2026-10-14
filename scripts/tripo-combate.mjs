@@ -269,3 +269,21 @@ export function nearFoes(foes, at, radius = 3, limit = 3) {
   list.sort((a, b) => a.d - b.d)
   return list.slice(0, limit)
 }
+
+/**
+ * El alcance del heroe en un duelo, para dibujarlo en el piso alrededor de su
+ * celda. El duelo mide la distancia en celdas, la mayor de las dos (lib/duel.js
+ * distance), menos las celdas de los cuerpos (gap): el alcance es un rectangulo
+ * de (reach + gap) celdas hacia cada lado, hasta el borde de la ultima celda.
+ * cx y cz son lo que mide una celda en el mundo. Devuelve { hx, hz, inside }:
+ * las mitades del rectangulo y si el rival esta al alcance; null sin duelo.
+ */
+export function reachBox(arena, cx, cz) {
+  if (!arena || !arena.self) return null
+  const cells = Math.max(0, num(arena.self.reach)) + Math.max(0, num(arena.gap)) + 0.5
+  return {
+    hx: cells * num(cx),
+    hz: cells * num(cz),
+    inside: num(arena.distance) <= num(arena.self.reach)
+  }
+}

@@ -9,7 +9,8 @@
 // en el recorrido), bundle() (el modulo juego.js, o null si no cargo), figure(color)
 // (una figura simple), label(texto) del mundo, text(nombre) (traduce) y L(en, es)
 // (los textos propios en el idioma elegido). Opcional: shake(amount), el
-// temblor de la camara de la pagina (el mismo del Coloso).
+// temblor de la camara de la pagina (el mismo del Coloso), y cue(kind, share),
+// el sonido y la vibracion de un golpe (tripo-sonido.mjs).
 //
 // Devuelve:
 //   provide(id)       los datos de un mapa que no viene del visor (como
@@ -2483,8 +2484,9 @@ const FOE_SHOT = {
 class Effects {
   // hint(st, touch), si viene, reemplaza la ayuda de la pradera (nearHint): la
   // de un lugar de adentro.
-  // feel, si viene: { stop(ms), shake(amount), contact() }, la pausa del golpe,
-  // el temblor de la camara y el aviso de que empezo una pelea (createMeadow).
+  // feel, si viene: { stop(ms), shake(amount), contact(), cue(kind, share) }, la
+  // pausa del golpe, el temblor de la camara, el aviso de que empezo una pelea y
+  // el sonido y la vibracion (createMeadow).
   constructor(ctx, crowd, bits, L, hint = null, feel = null) {
     this.ctx = ctx
     this.crowd = crowd
@@ -3075,6 +3077,7 @@ class Effects {
       this.heroBrace = time
     } else if (item.kind === 'swing') {
       this.heroLunge = time
+      this.cue('whiff')
       const style = WEAPON_STYLE[item.weapon] || 'punch'
       if (style === 'shot' && spot) {
         this.boltFrom.set(hero.x, 1.35, hero.z)
@@ -3099,6 +3102,7 @@ class Effects {
       this.number(`-${item.amount}`, '#fff4e0', spot.x, spot.top + 0.3, spot.z, time, 0, size)
       this.barHp = item.hp
       this.impact(item.share, 0.8)
+      this.cue(item.hp === 0 ? 'kill' : 'hit', item.share)
     } else if (item.kind === 'foe-swing') {
       this.crowd.strike(item.id, time)
       const shot = spot ? FOE_SHOT[spot.kind] : undefined
@@ -3125,6 +3129,7 @@ class Effects {
         numberScale(item.share)
       )
       this.impact(item.share, 1)
+      this.cue('hurt', item.share)
       const flash = this.bits.flash
       flash.hidden = false
       flash.classList.add('on')
@@ -3136,6 +3141,11 @@ class Effects {
 
   // La pausa del golpe y el temblor, segun la parte de la vida que se llevo
   // (el golpe al heroe tiembla un poco mas que el del heroe).
+  // El sonido y la vibracion de la pagina, si los dio (tripo-sonido.mjs).
+  cue(kind, share = 0) {
+    if (this.feel && this.feel.cue) this.feel.cue(kind, share)
+  }
+
   impact(share, weight) {
     if (!this.feel) return
     this.feel.stop(hitStopMs(share))
@@ -3520,6 +3530,7 @@ export function createMeadow(ctx) {
   const feel = {
     stop: (ms) => stop.kick(ms, realTime),
     shake: (amount) => (ctx.shake ? ctx.shake(amount) : null),
+    cue: (kind, share) => (ctx.cue ? ctx.cue(kind, share) : null),
     contact: () => pace.contact(fightTime)
   }
 

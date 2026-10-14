@@ -258,3 +258,113 @@ test('movil: la grafica devuelta fuera de una pelea recarga enseguida', (t) => {
   page.restore()
   t.is(page.win.reloads, 1)
 })
+
+// Una ventana para la pantalla completa: fullscreen y la traba de la pantalla
+// se pueden negar, como en un navegador que no las tiene.
+function fullWindow({ ua = '', fullscreen = true, lock = true, touch = 0 } = {}) {
+  const log = []
+  const doc = {
+    fullscreenEnabled: fullscreen,
+    fullscreenElement: null,
+    documentElement: {},
+    exitFullscreen() {
+      log.push('exit')
+      doc.fullscreenElement = null
+      return Promise.resolve()
+    }
+  }
+  if (fullscreen) {
+    doc.documentElement.requestFullscreen = (options) => {
+      log.push(['request', options])
+      doc.fullscreenElement = doc.documentElement
+      return Promise.resolve()
+    }
+  }
+  const listeners = new Map()
+  const win = {
+    document: doc,
+    navigator: { userAgent: ua, maxTouchPoints: touch },
+    matchMedia: () => ({ matches: false }),
+    screen: {
+      orientation: {
+        lock(kind) {
+          if (!lock) return Promise.reject(new Error('NotSupportedError'))
+          log.push(['lock', kind])
+          return Promise.resolve()
+        },
+        unlock() {
+          log.push('unlock')
+        }
+      }
+    },
+    addEventListener(name, fn) {
+      listeners.set(name, fn)
+    },
+    fire(name, event) {
+      listeners.get(name)(event)
+    }
+  }
+  return { win, log }
+}
+
+test('movil: iOS and installed app detection', (t) => {
+  t.ok(movil.isIos({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }))
+  t.ok(
+    movil.isIos({
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+      maxTouchPoints: 5
+    }),
+    'an iPad says Macintosh but has touch'
+  )
+  t.absent(movil.isIos({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }))
+  t.absent(movil.isIos({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7)' }))
+  const { win } = fullWindow()
+  t.absent(movil.isStandalone(win), 'a browser tab')
+  win.matchMedia = (query) => ({ matches: query === '(display-mode: fullscreen)' })
+  t.ok(movil.isStandalone(win), 'opened from the home screen')
+  t.ok(movil.isStandalone({ navigator: { standalone: true } }), 'iOS home screen app')
+})
+
+test('movil: fullscreen locks landscape and leaves cleanly', async (t) => {
+  const { win, log } = fullWindow()
+  t.ok(movil.canFullscreen(win.document))
+  const done = await movil.goFullscreen(win)
+  t.alike(done, { fullscreen: true, locked: true })
+  t.alike(log[0], ['request', { navigationUI: 'hide' }], 'without the navigation bar')
+  t.alike(log[1], ['lock', 'landscape'], 'locked sideways')
+  t.ok(movil.fullscreenOf(win.document))
+  await movil.leaveFullscreen(win)
+  t.alike(log.slice(2), ['unlock', 'exit'])
+  t.absent(movil.fullscreenOf(win.document))
+})
+
+test('movil: fullscreen without a lock or without the API never throws', async (t) => {
+  const noLock = fullWindow({ lock: false })
+  t.alike(await movil.goFullscreen(noLock.win), { fullscreen: true, locked: false })
+  const iphone = fullWindow({ fullscreen: false })
+  t.absent(movil.canFullscreen(iphone.win.document), 'the iPhone has no element fullscreen')
+  t.alike(await movil.goFullscreen(iphone.win), { fullscreen: false, locked: false })
+})
+
+test('movil: the install prompt is kept for our own button', async (t) => {
+  const { win } = fullWindow()
+  let changes = 0
+  const install = movil.createInstall(win, () => changes++)
+  t.absent(install.available())
+  t.is(await install.prompt(), 'unavailable')
+  let prevented = false
+  let prompted = 0
+  win.fire('beforeinstallprompt', {
+    preventDefault: () => (prevented = true),
+    prompt: () => prompted++,
+    userChoice: Promise.resolve({ outcome: 'accepted' })
+  })
+  t.ok(prevented, 'the browser banner waits for the button')
+  t.ok(install.available())
+  t.is(changes, 1)
+  t.is(await install.prompt(), 'accepted')
+  t.is(prompted, 1)
+  t.absent(install.available(), 'a prompt is used once')
+  win.fire('appinstalled', {})
+  t.ok(install.installed())
+})

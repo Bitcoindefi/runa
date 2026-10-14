@@ -11,6 +11,7 @@ const { Field, BARBARIAN_SETTLEMENTS, vdist } = require('../lib/field.js')
 const { DUNGEON, floorRows } = require('../lib/dungeon.js')
 const { campRows } = require('../lib/barbarian-camp.js')
 const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
+const { DUEL_BODY_GAP } = require('../lib/duel.js')
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
 // Los mapas fijos del juego que la pagina arma en 3D.
@@ -137,6 +138,9 @@ function arenaOf(runa) {
   return {
     tick: snap.tick,
     distance: snap.distance,
+    // Las celdas entre los dos que no cuentan en la distancia (los cuerpos): la
+    // pagina dibuja el alcance desde la celda del heroe.
+    gap: DUEL_BODY_GAP,
     self: fighter(snap.self),
     rival: fighter(snap.rival),
     online: !!network,

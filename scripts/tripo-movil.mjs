@@ -258,3 +258,131 @@ export function createMobile({
     typing
   }
 }
+
+// --- Pantalla completa e instalar -------------------------------------------
+
+/** Un iPhone o un iPad (que se presenta como Mac con pantalla tactil). */
+export function isIos(nav) {
+  if (!nav) return false
+  const ua = nav.userAgent || ''
+  if (/iPhone|iPad|iPod/i.test(ua)) return true
+  return /Macintosh/i.test(ua) && (nav.maxTouchPoints || 0) > 1
+}
+
+/** Si la pagina ya corre como app instalada (sin barra del navegador). */
+export function isStandalone(win) {
+  if (win.navigator && win.navigator.standalone === true) return true
+  try {
+    return ['fullscreen', 'standalone'].some(
+      (mode) => win.matchMedia && win.matchMedia(`(display-mode: ${mode})`).matches
+    )
+  } catch {
+    return false
+  }
+}
+
+/** Si se puede pedir pantalla completa (Android, la PC, el iPad; el iPhone no). */
+export function canFullscreen(doc) {
+  const root = doc.documentElement
+  return !!(
+    (doc.fullscreenEnabled || doc.webkitFullscreenEnabled) &&
+    (root.requestFullscreen || root.webkitRequestFullscreen)
+  )
+}
+
+/** El elemento a pantalla completa, o null. */
+export function fullscreenOf(doc) {
+  return doc.fullscreenElement || doc.webkitFullscreenElement || null
+}
+
+/**
+ * Pide la pantalla completa y, en Android, traba la pantalla acostada (solo
+ * anda a pantalla completa). Devuelve { fullscreen, locked }; nunca falla.
+ */
+export async function goFullscreen(win, { landscape = true } = {}) {
+  const doc = win.document
+  const root = doc.documentElement
+  let fullscreen = !!fullscreenOf(doc)
+  if (!fullscreen) {
+    try {
+      if (root.requestFullscreen) await root.requestFullscreen({ navigationUI: 'hide' })
+      else if (root.webkitRequestFullscreen) await root.webkitRequestFullscreen()
+      fullscreen = !!fullscreenOf(doc)
+    } catch {
+      fullscreen = false
+    }
+  }
+  let locked = false
+  const orientation = win.screen && win.screen.orientation
+  if (fullscreen && landscape && orientation && typeof orientation.lock === 'function') {
+    try {
+      await orientation.lock('landscape')
+      locked = true
+    } catch {
+      // Una tableta o la PC no traban: queda como este.
+    }
+  }
+  return { fullscreen, locked }
+}
+
+/** Sale de la pantalla completa y suelta la traba de la pantalla. */
+export async function leaveFullscreen(win) {
+  const doc = win.document
+  const orientation = win.screen && win.screen.orientation
+  try {
+    if (orientation && typeof orientation.unlock === 'function') orientation.unlock()
+  } catch {
+    // Sin traba no hay nada que soltar.
+  }
+  try {
+    if (doc.exitFullscreen && doc.fullscreenElement) {
+      await doc.exitFullscreen()
+    } else if (doc.webkitExitFullscreen && doc.webkitFullscreenElement) {
+      await doc.webkitExitFullscreen()
+    }
+  } catch {
+    // Ya habia salido.
+  }
+}
+
+/**
+ * Instalar como app: guarda el beforeinstallprompt de Chrome (Android, la PC)
+ * para mostrarlo con un boton propio. onChange() avisa cuando aparece o se va.
+ * Devuelve available() y prompt() (resuelve 'accepted', 'dismissed' o
+ * 'unavailable').
+ */
+export function createInstall(win, onChange = () => {}) {
+  let deferred = null
+  let installed = false
+  win.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault()
+    deferred = event
+    onChange()
+  })
+  win.addEventListener('appinstalled', () => {
+    deferred = null
+    installed = true
+    onChange()
+  })
+  return {
+    available: () => !!deferred && !installed,
+    installed: () => installed,
+    setOnChange(fn) {
+      onChange = fn
+    },
+    async prompt() {
+      if (!deferred) return 'unavailable'
+      const event = deferred
+      deferred = null
+      try {
+        event.prompt()
+        const choice = await event.userChoice
+        onChange()
+        return (choice && choice.outcome) || 'dismissed'
+      } catch {
+        onChange()
+        return 'unavailable'
+      }
+    }
+  }
+}
