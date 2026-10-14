@@ -203,11 +203,51 @@ const COMBAT_TURN = 6
 // prueba los compara, igual que COMBAT_TURN).
 const TICK = 1000 / 15
 
+// Las celdas que de verdad recorre el golpe marcado y las que ya queman. Las
+// marcas del Coloso son solo muestras (una cada dos celdas) y el poder pega a
+// una celda de distancia, asi que se copia el Coloso sin tocarlo, se suelta el
+// golpe en la copia y se avanzan sus poderes hasta que se apagan: "path" es lo
+// que recorre el golpe nuevo y "burnt" lo que recorren los poderes que ya
+// estaban sueltos.
+function strikeZone(boss, action, now, total) {
+  const sim = Object.assign(Object.create(Object.getPrototypeOf(boss)), boss, {
+    hazards: (boss.hazards || []).map((hazard) => ({ ...hazard }))
+  })
+  const key = (x, y) => x + ',' + y
+  const path = new Set()
+  const burnt = new Set()
+  const fresh = new Set()
+  const record = () => {
+    for (const hazard of sim.hazards) {
+      const cell = key(Math.round(hazard.x), Math.round(hazard.y))
+      if (fresh.has(hazard)) path.add(cell)
+      else burnt.add(cell)
+    }
+  }
+  const fire = action.startedAt + total
+  record()
+  for (let t = Math.min(now, fire); t <= fire + 400; t++) {
+    if (t === fire) {
+      const before = new Set(sim.hazards)
+      sim.release(action.attack, action.target, t)
+      for (const hazard of sim.hazards) if (!before.has(hazard)) fresh.add(hazard)
+      record()
+    }
+    sim.moveHazards(t)
+    record()
+    if (t >= fire && !sim.hazards.length) break
+  }
+  return { path, burnt }
+}
+
 // La ayuda para esquivar al Coloso, solo para la vista (no cambia reglas):
-// cuanto lleva cargado el golpe que marco (en ticks y en milisegundos) y, si el
-// heroe esta parado en una celda marcada, la celda libre mas cercana. Libre es
-// dentro del mapa, sin marca, sin fuego y fuera del cuerpo del Coloso; se camina
-// en ocho direcciones, asi que "cerca" son los pasos (y a igual pasos, la recta).
+// cuanto lleva cargado el golpe que marco (en ticks y en milisegundos), las
+// celdas que recorre el golpe ("path", para pintar el piso entero y no solo las
+// marcas) y, si el heroe esta donde lo alcanza un poder (en el recorrido o a una
+// celda, como mide touch() en lib/world-boss-event.js), la celda mas cercana
+// fuera de ese alcance. Tambien tiene que estar dentro del mapa y fuera del
+// cuerpo del Coloso; se camina en ocho direcciones, asi que "cerca" son los
+// pasos (y a igual pasos, la recta).
 function bossDodge(field) {
   const boss = field && field.mode === 'boss' ? field.boss : null
   const action = boss && boss.action
@@ -216,13 +256,19 @@ function bossDodge(field) {
     Math.max(1, ((action.attack && action.attack.frames) || ['idle']).length) * FRAME_TICKS
   const done = Math.max(0, Math.min(total, field.time - action.startedAt))
   const key = (x, y) => x + ',' + y
-  const marked = new Set(action.telegraphs.map((cell) => key(cell.x, cell.y)))
-  const burning = new Set(
-    (boss.hazards || []).map((cell) => key(Math.round(cell.x), Math.round(cell.y)))
-  )
+  const { path, burnt } = strikeZone(boss, action, field.time, total)
+  const reach = new Set()
+  for (const cells of [path, burnt]) {
+    for (const cell of cells) {
+      const [x, y] = cell.split(',').map(Number)
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) reach.add(key(x + dx, y + dy))
+      }
+    }
+  }
   const hx = field.player.x
   const hy = field.player.y
-  const danger = marked.has(key(hx, hy))
+  const danger = reach.has(key(hx, hy))
   let safe = null
   if (danger) {
     const free = (x, y) =>
@@ -230,10 +276,10 @@ function bossDodge(field) {
       y >= 0 &&
       x < field.width &&
       y < field.height &&
-      !marked.has(key(x, y)) &&
-      !burning.has(key(x, y)) &&
+      !reach.has(key(x, y)) &&
       !boss.occupies(x, y)
-    for (let r = 1; r <= 16 && !safe; r++) {
+    const far = Math.max(field.width, field.height)
+    for (let r = 1; r <= far && !safe; r++) {
       let best = Infinity
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -252,6 +298,10 @@ function bossDodge(field) {
     total,
     leftMs: Math.round((total - done) * TICK),
     totalMs: Math.round(total * TICK),
+    path: [...path].map((cell) => {
+      const [x, y] = cell.split(',').map(Number)
+      return { x, y }
+    }),
     danger,
     safe
   }

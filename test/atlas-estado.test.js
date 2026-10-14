@@ -215,25 +215,50 @@ test('dodge aid: the charge of the marked strike and the nearest free cell', (t)
   t.is(aid.danger, false, 'off the marks there is no danger')
   t.is(aid.safe, null)
 
-  const cell = boss.action.telegraphs[0]
-  player.x = cell.x
-  player.y = cell.y
-  aid = estado.bossDodge(field)
-  t.is(aid.danger, true, 'standing on a mark is danger')
-  t.ok(aid.safe, 'a free cell is offered')
-  const steps = Math.max(Math.abs(aid.safe.x - cell.x), Math.abs(aid.safe.y - cell.y))
-  t.ok(!marked.has(aid.safe.x + ',' + aid.safe.y), 'the free cell carries no mark')
-  t.ok(!boss.occupies(aid.safe.x, aid.safe.y), 'nor the body of the Colossus')
-  let closer = false
-  for (let dy = -steps + 1; dy < steps; dy++) {
-    for (let dx = -steps + 1; dx < steps; dx++) {
-      const x = cell.x + dx
-      const y = cell.y + dy
-      if (x < 0 || y < 0 || x >= 120 || y >= 36) continue
-      if (!marked.has(x + ',' + y) && !boss.occupies(x, y)) closer = true
+  // El golpe pega en todo su recorrido y a una celda: se prueba en una copia del
+  // Coloso, con el heroe quieto, si lo alcanza antes de que se apaguen los poderes.
+  const hits = (x, y) => {
+    const copy = new WorldBossEvent({ width: 120, height: 36 })
+    Object.assign(copy, boss, {
+      action: { ...boss.action },
+      hazards: boss.hazards.map((hazard) => ({ ...hazard }))
+    })
+    const hero = { x, y, hp: 99 }
+    for (let time = field.time; time < field.time + 200; time++) {
+      const events = copy.tick(hero, time)
+      if (events.some((event) => event.type === 'boss-hit')) return true
+      if (events.some((event) => event.type === 'boss-cast')) copy.nextAttackAt = Infinity
     }
+    return false
   }
-  t.is(closer, false, 'no free cell is fewer steps away')
+  t.is(hits(off.x, off.y), false, 'the far cell is never hit')
+
+  const cell = boss.action.telegraphs[0]
+  const next = boss.action.telegraphs[1]
+  t.ok(aid.path.length > boss.action.telegraphs.length, 'the path fills the gaps between marks')
+  const gap = { x: (cell.x + next.x) / 2, y: (cell.y + next.y) / 2 }
+  t.ok(!marked.has(gap.x + ',' + gap.y), 'a gap between two marks')
+  for (const spot of [cell, gap, { x: cell.x, y: cell.y + 1 }]) {
+    t.ok(hits(spot.x, spot.y), 'standing there gets hit')
+    player.x = spot.x
+    player.y = spot.y
+    aid = estado.bossDodge(field)
+    t.is(aid.danger, true, 'and the aid warns about it')
+    t.ok(aid.safe, 'a safe cell is offered')
+    t.ok(!boss.occupies(aid.safe.x, aid.safe.y), 'outside the body of the Colossus')
+    t.is(hits(aid.safe.x, aid.safe.y), false, 'following the arrow dodges the strike')
+    const steps = Math.max(Math.abs(aid.safe.x - spot.x), Math.abs(aid.safe.y - spot.y))
+    let closer = false
+    for (let dy = -steps + 1; dy < steps; dy++) {
+      for (let dx = -steps + 1; dx < steps; dx++) {
+        const x = spot.x + dx
+        const y = spot.y + dy
+        if (x < 0 || y < 0 || x >= 120 || y >= 36 || boss.occupies(x, y)) continue
+        if (!hits(x, y)) closer = true
+      }
+    }
+    t.is(closer, false, 'no safe cell is fewer steps away')
+  }
 
   field.time = 1 + total + 5
   t.is(estado.bossDodge(field).leftMs, 0, 'the countdown never goes below zero')

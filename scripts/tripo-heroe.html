@@ -2846,11 +2846,14 @@
       const markRed = new THREE.Color(0x8a1608)
       const fillRed = new THREE.Color(0xff3b1a)
       const markOrange = new THREE.Color(0xff9a20)
+      // Cuantas celdas entran en el piso: el recorrido entero de un golpe radial
+      // llega a unas 350 celdas.
+      const MARKS = 512
       function markMesh(opacity) {
         const mesh = new THREE.InstancedMesh(
           new THREE.PlaneGeometry(CX * 0.94, CZ * 0.94).rotateX(-Math.PI / 2),
           new THREE.MeshBasicMaterial({ transparent: true, opacity, depthWrite: false }),
-          256
+          MARKS
         )
         mesh.frustumCulled = false
         mesh.renderOrder = 2
@@ -2873,14 +2876,18 @@
         let i = 0
         let n = 0
         const put = (cell, color) => {
-          if (i >= 256) return
+          if (i >= MARKS) return
           const p = world.built.toWorld(cell.x, cell.y)
           marks.setMatrixAt(i, markMatrix.makeTranslation(p.x, 0.07, p.z))
           marks.setColorAt(i++, color)
         }
-        for (const cell of cells.telegraphs || []) {
-          put(cell, markRed)
-          if (n >= 256 || charge <= 0) continue
+        for (const cell of cells.telegraphs || []) put(cell, markRed)
+        // El relleno cubre todo lo que recorre el golpe (bossDodge path), no solo
+        // las marcas, que son una cada dos celdas: asi el piso coincide con lo
+        // que pega.
+        const fill = (cells.dodge && cells.dodge.path) || cells.telegraphs || []
+        for (const cell of fill) {
+          if (n >= MARKS || charge <= 0) break
           const p = world.built.toWorld(cell.x, cell.y)
           const k = 0.15 + 0.85 * charge
           markMatrix.compose(markAt.set(p.x, 0.08, p.z), markTurn, markScale.set(k, 1, k))
