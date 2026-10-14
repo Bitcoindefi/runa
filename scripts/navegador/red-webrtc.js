@@ -80,6 +80,16 @@ function shardVerdict({ selfId, fresh, others = [], cap = PUBLIC_CAP }) {
 const DEFAULT_ROOM = publicCode(1)
 
 /**
+ * Jugadores por sala privada, contando a uno. La malla completa de Trystero
+ * crece al cuadrado: pasado esto cada uno rechaza los enlaces nuevos, y el que
+ * llega a una sala llena queda afuera con el aviso "room full".
+ */
+const PRIVATE_CAP = 12
+
+/** Lo que dice `error` cuando la sala privada ya no tiene lugar. */
+const ROOM_FULL = 'room full'
+
+/**
  * El silencio que hace falta para dar por ido a alguien. En la terminal son
  * tres segundos; una pagina puede quedarse congelada mas que eso mientras arma
  * un mapa, o un telefono cambiar de app un momento. Una pestana cerrada no
@@ -123,6 +133,8 @@ class WebRtcPresence extends net.Presence {
     this.links = new Map()
     /** Lo ultimo que salio mal al entrar o al conectar, para mostrarlo. */
     this.error = ''
+    /** Llego a una sala privada llena: no enlaza a nadie mas. */
+    this.full = false
   }
 
   start() {
@@ -179,6 +191,11 @@ class WebRtcPresence extends net.Presence {
   /** Un peer de Trystero como la conexion que espera Presence.onConnection. */
   link(peerId, line) {
     this.unlink(peerId, false)
+    if (this.full) return false
+    if (!shardOf(this.room) && this.links.size >= PRIVATE_CAP - 1) {
+      this.refuse()
+      return false
+    }
     const handlers = {}
     const conn = {
       destroyed: false,
@@ -204,6 +221,21 @@ class WebRtcPresence extends net.Presence {
     }
     this.links.set(peerId, conn)
     this.onConnection(conn)
+    return true
+  }
+
+  /**
+   * Un enlace de mas en una sala privada. Los que ya estaban solo lo rechazan.
+   * El que llega lo nota porque ninguno de los que enlazo le hablo todavia
+   * (ellos tambien lo rechazaron): ese es el que sobra, suelta a todos y avisa
+   * una sola vez que la sala esta llena.
+   */
+  refuse() {
+    if (this.peers.size > 0 || this.full) return
+    this.full = true
+    this.error = ROOM_FULL
+    for (const peerId of [...this.links.keys()]) this.unlink(peerId, false)
+    this.fire('full', { room: this.room, cap: PRIVATE_CAP })
   }
 
   /**
@@ -241,6 +273,8 @@ module.exports = {
   PUBLIC_SHARDS,
   DISCOVER_MS,
   SETTLE_MS,
+  PRIVATE_CAP,
+  ROOM_FULL,
   publicCode,
   shardOf,
   reservedCode,

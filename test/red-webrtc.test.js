@@ -312,3 +312,62 @@ test('nueve recien llegados en RUNA1 terminan en 8 y 1', (t) => {
   t.is(moved[0].others().length + 1, 1, 'RUNA2 con 1')
   t.is(moved[0].room, 'RUNA2')
 })
+
+test('una sala privada no pasa de 12: el que sobra queda afuera con room full', (t) => {
+  const net = fakeTrystero()
+  const all = []
+  t.teardown(() => {
+    for (const p of all) p.stop()
+  })
+  for (let i = 0; i < red.PRIVATE_CAP; i++) {
+    const p = presence(net, 'P' + i, 'AMIGOS')
+    all.push(p)
+    p.start()
+  }
+  for (const p of all) p.beat()
+  t.ok(
+    all.every((p) => p.others().length === red.PRIVATE_CAP - 1),
+    'los doce se ven entre todos'
+  )
+
+  const late = presence(net, 'Tarde', 'AMIGOS')
+  const full = []
+  late.on('full', (info) => full.push(info))
+  t.ok(late.start(), 'la sala se abre igual')
+  for (const p of all.concat(late)) p.beat()
+  t.is(late.error, red.ROOM_FULL)
+  t.is(late.error, 'room full')
+  t.ok(late.full)
+  t.is(full.length, 1, 'avisa una sola vez')
+  t.is(late.others().length, 0, 'no ve a nadie')
+  t.is(late.links.size, 0, 'y no queda enlazado a nadie')
+  t.ok(
+    all.every((p) => p.links.size === red.PRIVATE_CAP - 1 && !p.error),
+    'los de adentro siguen igual y sin error'
+  )
+  all.push(late)
+})
+
+test('la sala llena se anota en el registro del juego', (t) => {
+  const game = new Runa({ presence: false, name: 'Tarde' })
+  const fake = new (require('bare-events'))()
+  game.attachPresence(fake)
+  fake.emit('full', { room: 'AMIGOS', cap: 12 })
+  game.onTick()
+  t.ok(game.log.some((line) => String(line).includes('la sala esta llena')))
+})
+
+test('el tope de 12 no toca las salas publicas', (t) => {
+  const net = fakeTrystero()
+  const all = []
+  t.teardown(() => {
+    for (const p of all) p.stop()
+  })
+  for (let i = 0; i < red.PRIVATE_CAP + 1; i++) {
+    const p = presence(net, 'P' + i, red.publicCode(7))
+    all.push(p)
+    p.start()
+  }
+  for (const p of all) p.beat()
+  t.ok(all.every((p) => !p.full && p.others().length === red.PRIVATE_CAP))
+})
