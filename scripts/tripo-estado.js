@@ -144,15 +144,31 @@ function arenaOf(runa) {
   }
 }
 
-// Los otros jugadores de la sala parados en el mismo mapa, como los dibuja la
-// terminal. El rival de un duelo no va aca: va en arena, que es la que manda.
+// Los otros jugadores de la sala parados en el mismo mapa: en la ciudad, como
+// los dibuja la terminal; afuera, los de la misma region (la pradera, un piso
+// de la cripta, un campamento, las ruinas). `map` es el id del mapa 3D (el de
+// regionOf) y `pose` la pose opcional para dibujarlos suave (net.cleanPose).
+// Solo se desafia en la ciudad (challenge). El rival de un duelo no va aca: va
+// en arena, que es la que manda.
 function playersOf(runa, arena) {
-  if (runa.title || runa.field) return []
+  if (runa.title) return []
   const rival = arena ? arena.rival.id : null
-  return runa
-    .others(runa.walker.mapId)
+  const map = regionOf(runa)
+  const list = runa.field
+    ? runa.others().filter((peer) => regionOfMapId(peer.mapId) === map)
+    : runa.others(runa.walker.mapId)
+  return list
     .filter((peer) => peer.id && peer.id !== rival)
-    .map(({ id, name, x, y, level }) => ({ id, name, x, y, level }))
+    .map(({ id, name, x, y, level, pose }) => ({
+      id,
+      name,
+      x,
+      y,
+      level,
+      map,
+      challenge: !runa.field,
+      pose: pose && typeof pose === 'object' ? { ...pose } : {}
+    }))
 }
 
 function inviteOf(runa) {

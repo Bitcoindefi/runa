@@ -182,7 +182,7 @@ class WebRtcPresence extends net.Presence {
     }
 
     this.online = true
-    this.beatTimer = setInterval(() => this.beat(), net.BEAT_MS)
+    this.beatTimer = setInterval(() => this.pulse(), net.PULSE_MS)
     this.sweepTimer = setInterval(() => this.reap(), net.SWEEP_MS)
     return true
   }

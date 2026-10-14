@@ -277,6 +277,24 @@ function start(opts = {}) {
 
     offline: leaveRoom,
 
+    /**
+     * La pose del heroe en la vista 3D, para que los demas lo dibujen suave
+     * (lib/net.js pose): { map, px, pz, yaw, g }. La pagina la manda cada
+     * cuadro y solo vale si `map` es el mapa donde el juego dice que esta el
+     * heroe (tripo-estado.js regionOf); si no, o con null, se borra y los
+     * demas lo ven por su celda.
+     *
+     * @param {{map: string, px: number, pz: number, yaw: number, g: number}|null} value
+     * @returns {boolean} si quedo puesta
+     */
+    pose(value) {
+      const current = joined()
+      if (!current) return false
+      const ok = !!value && !runa.title && value.map === estado.regionOf(runa)
+      current.presence.pose(ok ? value : null)
+      return ok
+    },
+
     // Ya es de la sala publica: no se muda aunque despues llegue mas gente.
     settle() {
       const current = joined()

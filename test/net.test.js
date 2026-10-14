@@ -613,3 +613,122 @@ test('mas de tres desafios por minuto del mismo peer se rechazan solos', (t) => 
   ana.onTick()
   t.ok(ana.duelInvite, 'pasado el minuto vuelve a llegar')
 })
+
+test('pose: una linea vieja sin pose se sigue leyendo y la pose es opcional', (t) => {
+  const ana = new Presence({ name: 'ana', offline: true })
+  // Una linea como las de antes: sin t, s, px, pz, yaw ni g.
+  ana.receive(JSON.stringify({ id: 'viejo1', name: 'viejo', mapId: 'city', x: 4, y: 5 }))
+  const old = ana.others().find((peer) => peer.id === 'viejo1')
+  t.is(old.x, 4)
+  t.is(old.y, 5)
+  t.alike(old.pose, {}, 'sin pose, un objeto vacio')
+
+  // Pose a medias y basura: solo pasa lo que esta bien, acotado.
+  ana.receive(
+    JSON.stringify({
+      id: 'nuevo1',
+      name: 'nuevo',
+      mapId: 'field',
+      x: 1,
+      y: 2,
+      t: 12345.9,
+      s: -4,
+      px: 1e9,
+      pz: 3.14159,
+      yaw: Math.PI * 3,
+      g: 7
+    })
+  )
+  const pose = ana.others().find((peer) => peer.id === 'nuevo1').pose
+  t.is(pose.t, 12345)
+  t.is(pose.s, 0, 'un numero de linea negativo queda en cero')
+  t.is(pose.px, 9999, 'la posicion queda acotada')
+  t.is(pose.pz, 3.14, 'con dos decimales')
+  t.ok(Math.abs(Math.abs(pose.yaw) - Math.PI) < 0.01, 'tres vueltas y media es media vuelta')
+  t.is(pose.g, 2, 'el paso va de 0 a 2')
+
+  ana.receive(
+    JSON.stringify({ id: 'raro1', name: 'raro', x: 0, y: 0, px: 'x', pz: 2, yaw: null, g: '1' })
+  )
+  t.alike(
+    ana.others().find((peer) => peer.id === 'raro1').pose,
+    {},
+    'una posicion sin las dos partes o un texto no pasan'
+  )
+  t.alike(net.cleanPose(null), {})
+})
+
+test('pose: viaja limpia y con su reloj y su numero de linea', (t) => {
+  const c = clock()
+  const ana = new Presence({ name: 'ana', offline: true, now: c.now })
+  const beto = new Presence({ name: 'beto', offline: true, now: c.now })
+  ana.update('field', 10, 20)
+  ana.pose({ px: 12.345, pz: -7.5, yaw: 1.2345, g: 1, t: 99, s: 99 })
+  t.absent('t' in ana.self && ana.self.t === 99, 'el reloj no lo pone la pagina')
+  connect(ana, beto)
+  const first = beto.others()[0].pose
+  t.is(first.px, 12.35)
+  t.is(first.pz, -7.5)
+  t.is(first.yaw, 1.235)
+  t.is(first.g, 1)
+  t.is(first.t, c.at % 0x7fffffff)
+  c.at += 100
+  ana.beat()
+  const second = beto.others()[0].pose
+  t.ok(second.s > first.s, 'cada linea lleva un numero mayor')
+  t.is(second.t - first.t, 100)
+
+  ana.pose(null)
+  ana.beat()
+  const cleared = beto.others()[0].pose
+  t.absent('px' in cleared, 'sin pose, el otro vuelve a la celda')
+  t.ok(Number.isFinite(cleared.s), 'el numero de linea sigue')
+})
+
+test('pose: late 10 veces por segundo caminando y 2 quieto', (t) => {
+  const c = clock()
+  const ana = new Presence({ name: 'ana', offline: true, now: c.now })
+  const beto = new Presence({ name: 'beto', offline: true, now: c.now })
+  connect(ana, beto)
+  let lines = 0
+  const count = (from, ms) => {
+    lines = 0
+    const end = c.at + ms
+    while (c.at < end) {
+      c.at += net.PULSE_MS
+      if (from()) lines++
+    }
+    return lines
+  }
+  // Quieto: dos por segundo.
+  t.is(
+    count(() => ana.pulse(), 2000),
+    4
+  )
+  // Caminando: una pose nueva cada pulso, diez por segundo.
+  let x = 0
+  t.is(
+    count(() => {
+      x += 0.7
+      ana.pose({ px: x, pz: 0, yaw: 0, g: 2 })
+      return ana.pulse()
+    }, 1000),
+    10
+  )
+  // Parado otra vez (g = 0): sale la ultima posicion y despues dos por segundo.
+  ana.pose({ px: x, pz: 0, yaw: 0, g: 0 })
+  t.is(
+    count(() => ana.pulse(), 1000),
+    2
+  )
+  // Una terminal que camina por celdas tambien late rapido.
+  let y = 0
+  t.is(
+    count(() => {
+      ana.update('city', 3, ++y)
+      return ana.pulse()
+    }, 500),
+    5
+  )
+  t.ok(net.RATE_LINES >= 1000 / net.POSE_FAST_MS, 'caminar entra en el cupo de lineas')
+})

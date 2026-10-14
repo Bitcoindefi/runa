@@ -1308,6 +1308,7 @@
       import { createMobile, backStep, typing } from './movil.js'
       import { readout, towardFoe } from './combate.js'
       import { createAtlas } from './atlas.js'
+      import { createTrack, placeOf as peerPlace, nearest, RIGS, CLIPS } from './jugadores.js'
 
       // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
       //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
@@ -3454,12 +3455,21 @@
       }
 
       // --- Los otros jugadores de la sala ------------------------------------
-      // En la ciudad cada jugador de la sala es una figura liviana con su nombre,
-      // la de los NPC (comparte geometria y material). En el Coliseo el rival es
-      // el heroe de Tripo clonado y tenido de rojo, con su barra de vida, y sale
-      // del duelo (st.arena, que ordena el host), no de la red: se ve lo que paso.
+      // Los de la sala en el mismo mapa (la ciudad, la pradera, un piso de la
+      // cripta, un campamento) se dibujan DELAY_MS atras entre las poses que
+      // llegan (jugadores.js): los RIGS mas cercanos con el heroe de Tripo
+      // animado y tenido de cian, el resto con la figura liviana de los NPC
+      // (comparte geometria y material). En el Coliseo el rival es el heroe
+      // tenido de rojo, con su barra de vida, y sale del duelo (st.arena, que
+      // ordena el host), no de la red: se ve lo que paso.
       const peers = new Map()
       const rivalTint = new THREE.Color(1, 0.5, 0.45)
+      const peerTint = new THREE.Color(0.45, 0.88, 1.15)
+      // Cuantos van con el heroe animado: menos en un telefono.
+      const peerRigs = touchPad ? RIGS.phone : RIGS.desktop
+      // A quienes vestir se decide cada tanto, no en cada cuadro.
+      let peerRankAt = 0
+      let peerRanked = new Set()
       // Cuanto se corre la camara hacia el rival durante un duelo.
       const duelView = new THREE.Vector3()
       const duelWant = new THREE.Vector3()
@@ -3521,13 +3531,23 @@
           clip: '',
           rig: null,
           materials: [],
-          // Con teclado, la etiqueta recuerda como desafiarlo.
-          tag: label(who.name + (duel || touchPad ? '' : ' [E]'), duel ? '#e07a6a' : '#6fd3e0'),
+          // Con teclado, la etiqueta recuerda como desafiarlo (solo en la ciudad).
+          tag: label(
+            who.name + (duel || touchPad || !who.challenge ? '' : ' [E]'),
+            duel ? '#e07a6a' : '#6fd3e0'
+          ),
           bar: duel ? hpSprite() : null,
           hp: null,
           swinging: 0,
           lunge: 0,
-          placed: false
+          placed: false,
+          // Las poses que llegan por la red y el ultimo salto ya aplicado.
+          track: duel ? null : createTrack(),
+          snaps: 0,
+          // Si lleva (o esta bajando) el heroe animado, y que pedido vale.
+          dressing: false,
+          dressToken: 0,
+          figure: null
         }
         holder.add(entry.body)
         entry.tag.position.y = duel ? 2.95 : 2.4
@@ -3538,17 +3558,30 @@
         }
         scene.add(root)
         peers.set(who.id, entry)
-        if (duel && avatarBody) dressRival(entry, AVATAR)
+        if (duel && avatarBody) dressRival(entry, AVATAR, rivalTint)
         return entry
       }
 
-      // El rival con el cuerpo del heroe de Tripo: el GLB ya esta en cache, asi
-      // que no baja nada nuevo. Materiales propios para que el del jugador no
-      // cambie de color; la geometria se comparte y no se libera.
-      function dressRival(entry, spec) {
+      // El heroe de Tripo con esqueleto (Idle, Walk, Run), si esta: el de los
+      // jugadores de la sala. null si solo hay el quieto.
+      function peerSpec() {
+        return (
+          AVATARS.find(
+            (spec) => spec.rigged && models.has(spec.file) && !avatarFailed.has(spec.file)
+          ) || null
+        )
+      }
+
+      // El rival (o un jugador cercano) con el cuerpo del heroe de Tripo: el GLB
+      // ya esta en cache, asi que no baja nada nuevo. Materiales propios para que
+      // el del jugador no cambie de color; la geometria se comparte y no se
+      // libera.
+      function dressRival(entry, spec, tint) {
+        entry.dressing = true
+        const token = ++entry.dressToken
         loadRig(spec.file)
           .then(({ object, clips }) => {
-            if (peers.get(entry.id) !== entry) return
+            if (peers.get(entry.id) !== entry || entry.dressToken !== token) return
             object.rotation.y = spec.yaw
             object.updateMatrixWorld(true)
             const box = new THREE.Box3().setFromObject(object)
@@ -3562,28 +3595,75 @@
             object.traverse((child) => {
               if (!child.isMesh) return
               child.castShadow = true
-              if (child.isSkinnedMesh) child.frustumCulled = false
+              // Con el recorte prendido: la esfera de un SkinnedMesh se mide en
+              // la pose del primer cuadro (unbound) y se agranda para el paso.
+              if (child.isSkinnedMesh) child.userData.unbound = true
               const own = [child.material].flat().map((material) => {
                 const copy = material.clone()
-                if (copy.color) copy.color.multiply(rivalTint)
+                if (copy.color) copy.color.multiply(tint)
                 entry.materials.push(copy)
                 return copy
               })
               child.material = Array.isArray(child.material) ? own : own[0]
             })
             entry.holder.remove(entry.body)
+            entry.figure = entry.body
             entry.body = object
             entry.rig = object
             entry.holder.add(object)
             if (spec.rigged) {
               entry.mixer = new THREE.AnimationMixer(object)
-              for (const name of ['Idle', 'Run']) {
+              for (const name of CLIPS) {
                 const clip = THREE.AnimationClip.findByName(clips, name)
                 if (clip) entry.clips[name] = entry.mixer.clipAction(clip)
               }
+              entry.clip = ''
             }
           })
-          .catch((error) => console.warn('el rival queda con la figura simple', error))
+          .catch((error) => {
+            if (entry.dressToken === token) entry.dressing = false
+            console.warn('el rival queda con la figura simple', error)
+          })
+      }
+
+      // La esfera de recorte de cada SkinnedMesh del rig, medida una vez ya
+      // animado y con margen para los brazos y las piernas.
+      function boundRig(entry) {
+        if (!entry.rig) return
+        entry.rig.traverse((child) => {
+          if (!child.isSkinnedMesh || !child.userData.unbound) return
+          child.userData.unbound = false
+          child.computeBoundingSphere()
+          if (child.boundingSphere) child.boundingSphere.radius *= 1.3
+        })
+      }
+
+      // Suelta lo propio del rig (materiales, esqueleto, animaciones).
+      function freeRig(entry) {
+        for (const material of entry.materials) material.dispose()
+        entry.materials.length = 0
+        if (entry.mixer) entry.mixer.stopAllAction()
+        if (entry.rig) {
+          entry.rig.traverse((child) => {
+            if (child.isSkinnedMesh && child.skeleton) child.skeleton.dispose()
+          })
+        }
+        entry.mixer = null
+        entry.clips = {}
+        entry.clip = ''
+        entry.rig = null
+      }
+
+      // Vuelve a la figura liviana: el jugador se alejo y otro ocupa su lugar.
+      function undressPeer(entry) {
+        entry.dressing = false
+        entry.dressToken++
+        if (!entry.rig) return
+        entry.holder.remove(entry.body)
+        freeRig(entry)
+        entry.body = entry.figure || figure('cyan')
+        entry.figure = null
+        entry.holder.add(entry.body)
       }
 
       function dropPeer(entry) {
@@ -3591,19 +3671,72 @@
         entry.tag.material.map.dispose()
         entry.tag.material.dispose()
         if (entry.bar) entry.bar.dispose()
-        for (const material of entry.materials) material.dispose()
-        if (entry.mixer) entry.mixer.stopAllAction()
-        if (entry.rig) {
-          entry.rig.traverse((child) => {
-            if (child.isSkinnedMesh && child.skeleton) child.skeleton.dispose()
-          })
-        }
+        entry.dressing = false
+        entry.dressToken++
+        freeRig(entry)
         peers.delete(entry.id)
+      }
+
+      // El clip del rig con un fundido corto. Sin Run (un GLB viejo) corre con
+      // Walk acelerado, como el heroe.
+      function peerClip(entry, name, scale) {
+        let clip = name
+        if (!entry.clips[clip] && clip === 'Run') {
+          clip = 'Walk'
+          scale = Math.min(3, scale * 2.4)
+        }
+        if (!entry.clips[clip]) clip = 'Idle'
+        const next = entry.clips[clip]
+        if (!next) return
+        if (entry.clip !== clip) {
+          next.reset().fadeIn(0.2).play()
+          if (entry.clips[entry.clip]) entry.clips[entry.clip].fadeOut(0.2)
+          entry.clip = clip
+          next.timeScale = scale
+        } else next.timeScale += (scale - next.timeScale) * 0.2
+      }
+
+      // Un jugador de la sala fuera de un duelo: va a donde dicen sus poses,
+      // DELAY_MS atras (jugadores.js), mira hacia donde mira el y anda con su
+      // paso. Un salto de mas de SNAP_GAP lo aparece ahi.
+      function walkPeer(entry, who, dt) {
+        const now = performance.now()
+        const cell = world.built.toWorld(who.x, who.y)
+        const pose = who.pose || {}
+        const spot = peerPlace(cell, pose)
+        entry.track.push(
+          {
+            x: spot.x,
+            z: spot.z,
+            yaw: spot.exact ? pose.yaw : undefined,
+            g: pose.g,
+            t: pose.t,
+            s: pose.s
+          },
+          now
+        )
+        const at = entry.track.at(now)
+        if (!at) return
+        const pos = entry.root.position
+        const jumped = at.snaps !== entry.snaps
+        entry.snaps = at.snaps
+        pos.set(at.x, 0, at.z)
+        if (!entry.placed || jumped) entry.root.rotation.y = at.yaw
+        else entry.root.rotation.y += wrap(at.yaw - entry.root.rotation.y) * Math.min(1, dt * 12)
+        entry.placed = true
+        if (!entry.mixer) return
+        const name = CLIPS[at.g]
+        const gait = name === 'Run' ? GAITS.run : GAITS.walk
+        const scale = at.g ? Math.min(gait.most, Math.max(0.8, at.speed / gait.pace)) : 1
+        peerClip(entry, name, scale)
+        entry.mixer.update(dt)
+        boundRig(entry)
       }
 
       // Va hacia su celda al paso de correr, mira hacia donde va (en el duelo,
       // al heroe) y en el duelo cuenta los golpes que recibe y los tajos que da.
       function movePeer(entry, who, dt) {
+        if (!entry.duel) return walkPeer(entry, who, dt)
         const at = world.built.toWorld(who.x, who.y)
         const pos = entry.root.position
         const gap = Math.hypot(at.x - pos.x, at.z - pos.z)
@@ -3632,8 +3765,8 @@
             entry.clip = name
           }
           entry.mixer.update(dt)
+          boundRig(entry)
         }
-        if (!entry.duel) return
         entry.bar.set(who.maxHp > 0 ? Math.max(0, who.hp) / who.maxHp : 0)
         if (entry.hp !== null && who.hp < entry.hp) {
           floater('-' + (entry.hp - who.hp), '#ffd27a', pos.clone().setY(3.4))
@@ -3646,14 +3779,58 @@
         entry.holder.position.z = Math.sin(entry.lunge * Math.PI) * 0.4
       }
 
+      // Los RIGS jugadores mas cerca del heroe llevan el heroe animado y el
+      // resto la figura; se decide dos veces por segundo.
+      function dressPeers() {
+        const now = performance.now()
+        if (now - peerRankAt < 500) return
+        peerRankAt = now
+        const spec = peerSpec()
+        const near = []
+        for (const entry of peers.values()) {
+          if (entry.duel) continue
+          const d = entry.root.position.distanceTo(hero.root.position)
+          near.push({ id: entry.id, d })
+        }
+        peerRanked = spec ? nearest(near, peerRigs) : new Set()
+        for (const entry of peers.values()) {
+          if (entry.duel) continue
+          const want = peerRanked.has(entry.id)
+          if (want && !entry.dressing) dressRival(entry, spec, peerTint)
+          else if (!want && entry.dressing) undressPeer(entry)
+        }
+      }
+
+      // La pose del heroe para los de la sala (tripo-juego.js pose): donde esta
+      // en metros del mapa 3D, hacia donde mira y su paso. Solo en el mapa que
+      // el juego dice; si no, se borra y lo ven por su celda.
+      function sendPose(st) {
+        if (!session || typeof session.pose !== 'function') return
+        if (!world || !st || !st.world || world.map !== st.world.map || paused) {
+          session.pose(null)
+          return
+        }
+        const going = performance.now() - lastStep < 170
+        const pos = hero.root.position
+        session.pose({
+          map: world.map,
+          px: pos.x,
+          pz: pos.z,
+          yaw: hero.root.rotation.y,
+          g: going ? (velocity > 3.5 ? 2 : 1) : 0
+        })
+      }
+
       // Cada cuadro: quien de la sala esta en este mapa, o el rival del duelo.
       function othersFrame(dt, st) {
         const arena = st && st.arena
         const want = new Map()
         if (world && arena && world.map === 'coliseum') {
           want.set(arena.rival.id, { ...arena.rival, duel: true })
-        } else if (world && st && !arena && st.location && world.map === st.location.mapId) {
-          for (const player of st.players || []) want.set(player.id, { ...player, duel: false })
+        } else if (world && st && !arena && st.world && world.map === st.world.map) {
+          for (const player of st.players || []) {
+            if (player.map === world.map) want.set(player.id, { ...player, duel: false })
+          }
         }
         for (const entry of [...peers.values()]) {
           const who = want.get(entry.id)
@@ -3661,6 +3838,7 @@
         }
         for (const who of want.values())
           movePeer(peers.get(who.id) || addPeer(who, who.duel), who, dt)
+        dressPeers()
 
         const rival = arena && peers.get(arena.rival.id)
         if (!rival) {
@@ -4816,6 +4994,7 @@
         bossMarks(st.boss, time)
         fightFrame(dt, time, st)
         othersFrame(dt, st)
+        sendPose(st)
         tickBits(dt)
         if (wantNet && !st.title && !st.naming) {
           const want = wantNet
@@ -7276,7 +7455,10 @@
           name: entry.name,
           duel: entry.duel,
           rig: !!entry.rig,
+          clip: entry.clip,
           hp: entry.hp,
+          poses: entry.track ? entry.track.size : 0,
+          yaw: Number(entry.root.rotation.y.toFixed(3)),
           at: entry.root.position.toArray().map((n) => Number(n.toFixed(2)))
         }))
       })

@@ -54,6 +54,9 @@ const MODULES = {
   // El minimapa y el mapa de la region: .mjs para que las pruebas lo carguen
   // en Bare.
   'atlas.js': path.join(__dirname, 'tripo-atlas.mjs'),
+  // Los otros jugadores entre una pose y la siguiente: .mjs para que las
+  // pruebas lo carguen en Bare.
+  'jugadores.js': path.join(__dirname, 'tripo-jugadores.mjs'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
