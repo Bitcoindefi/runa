@@ -37,6 +37,13 @@ const MODULES = {
   'titulo.js': path.join(__dirname, 'tripo-titulo.js'),
   'efectos.js': path.join(__dirname, 'tripo-efectos.js'),
   'pradera.js': path.join(__dirname, 'tripo-pradera.js'),
+  // Los pisos de la cripta y los campamentos como datos, sin three.js: .mjs para
+  // que las pruebas lo carguen en Bare.
+  'lugares.js': path.join(__dirname, 'tripo-lugares.mjs'),
+  // La cripta en 3D: un lugar de adentro de la pradera.
+  'cripta.js': path.join(__dirname, 'tripo-cripta.js'),
+  // Los campamentos barbaros en 3D: otro lugar de adentro de la pradera.
+  'campamento.js': path.join(__dirname, 'tripo-campamento.js'),
   'inventario.js': path.join(__dirname, 'tripo-inventario.js'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }

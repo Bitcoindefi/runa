@@ -35,8 +35,29 @@
 // mapa; los lugares (portones, cabana, cartel, cripta, portal, empalizadas) son
 // mallas propias juntas en pocas geometrias, y los monstruos van con
 // InstancedMesh por tipo: cada tipo cuesta una o dos llamadas de dibujo.
+//
+// Los lugares de adentro (los pisos de la cripta, los campamentos barbaros) usan
+// el mismo combate y los mismos monstruos. Cada uno es una fabrica que se
+// registra con addPlace(factory) (o llega en ctx.places) y recibe PARTS, las
+// piezas de este modulo, asi no lo importa de vuelta. factory(PARTS) devuelve:
+//
+//   mode              el field.mode que dibuja: 'dungeon' o 'barbarian-camp'
+//   data(field, names, ctx)   los datos del mapa de ese Field (lugares.js
+//                     cryptData o campData, con build si no va por buildWorld)
+//   landmarks(world, ctx, field)  opcional, al mostrarlo: { group, update(time,
+//                     st, field), dispose() }; group va dentro de built.group
+//   hint(st, field, touch, L)     opcional: la ayuda fuera de la pelea
+//   leave(mapId)      opcional: la pagina deja de mostrarlo
+//
+// El id de su mapa sale de lugares.js placeId: crypt-<piso> o camp:<id>. Sin un
+// lugar registrado para ese modo, worldAt da null y el juego sigue en texto.
+// ctx.cc0(path) trae un modelo libre de assets/cc0 (cc0Library, abajo).
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { placeId, placeOfId } from './lugares.js'
+import { cryptPlace } from './cripta.js'
+import { campPlace } from './campamento.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { document, performance } = globalThis
@@ -982,42 +1003,33 @@ function colossusPortal(kit, pulse, layout, facing) {
   }
 }
 
-// Una empalizada barbara como su arte: estacas en el contorno, dos torres de
-// guardia al norte, el porton cerrado al sur, las carpas de pieles y de botin,
-// el fogon con un totem y un estandarte con el color del campamento.
+// Las piezas de un campamento barbaro. Las usa la fachada de la pradera (abajo)
+// y el campamento de adentro (campamento.js, por PARTS.camp): una estaca, una
+// hilera de estacas, el porton cerrado, una torre de guardia, una carpa de
+// pieles, el fogon, el totem con calavera, un cerco bajo y el estandarte.
 const CAMP_COLORS = {
   'colmillo-rojo': 0xb02a20,
   'hachas-negras': 0x2a2624,
   'cuervos-ceniza': 0x7a7a80
 }
-function barbarianCamp(kit, flames, camp) {
-  const cell = (col, row) => [wx(camp.left + col), wz(camp.top + row)]
-  const stake = (x, z, k) => {
-    const h = 2.1 + k * 0.5
-    kit.cyl(0.13, 0.15, h, 6, x, h / 2, z, k > 0.5 ? WOOD : 0x5d4026)
-    kit.cone(0.14, 0.32, 6, x, h + 0.16, z, 0x8a6a42)
+function campStake(kit, x, z, k) {
+  const h = 2.1 + k * 0.5
+  kit.cyl(0.13, 0.15, h, 6, x, h / 2, z, k > 0.5 ? WOOD : 0x5d4026)
+  kit.cone(0.14, 0.32, 6, x, h + 0.16, z, 0x8a6a42)
+}
+function stakeLine(kit, a, b) {
+  const [ax, az] = a
+  const [bx, bz] = b
+  const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 0.36))
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    const x = ax + (bx - ax) * t
+    const z = az + (bz - az) * t
+    campStake(kit, x, z, hash(Math.round(x * 10), Math.round(z * 10)))
   }
-  const line = (a, b) => {
-    const [ax, az] = a
-    const [bx, bz] = b
-    const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 0.36))
-    for (let i = 0; i <= n; i++) {
-      const t = i / n
-      const x = ax + (bx - ax) * t
-      const z = az + (bz - az) * t
-      stake(x, z, hash(Math.round(x * 10), Math.round(z * 10)))
-    }
-  }
-  // El contorno: arriba (fila 2), los costados (columnas 2 y 32) y abajo (fila
-  // 8), con el porton entre las columnas 12 y 20.
-  line(cell(3, 2), cell(30, 2))
-  line(cell(2.5, 2.4), cell(2.5, 7.6))
-  line(cell(31.5, 2.4), cell(31.5, 7.6))
-  line(cell(3, 8), cell(12.3, 8))
-  line(cell(19.7, 8), cell(31, 8))
-  const color = CAMP_COLORS[camp.id] || 0x8a3a2a
-  // El porton: dos postes altos con calaveras y las hojas cerradas.
-  const [gx, gz] = cell(16, 8)
+}
+// El porton: dos postes altos con calaveras y las hojas cerradas.
+function campGate(kit, gx, gz) {
   for (const dx of [-1.85, 1.85]) {
     kit.box(0.34, 3.4, 0.34, gx + dx, 1.7, gz, WOOD_DARK)
     kit.ball(0.17, gx + dx, 3.55, gz + 0.05, BONE, { detail: 0 })
@@ -1025,38 +1037,94 @@ function barbarianCamp(kit, flames, camp) {
   kit.box(3.4, 2.2, 0.16, gx, 1.15, gz, WOOD)
   for (const y of [0.55, 1.75]) kit.box(3.4, 0.16, 0.22, gx, y, gz + 0.05, WOOD_DARK)
   kit.box(4.1, 0.3, 0.3, gx, 3.1, gz, WOOD_DARK)
-  // Torres de guardia sobre el lado norte.
-  for (const col of [7.5, 22.5]) {
-    const [tx, tz] = cell(col, 1.2)
-    for (const [dx, dz] of [
-      [-0.55, -0.45],
-      [0.55, -0.45],
-      [-0.55, 0.45],
-      [0.55, 0.45]
-    ]) {
-      kit.box(0.14, 3.6, 0.14, tx + dx, 1.8, tz + dz, WOOD_DARK)
-    }
-    kit.box(1.5, 0.14, 1.3, tx, 3.5, tz, WOOD)
-    kit.box(1.5, 0.5, 0.08, tx, 3.8, tz + 0.62, WOOD)
-    kit.cone(1.15, 1.2, 4, tx, 4.75, tz, 0x9a8250, { ry: Math.PI / 4 })
-    kit.box(0.6, 0.5, 0.06, tx, 3.2, tz + 0.7, color)
+}
+// Una torre de guardia de cuatro patas, con el frente (+z) del color del campamento.
+function watchtower(kit, tx, tz, color) {
+  for (const [dx, dz] of [
+    [-0.55, -0.45],
+    [0.55, -0.45],
+    [-0.55, 0.45],
+    [0.55, 0.45]
+  ]) {
+    kit.box(0.14, 3.6, 0.14, tx + dx, 1.8, tz + dz, WOOD_DARK)
   }
+  kit.box(1.5, 0.14, 1.3, tx, 3.5, tz, WOOD)
+  kit.box(1.5, 0.5, 0.08, tx, 3.8, tz + 0.62, WOOD)
+  kit.cone(1.15, 1.2, 4, tx, 4.75, tz, 0x9a8250, { ry: Math.PI / 4 })
+  kit.box(0.6, 0.5, 0.06, tx, 3.2, tz + 0.7, color)
+}
+// Una carpa de pieles de dos aguas con la puerta al frente (+z).
+function hideTent(kit, x, z, hex) {
+  const shape = new THREE.Shape()
+  shape.moveTo(-1.3, 0)
+  shape.lineTo(1.3, 0)
+  shape.lineTo(0, 1.9)
+  shape.lineTo(-1.3, 0)
+  kit.add(new THREE.ExtrudeGeometry(shape, { depth: 1.8, bevelEnabled: false }), hex, x, 0, z - 0.9)
+  kit.box(0.6, 1.0, 0.04, x, 0.5, z + 0.92, 0x2a1a10)
+}
+// El fogon: piedras en ronda, dos lenos cruzados y la llama (en `flames`).
+function firePit(kit, flames, fx, fz) {
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    kit.ball(0.14, fx + Math.cos(a) * 0.5, 0.08, fz + Math.sin(a) * 0.5, 0x6a6660, { detail: 0 })
+  }
+  kit.box(0.7, 0.1, 0.12, fx, 0.1, fz, WOOD_DARK, { ry: 0.6 })
+  kit.box(0.7, 0.1, 0.12, fx, 0.12, fz, WOOD_DARK, { ry: -0.6 })
+  flames.push([fx, 0.12, fz, 0.9, null])
+}
+// El totem: un palo con calavera y dos cuernos.
+function campTotem(kit, px, pz) {
+  kit.cyl(0.14, 0.17, 2.6, 6, px, 1.3, pz, 0x7a5a3a)
+  kit.ball(0.2, px, 2.7, pz + 0.05, BONE, { detail: 1 })
+  kit.box(0.9, 0.12, 0.12, px, 2.3, pz, 0x7a5a3a)
+  kit.cone(0.08, 0.35, 4, px - 0.45, 2.45, pz, BONE, { rz: 0.5 })
+  kit.cone(0.08, 0.35, 4, px + 0.45, 2.45, pz, BONE, { rz: -0.5 })
+}
+// Un cerco bajo de dos tablas de ax a bx (metros) sobre la linea az.
+function lowFence(kit, ax, bx, az) {
+  kit.box(bx - ax, 0.12, 0.08, (ax + bx) / 2, 0.75, az, WOOD)
+  kit.box(bx - ax, 0.12, 0.08, (ax + bx) / 2, 0.35, az, WOOD)
+  for (let x = ax; x <= bx + 0.01; x += 0.9) kit.box(0.1, 0.95, 0.1, x, 0.47, az, WOOD_DARK)
+}
+// El estandarte: un mastil con calavera y el pano del color del campamento.
+function campBanner(kit, bx, bz, color) {
+  kit.box(0.1, 4.2, 0.1, bx, 2.1, bz, WOOD_DARK)
+  kit.box(0.05, 1.3, 0.9, bx + 0.05, 3.4, bz + 0.48, color)
+  kit.ball(0.14, bx, 4.3, bz, BONE, { detail: 0 })
+}
+const CAMP_PIECES = {
+  stake: campStake,
+  stakeLine,
+  gate: campGate,
+  watchtower,
+  hideTent,
+  firePit,
+  totem: campTotem,
+  lowFence,
+  banner: campBanner
+}
+
+// Una empalizada barbara como su arte: estacas en el contorno, dos torres de
+// guardia al norte, el porton cerrado al sur, las carpas de pieles y de botin,
+// el fogon con un totem y un estandarte con el color del campamento.
+function barbarianCamp(kit, flames, camp) {
+  const cell = (col, row) => [wx(camp.left + col), wz(camp.top + row)]
+  // El contorno: arriba (fila 2), los costados (columnas 2 y 32) y abajo (fila
+  // 8), con el porton entre las columnas 12 y 20.
+  stakeLine(kit, cell(3, 2), cell(30, 2))
+  stakeLine(kit, cell(2.5, 2.4), cell(2.5, 7.6))
+  stakeLine(kit, cell(31.5, 2.4), cell(31.5, 7.6))
+  stakeLine(kit, cell(3, 8), cell(12.3, 8))
+  stakeLine(kit, cell(19.7, 8), cell(31, 8))
+  const color = CAMP_COLORS[camp.id] || 0x8a3a2a
+  campGate(kit, ...cell(16, 8))
+  // Torres de guardia sobre el lado norte.
+  for (const col of [7.5, 22.5]) watchtower(kit, ...cell(col, 1.2), color)
   // Las carpas: de pieles al oeste y del botin al este, con oro y un cofre.
   const tent = (col, hex) => {
     const [x, z] = cell(col, 4.8)
-    const shape = new THREE.Shape()
-    shape.moveTo(-1.3, 0)
-    shape.lineTo(1.3, 0)
-    shape.lineTo(0, 1.9)
-    shape.lineTo(-1.3, 0)
-    kit.add(
-      new THREE.ExtrudeGeometry(shape, { depth: 1.8, bevelEnabled: false }),
-      hex,
-      x,
-      0,
-      z - 0.9
-    )
-    kit.box(0.6, 1.0, 0.04, x, 0.5, z + 0.92, 0x2a1a10)
+    hideTent(kit, x, z, hex)
     return [x, z]
   }
   tent(8.5, 0xa88a60)
@@ -1065,20 +1133,8 @@ function barbarianCamp(kit, flames, camp) {
   kit.box(0.74, 0.08, 0.49, lx + 1.6, 0.47, lz + 0.6, 0xd8b050)
   kit.ball(0.32, lx - 1.7, 0.12, lz + 0.7, 0xf2c94a, { detail: 1, sy: 0.4, glow: 0.25 })
   // El fogon con piedras y el totem con calavera.
-  const [fx, fz] = cell(14.5, 4.2)
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2
-    kit.ball(0.14, fx + Math.cos(a) * 0.5, 0.08, fz + Math.sin(a) * 0.5, 0x6a6660, { detail: 0 })
-  }
-  kit.box(0.7, 0.1, 0.12, fx, 0.1, fz, WOOD_DARK, { ry: 0.6 })
-  kit.box(0.7, 0.1, 0.12, fx, 0.12, fz, WOOD_DARK, { ry: -0.6 })
-  flames.push([fx, 0.12, fz, 0.9, null])
-  const [px, pz] = cell(17.5, 5.6)
-  kit.cyl(0.14, 0.17, 2.6, 6, px, 1.3, pz, 0x7a5a3a)
-  kit.ball(0.2, px, 2.7, pz + 0.05, BONE, { detail: 1 })
-  kit.box(0.9, 0.12, 0.12, px, 2.3, pz, 0x7a5a3a)
-  kit.cone(0.08, 0.35, 4, px - 0.45, 2.45, pz, BONE, { rz: 0.5 })
-  kit.cone(0.08, 0.35, 4, px + 0.45, 2.45, pz, BONE, { rz: -0.5 })
+  firePit(kit, flames, ...cell(14.5, 4.2))
+  campTotem(kit, ...cell(17.5, 5.6))
   // El cerco bajo que separa las carpas del patio del porton.
   for (const [a, b] of [
     [4, 15.4],
@@ -1086,15 +1142,10 @@ function barbarianCamp(kit, flames, camp) {
   ]) {
     const [ax, az] = cell(a, 6)
     const [bx] = cell(b, 6)
-    kit.box(bx - ax, 0.12, 0.08, (ax + bx) / 2, 0.75, az, WOOD)
-    kit.box(bx - ax, 0.12, 0.08, (ax + bx) / 2, 0.35, az, WOOD)
-    for (let x = ax; x <= bx + 0.01; x += 0.9) kit.box(0.1, 0.95, 0.1, x, 0.47, az, WOOD_DARK)
+    lowFence(kit, ax, bx, az)
   }
   // El estandarte junto al porton.
-  const [bx, bz] = cell(21.5, 8.6)
-  kit.box(0.1, 4.2, 0.1, bx, 2.1, bz, WOOD_DARK)
-  kit.box(0.05, 1.3, 0.9, bx + 0.05, 3.4, bz + 0.48, color)
-  kit.ball(0.14, bx, 4.3, bz, BONE, { detail: 0 })
+  campBanner(kit, ...cell(21.5, 8.6), color)
 }
 
 // Un remolino violeta para el centro del portal, en un canvas.
@@ -1858,6 +1909,52 @@ const CSS = `
     bottom: auto;
   }
 }
+/* Celular parado: la ayuda va donde la de la pagina (#hint), sobre el registro,
+   y la barra del monstruo arriba de todo como la del Coloso, con la ficha
+   corrida hacia abajo: ninguna de las dos tapa la ficha. */
+@media (pointer: coarse) and (orientation: portrait) {
+  #meadow-hint {
+    top: auto;
+    bottom: calc(var(--above-ctl) + var(--log-h) + var(--gap));
+    max-width: calc(100vw - var(--sal) - var(--sar) - 2 * var(--gut));
+    box-sizing: border-box;
+    white-space: normal;
+    text-align: center;
+  }
+  #foebar {
+    top: calc(var(--sat) + var(--gut));
+    left: calc(var(--sal) + var(--gut));
+    right: calc(var(--sar) + var(--gut));
+    width: auto;
+    transform: none;
+  }
+  body:has(#foebar:not([hidden])) #stats {
+    top: calc(var(--sat) + var(--gut) + 44px);
+  }
+}
+/* Celular acostado: la barra a la derecha de la ficha y la ayuda sobre los
+   botones, como la de la pagina. */
+@media (pointer: coarse) and (max-height: 520px) {
+  #foebar {
+    top: calc(var(--sat) + var(--gut));
+    left: calc(var(--sal) + var(--gut) + var(--stats-w) + var(--gap));
+    right: calc(var(--sar) + var(--gut));
+    width: auto;
+    transform: none;
+    font-size: 12px;
+  }
+  #meadow-hint {
+    top: auto;
+    left: auto;
+    transform: none;
+    right: calc(var(--sar) + var(--gut));
+    bottom: calc(var(--sab) + var(--gut) + var(--ctl-h) + var(--gap));
+    max-width: var(--ctl-w);
+    box-sizing: border-box;
+    white-space: normal;
+    font-size: 13px;
+  }
+}
 `
 
 function pageBits() {
@@ -1923,6 +2020,11 @@ const BASE = new THREE.Matrix4()
 const LOCAL = new THREE.Matrix4()
 const PART = new THREE.Matrix4()
 const TINT = new THREE.Color()
+
+// Los carteles de los monstruos: a TAG_FULL m de la camara o mas, de su tamano;
+// mas cerca, del mismo tamano en la pantalla. A menos de TAG_HIDE m no van.
+const TAG_FULL = 16
+const TAG_HIDE = 2.5
 
 class Crowd {
   constructor(ctx, world, L) {
@@ -1998,6 +2100,7 @@ class Crowd {
     const template = this.labels.get(key)
     const sprite = new THREE.Sprite(template.material)
     sprite.scale.copy(template.scale)
+    sprite.userData.size = template.scale.clone()
     sprite.renderOrder = 10
     return sprite
   }
@@ -2147,7 +2250,12 @@ class Crowd {
       const top = pose.y + state.model.height * pose.scale
       // En la pelea el nombre va en la barra de arriba: aca queda la de vida.
       state.tag.position.set(pose.x, top + 0.55, pose.z)
-      state.tag.visible = state.dying < 0 && !engaged && near < 16
+      // A menos de TAG_FULL m de la camara el cartel no crece en la pantalla
+      // (en tercera persona, en un pasillo de la cripta, quedaba enorme); y si
+      // el monstruo pasa pegado a la camara, se oculta.
+      const seen = state.tag.position.distanceTo(this.ctx.camera.position)
+      state.tag.scale.copy(state.tag.userData.size).multiplyScalar(Math.min(1, seen / TAG_FULL))
+      state.tag.visible = state.dying < 0 && !engaged && near < 16 && seen > TAG_HIDE
       if (state.bar) {
         state.bar.sprite.position.set(pose.x, top + 0.35, pose.z)
         state.bar.sprite.visible = state.dying < 0 || time < state.dying + 0.5
@@ -2353,11 +2461,14 @@ const FOE_SHOT = {
 }
 
 class Effects {
-  constructor(ctx, crowd, bits, L) {
+  // hint(st, touch), si viene, reemplaza la ayuda de la pradera (nearHint): la
+  // de un lugar de adentro.
+  constructor(ctx, crowd, bits, L, hint = null) {
     this.ctx = ctx
     this.crowd = crowd
     this.bits = bits
     this.L = L
+    this.hint = hint
     this.group = new THREE.Group()
     ctx.scene.add(this.group)
     this.last = null
@@ -2563,7 +2674,7 @@ class Effects {
     }
     foebar.hidden = true
     hint.className = ''
-    const near = this.nearHint(st, touch)
+    const near = this.hint ? this.hint(st, touch) : this.nearHint(st, touch)
     hint.textContent = near
     hint.hidden = !near
   }
@@ -2576,7 +2687,7 @@ class Effects {
     const key = (letter) => (touch ? '' : letter + ' · ')
     const meadow = this.crowd.world.data.meadow
     const at = st.location
-    if (!at) return ''
+    if (!at || !meadow) return ''
     const close = (p, rx, ry) => Math.abs(p.x - at.x) <= rx && Math.abs(p.y - at.y) <= ry
     for (const guide of meadow.guides) {
       if (close(guide, 2, 2)) return key('E') + L('talk to ', 'hablar con ') + guide.name
@@ -2859,7 +2970,188 @@ class Effects {
 }
 
 // ---------------------------------------------------------------------------
+// Los modelos libres (CC0) de assets/cc0: <pack>/<modelo>.glb, el mismo nombre
+// que deja pasar el visor (tripo-viewer.js CC0_FILE) y que copia build-web.js.
+// La paleta de los packs de Kenney la pide cada GLB por ruta relativa.
+
+const CC0_PATH = /^[a-z0-9-]+\/[\w-]+(?:\.gltf)?\.glb$/
+
+/**
+ * Trae modelos de assets/cc0 una vez por ruta. Devuelve cc0(path), una promesa
+ * de una copia lista para la escena (comparte geometria y materiales con las
+ * demas copias: van con userData.shared para que built.dispose no los libere), y
+ * cc0.parts(path), las mallas con su transformacion aplicada ([{ geometry,
+ * material }]) para un InstancedMesh; esas tambien son compartidas: no se
+ * liberan. cc0.dispose() libera todo lo traido.
+ */
+export function cc0Library(base = 'assets/cc0/') {
+  let loader = null
+  const scenes = new Map()
+  const parts = new Map()
+  function scene(path) {
+    if (!CC0_PATH.test(path)) return Promise.reject(new Error('modelo CC0 desconocido: ' + path))
+    if (!scenes.has(path)) {
+      if (!loader) loader = new GLTFLoader()
+      const request = loader.loadAsync(base + path).then((gltf) => gltf.scene)
+      request.catch(() => scenes.delete(path))
+      scenes.set(path, request)
+    }
+    return scenes.get(path)
+  }
+  const cc0 = (path) =>
+    scene(path).then((root) => {
+      const copy = root.clone(true)
+      copy.traverse((node) => {
+        if (node.isMesh) node.userData.shared = true
+      })
+      return copy
+    })
+  cc0.parts = (path) => {
+    if (!parts.has(path)) {
+      const request = scene(path).then((root) => {
+        root.updateMatrixWorld(true)
+        const found = []
+        root.traverse((node) => {
+          if (!node.isMesh) return
+          const geometry = node.geometry.clone().applyMatrix4(node.matrixWorld)
+          found.push({ geometry, material: node.material })
+        })
+        return found
+      })
+      request.catch(() => parts.delete(path))
+      parts.set(path, request)
+    }
+    return parts.get(path)
+  }
+  cc0.known = (path) => CC0_PATH.test(path)
+  cc0.dispose = () => {
+    const free = new Set()
+    for (const request of parts.values()) {
+      request.then((found) => found.forEach((p) => p.geometry.dispose())).catch(() => {})
+    }
+    for (const request of scenes.values()) {
+      request
+        .then((root) =>
+          root.traverse((node) => {
+            if (!node.isMesh) return
+            node.geometry.dispose()
+            for (const material of [node.material].flat()) free.add(material)
+          })
+        )
+        .then(() => {
+          for (const material of free) {
+            if (material.map) material.map.dispose()
+            material.dispose()
+          }
+          free.clear()
+        })
+        .catch(() => {})
+    }
+    scenes.clear()
+    parts.clear()
+  }
+  return cc0
+}
+
+// ---------------------------------------------------------------------------
+// Los lugares de adentro y las piezas que reciben.
+
+const PLACE_FACTORIES = []
+
+/** Registra un lugar de adentro (ver el comentario de arriba del modulo). */
+export function addPlace(factory) {
+  if (typeof factory === 'function' && !PLACE_FACTORIES.includes(factory)) {
+    PLACE_FACTORIES.push(factory)
+  }
+}
+
+// La cripta (cripta.js): los tres pisos de lib/dungeon.js.
+addPlace(cryptPlace)
+// Los campamentos barbaros (campamento.js): los tres de lib/barbarian-camp.js.
+addPlace(campPlace)
+
+// Los carteles de un lugar que en pantalla quedan encima del heroe y mas cerca
+// de la camara que el (el del porton del campamento, el de la escalera de la
+// cripta con el heroe al lado) se vuelven casi transparentes; al correrse
+// vuelven. Mide los rectangulos en la pantalla con el tamano de cada cartel.
+const ASIDE_SIGN = new THREE.Vector3()
+const ASIDE_HERO = new THREE.Vector3()
+function signsAside(signs, camera, hero, dt) {
+  if (!camera || !hero || !signs.length) return
+  const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
+  const aspect = camera.aspect || 1
+  ASIDE_HERO.set(hero.x, hero.y + 0.9, hero.z)
+  const heroFar = Math.max(0.5, camera.position.distanceTo(ASIDE_HERO))
+  ASIDE_HERO.project(camera)
+  const heroH = 1 / (heroFar * tan)
+  const heroW = 0.35 / (heroFar * tan * aspect)
+  const k = Math.min(1, dt * 8)
+  for (const sprite of signs) {
+    sprite.getWorldPosition(ASIDE_SIGN)
+    const far = Math.max(0.5, camera.position.distanceTo(ASIDE_SIGN))
+    let over = false
+    if (far < heroFar + 0.5) {
+      ASIDE_SIGN.project(camera)
+      const halfW = sprite.scale.x / (2 * far * tan * aspect)
+      const halfH = sprite.scale.y / (2 * far * tan)
+      over =
+        Math.abs(ASIDE_SIGN.x - ASIDE_HERO.x) < halfW + heroW &&
+        Math.abs(ASIDE_SIGN.y - ASIDE_HERO.y) < halfH + heroH
+    }
+    const material = sprite.material
+    material.opacity += ((over ? 0.12 : 1) - material.opacity) * k
+  }
+}
+
+// Lo que un lugar de adentro puede usar de la pradera, sin importarla. wx y wz
+// llevan una celda del juego a metros (dependen de CX y CZ, que fija
+// createMeadow).
+export const PARTS = {
+  signsAside,
+  THREE,
+  mergeGeometries,
+  Kit,
+  piece,
+  place,
+  flame,
+  flameMaterial,
+  glowMaterial,
+  textSprite,
+  asciiSign,
+  hash,
+  wx: (x) => wx(x),
+  wz: (y) => wz(y),
+  CAMP_COLORS,
+  camp: CAMP_PIECES,
+  WOOD,
+  WOOD_DARK,
+  IRON,
+  BONE,
+  FOE_MODELS,
+  modelOf,
+  Crowd,
+  Effects
+}
+
+export {
+  Kit,
+  piece,
+  place,
+  flame,
+  flameMaterial,
+  glowMaterial,
+  FOE_MODELS,
+  modelOf,
+  Crowd,
+  Effects,
+  CAMP_COLORS
+}
+
+// ---------------------------------------------------------------------------
 // La pradera.
+
+// Los modos de la pradera, para liveField.
+const FIELD_MODES = ['field']
 
 export function createMeadow(ctx) {
   CX = ctx.CX || CX
@@ -2878,8 +3170,45 @@ export function createMeadow(ctx) {
       crypt: L('the crypt', 'la cripta'),
       portal: L('Colossus portal', 'portal del Coloso'),
       solid: L('a palisade', 'una empalizada'),
-      crossroads: ['runa <---+---> nox', '         |', L('   portal|crypt', '   portal|cripta')]
+      crossroads: ['runa <---+---> nox', '         |', L('   portal|crypt', '   portal|cripta')],
+      // Para que lugares.js guarde sus datos por idioma.
+      key: L('en', 'es')
     }
+  }
+
+  // Lo que reciben los lugares de adentro: el ctx de la pagina y cc0, el de la
+  // pagina si lo trae o uno propio (se arma la primera vez que se usa).
+  let library = null
+  const own = (path) => (library || (library = cc0Library()))(path)
+  own.parts = (path) => (library || (library = cc0Library())).parts(path)
+  own.known = (path) => CC0_PATH.test(path)
+  const placeCtx = Object.create(ctx)
+  placeCtx.cc0 = ctx.cc0 || own
+
+  // Los lugares de adentro registrados, armados una vez con PARTS.
+  // Ya armados, por modo: worldAt pregunta en cada cuadro.
+  const made = new Map()
+  const byMode = new Map()
+  function placeFor(mode) {
+    if (!mode || mode === 'field') return null
+    if (byMode.has(mode)) return byMode.get(mode)
+    let found = null
+    for (const factory of [...PLACE_FACTORIES, ...(ctx.places || [])]) {
+      if (!made.has(factory)) {
+        const place = factory(PARTS) || null
+        // Los modos de su Field en una lista hecha una vez (liveField la pide en
+        // cada cuadro).
+        if (place) place.modes = [place.mode]
+        made.set(factory, place)
+      }
+      const place = made.get(factory)
+      if (place && place.mode === mode) {
+        found = place
+        break
+      }
+    }
+    byMode.set(mode, found)
+    return found
   }
 
   // Lo que el juego empaquetado ofrece de la pradera (juego.js meadow), o null
@@ -2926,15 +3255,23 @@ export function createMeadow(ctx) {
     })
   }
 
-  // El campo de la partida, si esta en la pradera.
-  function liveField() {
+  // El campo de la partida, si esta en uno de esos modos (la pradera, si no se
+  // dice otro).
+  function liveField(modes = FIELD_MODES) {
     const game = session()
     const field = game && game.runa ? game.runa.field : null
-    return field && field.mode === 'field' ? field : null
+    return field && modes.includes(field.mode) ? field : null
   }
 
   function provide(id) {
-    if (id !== 'field') return null
+    if (id !== 'field') {
+      // Un lugar de adentro: solo el que la partida tiene abierto ahora.
+      const where = placeOfId(id)
+      const place = where && placeFor(where.mode)
+      const field = place && liveField(place.modes)
+      if (!field || placeId(field) !== id) return null
+      return place.data(field, names(), placeCtx)
+    }
     const meadow = kit()
     const field = liveField()
     if (meadow && field) return dataFor(meadow, field)
@@ -2943,8 +3280,13 @@ export function createMeadow(ctx) {
   }
 
   function worldAt(st) {
-    if (!st || st.field !== 'field' || !st.location) return null
-    const at = { map: 'field', x: st.location.x, y: st.location.y }
+    if (!st || !st.location) return null
+    let map = null
+    const place = st.field === 'field' ? null : placeFor(st.field)
+    if (st.field === 'field') map = 'field'
+    else if (place) map = placeId(liveField(place.modes))
+    if (!map) return null
+    const at = { map, x: st.location.x, y: st.location.y }
     st.world = at
     return at
   }
@@ -2957,44 +3299,73 @@ export function createMeadow(ctx) {
   let fx = null
   let bits = null
 
+  // El lugar de adentro que se ve (null en la pradera) y los modos de su Field.
+  let shownPlace = null
+  const modesOf = (place) => (place ? place.modes : FIELD_MODES)
+
   function handlesCombat(st) {
-    return !!(st && st.combat && st.field === 'field' && shown)
+    if (!st || !st.combat || !shown) return false
+    return shownPlace ? st.field === shownPlace.mode : st.field === 'field'
   }
 
-  function setUp(world) {
+  // Que muestra el mapa de la pagina: la pradera ({ place: null }), un lugar de
+  // adentro ({ place }) o nada de esto (null).
+  function whose(world) {
+    if (!world || !world.data) return null
+    if (world.map === 'field') return world.data.meadow ? { place: null } : null
+    const where = placeOfId(world.map)
+    const place = where && world.data.id === world.map ? placeFor(where.mode) : null
+    return place ? { place } : null
+  }
+
+  function setUp(world, place) {
     shown = world
+    shownPlace = place
     const start = performance.now()
-    places = buildLandmarks(world.data.meadow, ctx, names())
-    world.built.group.add(places.group)
+    if (place) {
+      places = place.landmarks ? place.landmarks(world, placeCtx, liveField(place.modes)) : null
+    } else {
+      places = buildLandmarks(world.data.meadow, ctx, names())
+    }
+    if (places && places.group) world.built.group.add(places.group)
     stats.landmarksMs = Math.round(performance.now() - start)
     bits = pageBits()
     crowd = new Crowd(ctx, world, L)
-    fx = new Effects(ctx, crowd, bits, L)
+    // La ayuda de un lugar de adentro es la suya (o ninguna); la de la pradera,
+    // nearHint.
+    const hint = place
+      ? (st, onTouch) => (place.hint ? place.hint(st, liveField(place.modes), onTouch, L) : '')
+      : null
+    fx = new Effects(ctx, crowd, bits, L, hint)
   }
 
   function tearDown() {
     if (crowd) crowd.dispose()
     if (fx) fx.dispose()
+    if (places && places.dispose) places.dispose()
     crowd = null
     fx = null
     places = null
     shown = null
+    shownPlace = null
   }
 
   function update(time, dt, st, world) {
-    if (!world || world.map !== 'field' || !world.data || !world.data.meadow) return
+    const owner = whose(world)
+    if (!owner) return
     if (!shown || shown.built !== world.built) {
       if (shown) tearDown()
-      setUp(world)
+      setUp(world, owner.place)
     }
-    places.update(time)
+    const field = liveField(modesOf(shownPlace))
+    if (places && places.update) places.update(time, st, field)
     if (st) {
       const game = session()
       const said = game && game.runa && Array.isArray(game.runa.log) ? game.runa.log : []
-      fx.sync(st, liveField(), said, time, touch)
+      fx.sync(st, field, said, time, touch)
       crowd.sync(st.foes || [], time)
       fx.settle()
-    } else {
+    } else if (!shownPlace) {
       const meadow = kit()
       if (meadow && tourField) crowd.tour(tourField, meadow, dt, time)
     }
@@ -3004,12 +3375,14 @@ export function createMeadow(ctx) {
   }
 
   function leave(mapId) {
-    if (mapId !== 'field' || !shown) return
+    if (!shown || shown.map !== mapId) return
     // Si el juego saco al heroe del campo en medio de una pelea, cayo: ya lo
     // puso en la iglesia. Se avisa un momento. (Cambiar de idioma o salir al
-    // titulo tambien deja el mapa, pero el juego sigue en el campo o termino.)
+    // titulo tambien deja el mapa, pero el juego sigue en el campo o termino.
+    // Cambiar de piso en la cripta deja otro Field, no ninguno.)
     const game = session()
     const fell = !!fx && fx.fighting() && !!game && !!game.runa && !game.runa.field
+    if (shownPlace && shownPlace.leave) shownPlace.leave(mapId)
     tearDown()
     if (fell && bits) showFall(bits.fell, L)
   }
@@ -3021,11 +3394,11 @@ export function createMeadow(ctx) {
     shown: shown ? shown.map : null,
     fight: fx ? fx.debug() : null
   })
-  globalThis.runaMeadowField = () => liveField() || tourField
+  globalThis.runaMeadowField = () => liveField(modesOf(shownPlace)) || tourField
   globalThis.runaMeadowRows = (x0, y0, x1, y1) =>
     shown ? shown.data.rows.slice(y0, y1).map((row) => row.slice(x0, x1)) : null
   globalThis.runaMeadowToggle = (what, on) => {
-    if (what === 'places' && places) places.group.visible = on
+    if (what === 'places' && places && places.group) places.group.visible = on
     if (what === 'crowd' && crowd) crowd.group.visible = on
     if (what === 'world' && shown) {
       for (const child of shown.built.group.children) {

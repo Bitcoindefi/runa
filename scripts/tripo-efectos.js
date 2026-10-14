@@ -18,7 +18,13 @@
 //                       'low': renderer.render solo, para celulares y placas de
 //                       video modestas
 //   atmosphere(data)    el cielo, la niebla y las luces de un mapa (el JSON de
-//                       /world/<id>.json), o con null los de la vitrina
+//                       /world/<id>.json), o con null los de la vitrina. Un
+//                       clima `indoor` (la cripta) apaga el cielo y la sombra
+//                       del sol
+//   fogFromHero(d)      cada cuadro, d = metros de la camara al heroe: en un
+//                       lugar cerrado la niebla se mide desde el heroe; afuera
+//                       no hace nada
+//   mood()              el clima del mapa que se ve, o null en la vitrina
 //   shafts(direction)   rayos de sol desde esa direccion del mundo (el titulo
 //                       la da en cada cuadro); con null, sin rayos
 //   post()              el postproceso armado, para medir desde la consola
@@ -28,7 +34,9 @@
 // con un degrade pintado encima, sol grande, estrellas, luna, nubes en vetas y
 // un horizonte que se funde con la niebla; dressSky, que lo viste con un clima
 // como los de MOODS, y skyNoise, el ruido de las nubes. El titulo (titulo.js)
-// arma su cielo con las mismas funciones.
+// arma su cielo con las mismas funciones. moodOf(data) es el clima que le toca a
+// un mapa (la regla esta en lugares.js moodKey, que las pruebas cargan sin
+// three.js).
 //
 // En 'high' el cuadro pasa por EffectComposer, como en los ejemplos de
 // three.js: RenderPass dibuja la escena en un buffer de punto flotante (con
@@ -47,6 +55,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
+import { moodKey, heroFog } from './lugares.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { performance } = globalThis
@@ -339,6 +348,9 @@ export function skyDirection(elevation, bearing, target = new THREE.Vector3()) {
 // clouds [cuanto, cobertura, suavidad, color con luz, color en sombra]
 // stars  cuantas estrellas; moon [elevacion, rumbo] de la luna
 // fog    [color, cerca, lejos]: la niebla y el horizonte del cielo
+// indoor un lugar cerrado (la cripta): sin cielo, sin sombra del sol y con la
+//        niebla medida desde el heroe (fogFromHero); no lleva sun, air, sky,
+//        paint ni clouds
 // hemi   [arriba, abajo, intensidad] de la luz de hemisferio
 // light  [color, intensidad] de la direccional; env, cuanto reflejan los PBR
 // post   bloom [fuerza, radio, umbral, rodilla]: brilla lo que pasa del umbral
@@ -427,6 +439,86 @@ const MOODS = {
       saturation: 1.06,
       contrast: 1.06,
       tint: [1.03, 0.98, 0.95]
+    }
+  },
+  // Los pisos de la cripta (lugares.js cryptData, id crypt-<piso>): bajo tierra,
+  // sin cielo ni sombra del sol; la luz la ponen las antorchas. La niebla se
+  // mide desde el heroe (fogFromHero) y la luz del sol queda como un relleno
+  // tenue. Las cisternas, humedas y verdosas.
+  'crypt-1': {
+    indoor: true,
+    fog: [0x070d0b, 4, 24],
+    hemi: [0x5f7a70, 0x0b0907, 0.26],
+    light: [0x9fc4b8, 0.18],
+    env: 0.12,
+    post: {
+      bloom: [0.8, 0.5, 0.68, 0.25],
+      vignette: 0.42,
+      saturation: 0.96,
+      contrast: 1.08,
+      tint: [0.96, 1.02, 0.99]
+    }
+  },
+  // El osario: hueso y polvo, ambar.
+  'crypt-2': {
+    indoor: true,
+    fog: [0x0e0a07, 4, 24],
+    hemi: [0x7a6a58, 0x0c0806, 0.25],
+    light: [0xd8c0a0, 0.17],
+    env: 0.12,
+    post: {
+      bloom: [0.8, 0.5, 0.68, 0.25],
+      vignette: 0.44,
+      saturation: 0.94,
+      contrast: 1.08,
+      tint: [1.03, 1, 0.94]
+    }
+  },
+  // La necropolis de la corona: violeta y oro, un poco mas abierta.
+  'crypt-3': {
+    indoor: true,
+    fog: [0x0b0812, 5, 28],
+    hemi: [0x6c5f8a, 0x0a0710, 0.28],
+    light: [0xc8b8ff, 0.2],
+    env: 0.15,
+    post: {
+      bloom: [0.85, 0.55, 0.66, 0.25],
+      vignette: 0.44,
+      saturation: 1.02,
+      contrast: 1.08,
+      tint: [1.01, 0.97, 1.04]
+    }
+  },
+  // Cualquier otro piso de la cripta.
+  crypt: {
+    indoor: true,
+    fog: [0x0a0a0b, 4, 24],
+    hemi: [0x6a6a70, 0x0a0908, 0.26],
+    light: [0xc0c4d0, 0.18],
+    env: 0.12,
+    post: { bloom: [0.8, 0.5, 0.68, 0.25], vignette: 0.42, saturation: 0.98, contrast: 1.08 }
+  },
+  // Los campamentos barbaros (campData, id camp:<id>): al caer la tarde, con el
+  // humo de los fuegos; el sol bajo y anaranjado al oeste, las brasas brillan.
+  camp: {
+    sun: [6, 255],
+    disc: [0xff9a4a, 1.6, 0.45, 0.06],
+    air: [5, 2, 0.006, 0.82],
+    sky: [0.42, [1, 0.88, 0.74]],
+    paint: [0xe08a4c, 0x8c6c62, 0x5c6a88, 0x1e2a4a, [0.22, 0.8, 2.2, 0.7]],
+    clouds: [0.6, 0.5, 0.24, 0xf2a474, 0x4a3a3a],
+    fog: [0x6c5249, 45, 120],
+    hemi: [0xdabaa2, 0x2a1c14, 1.05],
+    // Luz y umbral del brillo medidos con el heroe: con 2,1 y 0,82 la vincha y
+    // los hombros claros se quemaban a blanco.
+    light: [0xffb27a, 1.75],
+    env: 0.35,
+    post: {
+      bloom: [0.5, 0.5, 0.95, 0.22],
+      vignette: 0.28,
+      saturation: 1.04,
+      contrast: 1.03,
+      tint: [1.03, 0.99, 0.95]
     }
   }
 }
@@ -996,13 +1088,17 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
   function atmosphere(data) {
     mood = moodOf(data)
     const look = mood || SHOWCASE
-    sky.visible = !!mood
-    if (mood) dressSky(sky.material.uniforms, mood)
+    const indoor = !!mood && !!mood.indoor
+    sky.visible = !!mood && !indoor
+    if (sky.visible) dressSky(sky.material.uniforms, mood)
     backColor.setHex(look.fog[0])
     scene.background = backColor
     scene.fog.color.setHex(look.fog[0])
     scene.fog.near = look.fog[1]
     scene.fog.far = look.fog[2]
+    if (indoor) fogFromHero(heroDistance)
+    // Bajo tierra el sol no da sombra: la luz es de las antorchas.
+    if (lights.sun) lights.sun.castShadow = !indoor
     if (lights.sky) {
       lights.sky.color.setHex(look.hemi[0])
       lights.sky.groundColor.setHex(look.hemi[1])
@@ -1015,11 +1111,26 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
     scene.environmentIntensity = look.env
   }
 
+  // En un lugar cerrado la niebla arranca donde esta el heroe: la pagina da, en
+  // cada cuadro, cuanto hay de la camara al heroe. Afuera no cambia nada. Hasta
+  // el primer aviso vale lo de la vista alta cercana (unos 30 m).
+  let heroDistance = 30
+  function fogFromHero(distance) {
+    if (Number.isFinite(distance)) heroDistance = distance
+    if (!mood || !mood.indoor) return
+    const [near, far] = heroFog(mood.fog, heroDistance)
+    scene.fog.near = near
+    scene.fog.far = far
+  }
+
   return {
     render,
     setSize,
     setQuality,
     atmosphere,
+    fogFromHero,
+    // El clima del mapa que se ve (con indoor si es cerrado), o null en la vitrina.
+    mood: () => mood,
     shafts,
     post: () => ({ title: titlePost, map: mapPost }),
     dispose() {
@@ -1031,11 +1142,11 @@ export function createEffects({ renderer, scene, camera, settings = {}, lights =
   }
 }
 
-// El clima de un mapa: el suyo, el de las ruinas o el de la ciudad.
-function moodOf(data) {
-  if (!data) return null
-  if (MOODS[data.id]) return MOODS[data.id]
-  return data.kind === 'boss' ? MOODS.boss : MOODS.city
+// El clima de un mapa: el de su id, el de su tipo (las ruinas, la cripta, el
+// campamento) o el de la ciudad (lugares.js moodKey).
+export function moodOf(data) {
+  const key = moodKey(data, MOODS)
+  return key ? MOODS[key] : null
 }
 
 // Los uniformes del cielo para un clima con la forma de MOODS (el del titulo

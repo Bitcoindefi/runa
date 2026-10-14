@@ -160,8 +160,17 @@ const STRUCTURE = new Set([
 // En el arte, una "o" o una "t" dentro de una palabra es una letra del cartel,
 // no una piedra ni un arbol.
 const letter = (ch) => ch >= 'a' && ch <= 'z'
+// Una tira de solo "o" y "t" no es una palabra: son piedras y arboles juntos,
+// como el ruido del suelo de la pradera (lib/field.js groundAt). Ningun cartel
+// de los mapas de la ciudad tiene una palabra asi.
 function inWord(row, x) {
-  return letter(row[x - 1] || '') || letter(row[x + 1] || '')
+  if (!letter(row[x - 1] || '') && !letter(row[x + 1] || '')) return false
+  let a = x
+  while (a > 0 && letter(row[a - 1])) a--
+  for (let i = a; i < row.length && letter(row[i]); i++) {
+    if (row[i] !== 'o' && row[i] !== 't') return true
+  }
+  return false
 }
 
 function classify(ch, tile, kind) {
@@ -2898,8 +2907,14 @@ function blobTexture() {
  * text(nombre) para los carteles en el idioma elegido. Si `data.signs` trae las
  * filas con los letreros traducidos (mapLabels de lib/locale.js, que no cambia
  * su largo), las letras salen de ahi; que es cada celda sigue saliendo del mapa.
+ *
+ * Un lugar que se arma de otra manera (la cripta, bajo tierra: sin terreno, sin
+ * murallas, sin la paleta de la ciudad) trae `data.build(data, extras)`, y eso
+ * es lo que se devuelve: un objeto con la misma forma que el de abajo (group,
+ * toWorld, blocks, terrainHeight, update, dispose, colossus, loading).
  */
 export function buildWorld(data, extras = {}) {
+  if (typeof data.build === 'function') return data.build(data, extras)
   const { width, height, rows, tiles } = data
   const palette = PALETTES[data.id] || PALETTES.city
   const group = new THREE.Group()

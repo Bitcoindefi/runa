@@ -2489,6 +2489,13 @@
         // Un mapa que arma la pagina (la pradera, de pradera.js) no se pide al visor.
         const local = meadow && meadow.provide(id)
         if (local) return Promise.resolve(local)
+        // Un piso de la cripta o un campamento que el juego ya cerro (cambio de
+        // piso a medio armar): no esta en el visor, se espera la proxima celda.
+        if (/^crypt-\d+$|^camp:/.test(id)) {
+          const gone = new Error('el lugar ' + id + ' ya no esta abierto')
+          gone.quiet = true
+          return Promise.reject(gone)
+        }
         if (!maps.has(id)) {
           const request = retry(() =>
             fetch('world/' + id + '.json', { cache: 'no-store' }).then((response) => {
@@ -2522,6 +2529,18 @@
         return new THREE.Vector3(0, up, back)
       }
 
+      // El giro de llegada (radianes) de la entrada de data.arrive mas cercana a
+      // la celda, a 8 celdas o menos; null si el mapa no trae ninguna.
+      function arrivalAzimuth(data, at) {
+        if (!data || !Array.isArray(data.arrive)) return null
+        let best = null
+        for (const spot of data.arrive) {
+          const d = Math.abs(spot.x - at.x) + Math.abs(spot.y - at.y)
+          if (d <= 8 && (!best || d < best.d)) best = { d, azimuth: spot.azimuth }
+        }
+        return best ? THREE.MathUtils.degToRad(best.azimuth) : null
+      }
+
       // La consulta llega seguido y armar la ciudad puede tardar mas: mientras un
       // mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
       let loadingMap = null
@@ -2542,6 +2561,7 @@
           data = await mapData(at.map)
         } catch (error) {
           if (token === worldToken) loadingMap = null
+          if (error && error.quiet) return
           mode.textContent = L('could not load the map ', 'no pude traer el mapa ') + at.map
           console.warn(error)
           return
@@ -2592,7 +2612,17 @@
         // el giro que tenia, asi la tecla sigue yendo al mismo lado y no lo
         // vuelve a la puerta.
         const off = cameraOffset()
-        if (cameFrom && settings.camera === 'third') {
+        // Un lugar estrecho (la cripta, el campamento) dice desde donde se lo
+        // mira al llegar a cada entrada: data.arrive [{ x, y, azimuth }], en
+        // grados desde el sur como runaView.frame. Gana la entrada mas cercana.
+        const arrive = settings.camera === 'third' && arrivalAzimuth(data, at)
+        if (arrive !== null && arrive !== false) {
+          off.set(
+            Math.sin(arrive) * VIEWS.third[1],
+            VIEWS.third[0],
+            Math.cos(arrive) * VIEWS.third[1]
+          )
+        } else if (cameFrom && settings.camera === 'third') {
           const az = rawForward ? hero.root.rotation.y + Math.PI : lastAz
           off.set(Math.sin(az) * VIEWS.third[1], VIEWS.third[0], Math.cos(az) * VIEWS.third[1])
         }
@@ -2707,6 +2737,8 @@
       const timer = new THREE.Timer()
       const step = new THREE.Vector3()
       const follow = new THREE.Vector3()
+      // El alto del piso bajo el heroe, suavizado (ver built.walkHeight).
+      let heroGround = 0
       // En tercera persona las etiquetas de cerca se achican segun la distancia a
       // la camara; las de lejos quedan como en la vista 2.5D. Las de un mapa que
       // todavia no entro a la escena se saltean.
@@ -2887,6 +2919,9 @@
         const want = armDir.length()
         if (want < 0.01) return null
         armDir.divideScalar(want)
+        if (world.built.overhead) return liftArm(dt, want)
+        armLift = 0
+        armTurned = false
         // Hasta 0,3 m antes de la casa, solo si hay una en el medio.
         const hit = armHit(controls.target, armDir, want)
         const free = hit < want ? Math.min(want, Math.max(1.4, hit - 0.3)) : want
@@ -2898,6 +2933,61 @@
           : 0
         armOff.y += Math.max(0, ground + 0.8 - (camera.position.y + armOff.y))
         return armOff.lengthSq() > 1e-4 ? armOff : null
+      }
+      // Un lugar sin techo (built.overhead: la cripta, el campamento) tiene
+      // paredes mas altas que la camara de tercera persona a dos metros: en vez
+      // de acercarse hasta pegarse al heroe, la camara sube por encima de la
+      // pared (a la misma distancia) hasta verlo, y baja despacio cuando el paso
+      // queda libre. armTurned avisa que hay que volver a apuntarla al heroe.
+      let armLift = 0
+      let armTurned = false
+      const armQuat = new THREE.Quaternion()
+      const LIFT = { most: 1.36, step: 0.07, down: 1.6, knees: 0.6 }
+      const liftDir = new THREE.Vector3()
+      const liftFrom = new THREE.Vector3()
+      function liftAt(rise, hx, hz) {
+        const e = Math.min(LIFT.most, rise)
+        liftDir.set(Math.cos(e) * hx, Math.sin(e), Math.cos(e) * hz)
+        return liftDir
+      }
+      function liftArm(dt, want) {
+        const flat = Math.hypot(armDir.x, armDir.z)
+        if (flat < 1e-3) {
+          armLift = 0
+          return null
+        }
+        const hx = armDir.x / flat
+        const hz = armDir.z / flat
+        const e0 = Math.asin(THREE.MathUtils.clamp(armDir.y, -1, 1))
+        // La elevacion mas baja desde la que la pared no tapa al heroe: el rayo
+        // sale de las rodillas, asi el borde de la pared no le corta las piernas.
+        liftFrom.copy(controls.target)
+        liftFrom.y -= LIFT.knees
+        let need = LIFT.most - e0
+        for (let e = e0; e < LIFT.most; e += LIFT.step) {
+          if (armHit(liftFrom, liftAt(e, hx, hz), want) >= want) {
+            need = e - e0
+            break
+          }
+        }
+        armLift = need >= armLift ? need : armLift + (need - armLift) * ease(dt, LIFT.down)
+        if (armLift < 1e-3) {
+          armLift = 0
+          armTurned = false
+          return null
+        }
+        const dir = liftAt(e0 + armLift, hx, hz)
+        // Arriba del todo y todavia tapado: recien ahi se acerca.
+        const hit = armHit(controls.target, dir, want)
+        const len = hit < want ? Math.max(1.4, hit - 0.3) : want
+        armOff.copy(dir).multiplyScalar(len).add(controls.target).sub(camera.position)
+        // Y nunca dentro del cerro de afuera (el campamento tiene terreno).
+        const ground = world.built.terrainHeight
+          ? world.built.terrainHeight(camera.position.x + armOff.x, camera.position.z + armOff.z)
+          : 0
+        armOff.y += Math.max(0, ground + 0.8 - (camera.position.y + armOff.y))
+        armTurned = true
+        return armOff
       }
       // El heroe se desvanece si la camara le queda encima (el brazo de resorte la
       // acerco contra una pared): opaco a mas de FADE.far metros del pecho, y a
@@ -3697,7 +3787,7 @@
         // En un duelo la camara mira entre los dos, para que el rival entre en cuadro.
         follow.set(
           pos.x + framing.x + duelView.x,
-          framing.y + bossLift,
+          framing.y + bossLift + heroGround,
           pos.z + framing.z + duelView.z
         )
         if (settings.camera === 'third') floatCamera(dt, going, speed)
@@ -3727,7 +3817,9 @@
         figure,
         label,
         text: (name) => tr(name),
-        L
+        L,
+        // La cripta mide su niebla desde el heroe (efectos.js fogFromHero).
+        effects
       })
       const inventory = createInventory({
         tr: (name) => tr(name),
@@ -3760,7 +3852,18 @@
         hero.arms.left_hand.shoulder.rotation.x = Math.sin(t * 1.3) * 0.05
         hero.arms.right_hand.shoulder.rotation.x = -Math.sin(t * 1.3) * 0.05
         const since = (now - hop) / 1000
-        hero.root.position.y = since < 0.45 ? Math.sin((since / 0.45) * Math.PI) * 0.18 : 0
+        // El alto del piso donde pisa (los escalones de la cripta: built.walkHeight);
+        // en el resto de los mapas el heroe camina en 0.
+        const floorY =
+          world && world.built.walkHeight
+            ? world.built.walkHeight(hero.root.position.x, hero.root.position.z)
+            : 0
+        heroGround =
+          Math.abs(floorY - heroGround) > 2
+            ? floorY
+            : heroGround + (floorY - heroGround) * (1 - Math.exp(-10 * dt))
+        hero.root.position.y =
+          heroGround + (since < 0.45 ? Math.sin((since / 0.45) * Math.PI) * 0.18 : 0)
         ringMat.opacity = since < 1 ? 0.5 + (1 - since) * 0.5 : 0.5
         ring.scale.setScalar(since < 1 ? 1 + (1 - since) * 0.25 : 1)
         for (let i = pops.length - 1; i >= 0; i--) {
@@ -3795,7 +3898,12 @@
         // El brazo de resorte: la camara se acerca si una casa o el cerro quedan
         // en el medio, solo para este cuadro.
         const pulled = springArm(dt)
+        // Subida por encima de una pared: ademas de moverla, se la apunta al
+        // heroe; los controles recuperan su giro despues de dibujar.
+        const turned = !!pulled && armTurned
+        if (turned) armQuat.copy(camera.quaternion)
         if (pulled) camera.position.add(pulled)
+        if (turned) camera.lookAt(controls.target)
         // Con la camara ya acercada: si le queda encima, el heroe se desvanece.
         fadeHero(dt)
         sizeLabels()
@@ -3808,6 +3916,7 @@
         effects.render(dt, screen)
         if (shook) camera.position.sub(shook)
         if (pulled) camera.position.sub(pulled)
+        if (turned) camera.quaternion.copy(armQuat)
       })
 
       // En el menu de titulo la escena se corre a la derecha (una fraccion del
@@ -5062,6 +5171,19 @@
         const runa = session && session.runa
         if (!runa) return null
         const f = runa.field
+        // La cripta y los campamentos: lo que frena es lo del juego (isWalkable)
+        // y las puertas son sus escaleras y la U. Los datos de la pradera que el
+        // Field les deja (campamentos, entrada de la cripta) no valen adentro.
+        if (f && f.player && (f.mode === 'dungeon' || f.mode === 'barbarian-camp')) {
+          const lay = f.layout || {}
+          const exits = [lay.up, lay.down, lay.exit].filter(Boolean)
+          return {
+            x: f.player.x,
+            y: f.player.y,
+            open: (x, y) => !!f.isWalkable(x, y),
+            door: (x, y) => exits.some((e) => e.x === x && e.y === y)
+          }
+        }
         if (f && f.player) {
           const exits = [f.gate, f.noxGate, f.dungeonEntrance, f.worldBossPortal].filter(Boolean)
           const inside = (x, y) => x >= 0 && y >= 0 && x < f.width && y < f.height
@@ -6058,7 +6180,9 @@
           primary: true,
           area: 'f',
           hot: !!near,
-          dim: !near && !st.field
+          // En la cripta y los campamentos se sale pisando la escalera o la U:
+          // sin nada cerca, USE no hace nada, como en la ciudad.
+          dim: !near && st.field !== 'field'
         })
         setAct('i', { icon: 'bag', label: L('Bag', 'Mochila') })
         setAct('enter', null)
