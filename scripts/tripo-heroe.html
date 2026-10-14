@@ -1289,6 +1289,7 @@
       import { createMeadow } from './pradera.js'
       import { createInventory } from './inventario.js'
       import { createShowcase } from './vitrina.js'
+      import { createMobile, backStep, typing } from './movil.js'
 
       // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
       //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
@@ -3953,6 +3954,19 @@
 
       let screen = 'boot'
       let juego = null
+      // Telefonos (movil.js): el atras abre la pausa en vez de salir, se guarda
+      // al ocultar la pagina y se avisa si se pierde el contexto de WebGL.
+      const mobile = createMobile({
+        canvas: renderer.domElement,
+        save: () => session && session.runa.saveCurrent(),
+        say,
+        lostText: L(
+          'The graphics were reset. Reloading the game...',
+          'Se reinicio la grafica. Recargando el juego...'
+        ),
+        wanted: () => screen === 'play' || screen === 'tour',
+        onBack: backPressed
+      })
       const keysLine = document.getElementById('keys')
       const hud = document.getElementById('hud')
       const menu = document.getElementById('menu')
@@ -3965,7 +3979,8 @@
         if (!event.target.closest('.online') || !session || paused) return
         // Sin conexion por un error: tocarla reintenta, como dice.
         const room = roomOf()
-        if (netState(room) === 'error') {
+        // Una sala llena no se reintenta: se abre la hoja para elegir otra.
+        if (netState(room) === 'error' && !room.full) {
           if (room.public || publicLike(room.code)) goPublic()
           else joinPrivate(room.code)
           return
@@ -4042,7 +4057,10 @@
       }
 
       // Una hoja del menu (de titulo o de la partida), con titulo y volver.
+      // El Volver de la hoja abierta en la pausa: el atras del telefono lo usa.
+      let pauseBack = null
       function sheet(box, title, back) {
+        if (box === pause.querySelector('.sheet')) pauseBack = back
         box.replaceChildren()
         const h = document.createElement('h2')
         h.textContent = title
@@ -4135,6 +4153,7 @@
       }
 
       function showMenu() {
+        if (screen === 'play' || screen === 'tour') mobile.release()
         leaveScreen()
         screen = 'menu'
         menu.hidden = false
@@ -4247,7 +4266,9 @@
         menuMain.hidden = true
         menuPage.hidden = false
         build(menuPage, mainMenu)
-        const first = menuPage.querySelector('input, button:not([disabled])')
+        const first = menuPage.querySelector(
+          touchPad ? 'button:not([disabled])' : 'input, button:not([disabled])'
+        )
         if (first) first.focus()
       }
 
@@ -4262,6 +4283,7 @@
           name.autocomplete = 'off'
           name.spellcheck = false
           name.placeholder = L('your name', 'tu nombre')
+          typing(name, { hint: 'go', caps: 'words' })
           const label = document.createElement('label')
           label.append(L('Your name', 'Tu nombre'), name)
           form.append(label)
@@ -4702,6 +4724,7 @@
         setupActions()
         actionsKey = ''
         fitTerm()
+        mobile.arm()
       }
 
       function stopPlay() {
@@ -5511,6 +5534,7 @@
           return L('Finding a public room...', 'Buscando sala publica...')
         if (roomJoining) return L('Joining room ', 'Entrando a la sala ') + roomJoining + '...'
         if (!room) return L('Offline · Play online', 'Sin conexion · Jugar en linea')
+        if (room.full) return `${L('Room full', 'Sala llena')} · ${room.code}`
         if (!room.id || room.error)
           return L('No connection · Tap to retry', 'Sin conexion · Toca para reintentar')
         const count = room.players.length + 1
@@ -5530,7 +5554,8 @@
         else url.searchParams.delete('room')
         url.searchParams.delete('sala')
         url.searchParams.delete('online')
-        history.replaceState(null, '', url)
+        // Sin perder la marca de la guardia del boton atras (movil.js).
+        history.replaceState(history.state, '', url)
       }
 
       function joinRoom(code, opts = {}) {
@@ -5691,6 +5716,7 @@
         input.autocomplete = 'off'
         input.spellcheck = false
         input.value = room && room.id && !room.public ? room.code : settings.room || ''
+        typing(input, { hint: 'go', caps: 'characters' })
         const label = document.createElement('label')
         label.append(L('Private room code', 'Codigo de sala privada'), input)
         form.append(label)
@@ -5790,6 +5816,24 @@
         stickMode = null
         pause.hidden = false
         pauseMain()
+      }
+      // El boton atras del telefono (movil.js): lo mismo que Esc, pero en la
+      // pausa vuelve una hoja y en el recorrido sale al titulo. Devuelve si la
+      // guardia se vuelve a poner.
+      function backPressed() {
+        const st = session ? live || session.state() : null
+        const roaming = !st || exploring(st) || !!st.title || !!st.naming
+        const step = backStep({ screen, paused, roaming })
+        if (step === 'title') {
+          showMenu()
+          return false
+        }
+        if (step === 'sheet') (pauseBack || closePause)()
+        else if (step === 'pause') {
+          peek = false
+          openPause()
+        } else if (step === 'escape' && session) session.press('escape')
+        return step !== 'none'
       }
       function closePause() {
         paused = false
@@ -5895,7 +5939,7 @@
           })
         )
         done()
-        area.focus()
+        if (!touchPad) area.focus()
       }
 
       // --- Botones tactiles ---------------------------------------------------
@@ -6682,6 +6726,7 @@
         }
         tourTexts()
         goMap('city')
+        mobile.arm()
       }
 
       // --- Seguir la terminal (solo en el visor local) ------------------------

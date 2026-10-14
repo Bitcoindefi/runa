@@ -296,7 +296,11 @@ function start(opts = {}) {
      */
     room() {
       const current = joined()
-      if (!current) return arena && arena.error ? { code: arena.code, error: arena.error } : null
+      // full: la sala privada ya tenia su cupo y esta presencia quedo afuera.
+      if (!current) {
+        if (!arena || !arena.error) return null
+        return { code: arena.code, error: arena.error, full: arena.error === red.ROOM_FULL }
+      }
       const presence = current.presence
       let all = []
       try {
@@ -307,6 +311,7 @@ function start(opts = {}) {
         code: current.code,
         id: presence.id,
         error: presence.error || '',
+        full: presence.error === red.ROOM_FULL,
         links: presence.conns.size,
         fresh: presence.self.fresh === 1,
         // El numero de sala publica, o 0 si es una privada.

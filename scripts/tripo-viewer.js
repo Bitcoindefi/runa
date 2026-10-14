@@ -45,6 +45,9 @@ const MODULES = {
   // Los campamentos barbaros en 3D: otro lugar de adentro de la pradera.
   'campamento.js': path.join(__dirname, 'tripo-campamento.js'),
   'inventario.js': path.join(__dirname, 'tripo-inventario.js'),
+  // La red de seguridad para telefonos (atras, guardar al ocultar, WebGL
+  // perdido, teclado): .mjs para que las pruebas lo carguen en Bare.
+  'movil.js': path.join(__dirname, 'tripo-movil.mjs'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
