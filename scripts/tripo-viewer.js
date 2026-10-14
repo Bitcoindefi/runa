@@ -51,6 +51,9 @@ const MODULES = {
   // El ritmo y la lectura del combate en 3D (pradera, cripta, campamentos):
   // .mjs para que las pruebas lo carguen en Bare.
   'combate.js': path.join(__dirname, 'tripo-combate.mjs'),
+  // El minimapa y el mapa de la region: .mjs para que las pruebas lo carguen
+  // en Bare.
+  'atlas.js': path.join(__dirname, 'tripo-atlas.mjs'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra
@@ -435,6 +438,27 @@ function gameBundle() {
 // El mapa tal como lo dibuja la terminal, con la tabla TILES del juego. Se carga
 // al pedirlo: si un cambio en lib/ lo rompe, el resto del visor sigue andando.
 const worlds = new Map()
+// Los portones (exits: { x, y, to }, to como en tripo-estado gateGraph) y las
+// demas puertas (shops: { x, y, kind, shop }) de un mapa fijo.
+function doorsOf(rows, tiles) {
+  const exits = []
+  const shops = []
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const tile = tiles[row[x]]
+      const enter = tile && tile.enter
+      if (!enter) continue
+      if (enter.kind === 'travel') {
+        let to = enter.to
+        if (enter.returnTo === 'dungeon') to = 'castle'
+        else if (enter.returnTo === 'castle') to = 'city'
+        exits.push({ x, y, to })
+      } else shops.push({ x, y, kind: enter.kind, shop: enter.shop || null })
+    }
+  })
+  return { exits, shops }
+}
+
 function worldMap(id) {
   if (worlds.has(id)) return worlds.get(id)
   let data = null
@@ -458,6 +482,8 @@ function worldMap(id) {
         width: BOSS_ZONE.width,
         height: BOSS_ZONE.height,
         rows: volcanicRows().rows,
+        // El portal de vuelta a la pradera, para el minimapa.
+        exits: [{ ...volcanicRows().portal, to: 'field' }],
         tiles,
         // Donde BossZone pone al Coloso al entrar.
         boss: { x: BOSS_ZONE.width - 24, y: Math.floor(BOSS_ZONE.height / 2) }
@@ -487,7 +513,10 @@ function worldMap(id) {
           id: mark.id,
           name: mark.name,
           bounds: mark.bounds
-        }))
+        })),
+        // Para el minimapa (tripo-atlas.mjs): los portones con su destino y las
+        // puertas de las tiendas, la casa, la iglesia y la taberna.
+        ...doorsOf(map.rows, TILES)
       }
     }
   } catch (error) {

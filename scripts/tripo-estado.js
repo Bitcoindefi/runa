@@ -5,7 +5,12 @@
 // (scripts/tripo-viewer.js lo lee) que del juego que corre dentro de la pagina
 // (scripts/tripo-juego.js), para que las dos formas de jugar se vean igual.
 
-const { items, foes } = require('../lib/content.js')
+const { items, foes, zones } = require('../lib/content.js')
+const { MAPS, TILES } = require('../lib/map.js')
+const { Field, BARBARIAN_SETTLEMENTS, vdist } = require('../lib/field.js')
+const { DUNGEON, floorRows } = require('../lib/dungeon.js')
+const { campRows } = require('../lib/barbarian-camp.js')
+const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
 // Los mapas fijos del juego que la pagina arma en 3D.
@@ -215,6 +220,227 @@ function fightOf(field) {
   }
 }
 
+// --- El atlas: la region, los portones entre regiones y el objetivo ----------
+//
+// Las regiones son los mapas que la pagina arma en 3D, con el mismo id: los
+// mapas fijos (city, nox, castle, coliseum, dungeon = las ruinas bajo el
+// castillo), la pradera ('field'), cada piso de la cripta ('crypt-1'..) y cada
+// campamento ('camp:<id>'), y las ruinas del Coloso ('boss').
+
+// La region donde esta el heroe.
+function regionOf(runa) {
+  const field = runa.field
+  if (field) {
+    if (field.mode === 'dungeon') return 'crypt-' + (Math.floor(Number(field.floor)) || 1)
+    if (field.mode === 'barbarian-camp' && field.camp) return 'camp:' + field.camp.id
+    if (field.mode === 'boss') return 'boss'
+    return 'field'
+  }
+  return runa.walker ? runa.walker.mapId : null
+}
+
+// La region del mapa que anuncia otro jugador (lib/game.js awayMapId):
+// 'crypt2' es 'crypt-2' y 'camp-x' es 'camp:x'.
+function regionOfMapId(mapId) {
+  const id = String(mapId || '')
+  const crypt = /^crypt(\d+)$/.exec(id)
+  if (crypt) return 'crypt-' + crypt[1]
+  if (id.startsWith('camp-') && id.length > 5) return 'camp:' + id.slice(5)
+  return id || null
+}
+
+// Adonde lleva un porton de un mapa fijo. Volver de las ruinas deja en el
+// castillo y salir del castillo, en la ciudad (game.js enter, 'travel').
+function travelTo(enter) {
+  if (enter.returnTo === 'dungeon') return 'castle'
+  if (enter.returnTo === 'castle') return 'city'
+  return enter.to
+}
+
+// Los portones de cada region: { region: [{ to, x, y }] }, en celdas de esa
+// region. Sale del juego: los mapas fijos de lib/map.js, la pradera de un Field
+// (su porton de RUNA, el de NOX, la cripta, el portal y los campamentos), las
+// escaleras de cada piso, la salida de cada campamento y el portal del Coloso.
+let gates = null
+function gateGraph() {
+  if (gates) return gates
+  const graph = {}
+  const add = (from, to, at) => {
+    if (!at || !to) return
+    if (!graph[from]) graph[from] = []
+    graph[from].push({ to, x: at.x, y: at.y })
+  }
+  for (const map of Object.values(MAPS)) {
+    // MAPS.field es el campo viejo de la terminal: la pradera es un Field.
+    if (map.id === 'field') continue
+    map.rows.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        const tile = TILES[row[x]]
+        const enter = tile && tile.enter
+        if (enter && enter.kind === 'travel') add(map.id, travelTo(enter), { x, y })
+      }
+    })
+  }
+  const meadow = new Field({ seed: 1 })
+  add('field', 'city', meadow.gate)
+  add('field', 'nox', meadow.noxGate)
+  add('field', 'crypt-1', meadow.dungeonEntrance)
+  add('field', 'boss', meadow.worldBossPortal)
+  for (const camp of BARBARIAN_SETTLEMENTS) {
+    add('field', 'camp:' + camp.id, camp)
+    add('camp:' + camp.id, 'field', campRows(camp.id).exit)
+  }
+  for (let floor = 1; floor <= DUNGEON.floors; floor++) {
+    const plan = floorRows(floor)
+    add('crypt-' + floor, floor === 1 ? 'field' : 'crypt-' + (floor - 1), plan.up)
+    if (plan.down) add('crypt-' + floor, 'crypt-' + (floor + 1), plan.down)
+  }
+  add('boss', 'field', volcanicRows(BOSS_ZONE.width, BOSS_ZONE.height).portal)
+  gates = graph
+  return graph
+}
+
+// El camino de una region a otra, por anchura sobre los portones: la lista de
+// portones a cruzar, [{ region, to, x, y }], el primero en `from`. [] si ya
+// esta ahi y null si no hay camino. Si hay dos portones al mismo lado, el
+// primero es el mas cercano a `at` (la celda del heroe).
+function routeTo(from, to, at = null) {
+  if (!from || !to) return null
+  if (from === to) return []
+  const graph = gateGraph()
+  const back = new Map([[from, null]])
+  const queue = [from]
+  while (queue.length && !back.has(to)) {
+    const region = queue.shift()
+    for (const gate of graph[region] || []) {
+      if (back.has(gate.to)) continue
+      back.set(gate.to, region)
+      queue.push(gate.to)
+    }
+  }
+  if (!back.has(to)) return null
+  const path = [to]
+  while (back.get(path[0]) !== null) path.unshift(back.get(path[0]))
+  const hops = []
+  for (let i = 0; i < path.length - 1; i++) {
+    const options = graph[path[i]].filter((gate) => gate.to === path[i + 1])
+    let best = options[0]
+    if (i === 0 && at) {
+      const far = (gate) => Math.abs(gate.x - at.x) + Math.abs(gate.y - at.y)
+      for (const gate of options) if (far(gate) < far(best)) best = gate
+    }
+    hops.push({ region: path[i], to: best.to, x: best.x, y: best.y })
+  }
+  return hops
+}
+
+// Los tres campamentos con su celda en la pradera y si ya quedaron despejados.
+function campsOf(runa) {
+  const state = runa.barbarianState
+  const cleared = new Set((state && Array.isArray(state.cleared) ? state.cleared : []).map(String))
+  // El campamento abierto sin nadie en pie ya cuenta, antes de salir por la U.
+  const field = runa.field
+  if (field && field.mode === 'barbarian-camp' && field.camp && Array.isArray(field.foes)) {
+    if (field.foes.every((foe) => foe.dead)) cleared.add(field.camp.id)
+  }
+  return BARBARIAN_SETTLEMENTS.map((camp) => ({
+    id: camp.id,
+    name: camp.name,
+    x: camp.x,
+    y: camp.y,
+    cleared: cleared.has(camp.id)
+  }))
+}
+
+// Adonde manda el capitulo de la historia (st.story): { kind, region, x, y }.
+// Con el capitulo por entregar o por cobrar, el rey en el castillo. Despues: el
+// anillo de los mosquitos alrededor del porton de RUNA (radius en celdas
+// visuales, como zoneAt), el campamento sin despejar mas cercano o el portal
+// del Coloso (adentro de las ruinas, el Coloso). null sin nada que hacer.
+// `at` es la celda del heroe en `here`; `boss`, donde esta el Coloso.
+function storyTarget(story, here, camps = [], at = null, boss = null) {
+  if (!story || story.status === 'done') return null
+  if (story.status !== 'active') {
+    const giver = story.giver || { map: 'castle', x: 56, y: 13 }
+    return { kind: 'giver', region: giver.map, x: giver.x, y: giver.y }
+  }
+  const meadow = gateGraph().field
+  const gateTo = (to) => meadow.find((gate) => gate.to === to)
+  if (story.id === 'king_trial') {
+    const gate = gateTo('city')
+    return { kind: 'ring', region: 'field', x: gate.x, y: gate.y, radius: zones[0].until }
+  }
+  if (story.id === 'barbarian_raid') {
+    const open = camps.filter((camp) => !camp.cleared)
+    const inside = open.find((camp) => 'camp:' + camp.id === here)
+    if (inside) return { kind: 'camp', region: here, id: inside.id, x: null, y: null }
+    if (!open.length) return null
+    const from = here === 'field' && at ? at : gateTo('city')
+    const far = (camp) => vdist(camp.x, camp.y, from.x, from.y)
+    let best = open[0]
+    for (const camp of open) if (far(camp) < far(best)) best = camp
+    return { kind: 'camp', region: 'field', id: best.id, x: best.x, y: best.y }
+  }
+  if (story.id === 'colossus_awakening') {
+    if (here === 'boss') {
+      return { kind: 'boss', region: 'boss', x: boss ? boss.x : null, y: boss ? boss.y : null }
+    }
+    const portal = gateTo('boss')
+    return { kind: 'portal', region: 'field', x: portal.x, y: portal.y }
+  }
+  return null
+}
+
+// Cuantos otros jugadores de la sala hay en cada region (la presencia de
+// lib/net.js, ya limpiada por runa.others).
+function playersByRegion(runa) {
+  const counts = {}
+  if (typeof runa.others !== 'function') return counts
+  for (const peer of runa.others()) {
+    const region = regionOfMapId(peer.mapId)
+    if (region) counts[region] = (counts[region] || 0) + 1
+  }
+  return counts
+}
+
+// El atlas de un juego en marcha, para el minimapa y el mapa de la pagina: la
+// region, los campamentos, el objetivo de la historia y el camino hasta el.
+// discovered queda en null: la niebla de guerra no esta en este paso.
+function atlasOf(runa, story = runa.storySummary()) {
+  if (runa.title) return null
+  const region = regionOf(runa)
+  const location = locationOf(runa)
+  const at = { x: location.x, y: location.y }
+  const field = runa.field
+  const boss = field && field.mode === 'boss' && field.boss ? field.boss : null
+  const camps = campsOf(runa)
+  const target = storyTarget(story, region, camps, at, boss)
+  const graph = gateGraph()
+  return {
+    region,
+    camps,
+    target,
+    route: target ? routeTo(region, target.region, at) : null,
+    // Los portones de esta region y todos los del reino (fijos, para la pestana
+    // del reino): { from, to, x, y } con la celda en `from`.
+    exits: graph[region] || [],
+    links: linksOf(graph),
+    players: playersByRegion(runa),
+    discovered: null
+  }
+}
+
+let links = null
+function linksOf(graph) {
+  if (!links) {
+    links = []
+    for (const [from, list] of Object.entries(graph)) {
+      for (const gate of list) links.push({ from, ...gate })
+    }
+  }
+  return links
+}
+
 // Un juego en marcha (lib/game.js Runa) tal como lo describe la pagina.
 function live(runa) {
   const sheet = runa.player.snapshot()
@@ -232,6 +458,7 @@ function live(runa) {
     hp = arena.self.hp
     maxhp = arena.self.maxHp
   }
+  const story = runa.title ? null : runa.storySummary()
   return {
     title: !!runa.title,
     naming: !!runa.naming,
@@ -274,7 +501,9 @@ function live(runa) {
     // El capitulo del modo historia, para un rastreador: titulo, objetivo,
     // progreso y a quien volver. Los textos van en castellano y la pagina los
     // traduce con tr(). Forma completa en docs/story.md.
-    story: runa.title ? null : runa.storySummary(),
+    story,
+    // El minimapa y el mapa de la region (tripo-atlas.mjs).
+    atlas: runa.title ? null : atlasOf(runa, story),
     arena,
     players: playersOf(runa, arena),
     invite: inviteOf(runa),
@@ -299,5 +528,13 @@ module.exports = {
   inviteOf,
   foesOf,
   fightOf,
+  regionOf,
+  regionOfMapId,
+  gateGraph,
+  routeTo,
+  campsOf,
+  storyTarget,
+  playersByRegion,
+  atlasOf,
   live
 }

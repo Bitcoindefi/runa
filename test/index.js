@@ -65,6 +65,7 @@ require('./red-webrtc.test.js')
 require('./lugares.test.js')
 require('./movil.test.js')
 require('./combate.test.js')
+require('./atlas-estado.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })

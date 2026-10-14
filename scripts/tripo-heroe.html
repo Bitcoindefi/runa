@@ -1307,6 +1307,7 @@
       import { createShowcase } from './vitrina.js'
       import { createMobile, backStep, typing } from './movil.js'
       import { readout, towardFoe } from './combate.js'
+      import { createAtlas } from './atlas.js'
 
       // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
       //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
@@ -4033,6 +4034,27 @@
       const tr = (text) => (juego && text ? juego.translate(settings.lang, text) : text || '')
       const itemName = (entry) => (entry ? tr(entry.name) : '-')
 
+      // El minimapa y el mapa de la region (atlas.js): se abre con M o tocando
+      // el minimapa. Lee la camara y el heroe; con el mapa abierto el heroe no
+      // camina ni ataca.
+      const atlas = createAtlas({
+        L,
+        tr,
+        view: () => ({
+          yaw: Math.atan2(
+            controls.target.x - camera.position.x,
+            camera.position.z - controls.target.z
+          ),
+          heroAt: world ? { x: hero.root.position.x, z: hero.root.position.z } : null,
+          facing: world ? hero.root.rotation.y : null
+        }),
+        onOpen: () => {
+          mover.held.clear()
+          mover.fingers.clear()
+          if (meadow) meadow.attack('cancel')
+        }
+      })
+
       // Cada pantalla deja todo como lo encontro: la de la que se sale se apaga
       // entera antes de prender la otra.
       function leaveScreen() {
@@ -4040,6 +4062,7 @@
         if (title) title.show(false)
         if (vitrina) vitrina.show(false)
         if (inventory) inventory.sync(null, null)
+        atlas.frame(null, null, null, true)
         viewShift = 0
         shiftView()
         camera.updateProjectionMatrix()
@@ -4821,6 +4844,17 @@
         const text = st.title || st.naming || !at || (!!st.overlay && !panel) || combat
         setTerm(text || peek)
         playBox.hidden = termShown
+        const shownMap = world && at && world.map === at.map ? world : null
+        atlas.frame(
+          st,
+          shownMap && shownMap.data,
+          shownMap && shownMap.built.toWorld,
+          termShown || st.duel || paused
+        )
+        if (atlas.isOpen()) {
+          mover.held.clear()
+          mover.fingers.clear()
+        }
         refreshPlayHud()
         syncActions(st)
         // Un menu que se abre o se cierra bajo el pulgar cambia el modo del stick ya.
@@ -5378,6 +5412,8 @@
           return
         }
         const st = live || session.state()
+        // M abre el mapa; con el mapa abierto las teclas son suyas (Esc lo cierra).
+        if (atlas.key(event, down, exploring(st) && !!world && !st.duel && !peek)) return
         const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
         const dir = MOVES[key]
         const roaming = exploring(st)
@@ -5878,6 +5914,7 @@
       function openPause() {
         paused = true
         document.body.classList.add('paused')
+        atlas.close()
         mover.held.clear()
         mover.fingers.clear()
         clearInterval(padRepeat)
@@ -5894,6 +5931,7 @@
       // pausa vuelve una hoja y en el recorrido sale al titulo. Devuelve si la
       // guardia se vuelve a poner.
       function backPressed() {
+        if (atlas.close()) return true
         const st = session ? live || session.state() : null
         const roaming = !st || exploring(st) || !!st.title || !!st.naming
         const step = backStep({ screen, paused, roaming })
@@ -7230,6 +7268,7 @@
         timeScale: gait ? gait.timeScale : 0,
         speed: pace().speed,
         map: world ? world.map : null,
+        atlas: atlas.debug(),
         // La sala del Coliseo en linea y las figuras de los otros jugadores.
         room: roomOf(),
         figures: [...peers.values()].map((entry) => ({
