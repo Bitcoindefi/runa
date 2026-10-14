@@ -420,6 +420,65 @@ test('cada conexion tiene un cupo de 30 lineas de estado por segundo', (t) => {
   t.is(beto.peers.get('ana1').x, 77, 'al segundo siguiente vuelve a escuchar')
 })
 
+test('el cupo de duelo cubre de una vez todo el silencio tolerado', (t) => {
+  const c = clock()
+  const beto = new Presence({ name: 'beto', offline: true, now: c.now, goneMs: 10000 })
+  const conn = fakeConn()
+  beto.onConnection(conn)
+  const burst = net.duelBurst(10000)
+  t.is(burst, net.RATE_DUEL_LINES * 11, 'diez segundos de silencio y uno de margen')
+  let admitted = 0
+  for (let i = 0; i < burst + 50; i++) if (beto.admit(conn, true)) admitted++
+  t.is(admitted, burst, 'la rafaga entera entra y lo que sobra se tira')
+  t.absent(beto.admit(conn, true), 'agotado, no entra nada mas')
+  c.at += net.RATE_WINDOW_MS / 2
+  admitted = 0
+  for (let i = 0; i < net.RATE_DUEL_LINES; i++) if (beto.admit(conn, true)) admitted++
+  t.is(admitted, net.RATE_DUEL_LINES / 2, 'se recarga al ritmo sostenido')
+  c.at -= 5000
+  t.absent(beto.admit(conn, true), 'un reloj que vuelve atras no recarga')
+})
+
+test('un invitado congelado casi diez segundos recibe todos los pasos y sigue en el duelo', (t) => {
+  const c = clock()
+  const opts = { offline: true, now: c.now, goneMs: 10000 }
+  const ana = new Runa({ presence: false, name: 'Ana', now: c.now })
+  const beto = new Runa({ presence: false, name: 'Beto', now: c.now })
+  ana.title = false
+  beto.title = false
+  const pa = new Presence({ name: 'Ana', ...opts })
+  const pb = new Presence({ name: 'Beto', ...opts })
+  ana.attachPresence(pa)
+  beto.attachPresence(pb)
+  ana.presenceStarted = true
+  beto.presenceStarted = true
+  pa.update('city', ana.walker.x, ana.walker.y)
+  pb.update('city', beto.walker.x + 1, beto.walker.y)
+  connect(pa, pb)
+  const challenger = pa.id < pb.id ? ana : beto
+  const accepter = challenger === ana ? beto : ana
+  challenger.challengePlayer(challenger.others('city').find((p) => p.id !== challenger.presence.id))
+  accepter.onTick()
+  accepter.answerDuel(true)
+  challenger.onTick()
+  const host = challenger
+  const guest = accepter
+  t.is(host.duelNetwork.hostId, host.presence.id)
+
+  // El invitado no corre ni un tick: todo lo que ordena el host llega junto,
+  // en el mismo instante del reloj, como al despertar una pagina congelada.
+  const ticks = guest.duelSilenceTicks() - 5
+  for (let i = 0; i < ticks; i++) {
+    if (i % 5 === 0) host.sendDuelInput({ dx: 0, dy: i % 10 === 0 ? 1 : -1 })
+    host.onTick()
+  }
+  t.ok(ticks + ticks / 5 > 150, 'mas de 150 pasos ordenados en una rafaga')
+  guest.onTick()
+  t.ok(guest.duel && guest.duel.active, 'el duelo sigue')
+  t.is(guest.duelNetwork.expectedOrder, host.duelNetwork.nextOrder + 1, 'no se perdio ningun paso')
+  t.is(guest.duelCombat.tickCount, host.duelCombat.tickCount)
+})
+
 test('un duelo sale solo por la conexion de su destinatario', (t) => {
   const ana = new Presence({ name: 'ana', offline: true })
   const toBeto = spyConn('beto1')

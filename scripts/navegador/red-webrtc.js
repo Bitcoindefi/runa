@@ -90,6 +90,13 @@ const PRIVATE_CAP = 12
 const ROOM_FULL = 'room full'
 
 /**
+ * Lo que espera el recien llegado que toca el tope antes de darse por el que
+ * sobra. Los que lo aceptaron le hablan en el primer latido (cada BEAT_MS);
+ * si en este tramo no le hablo ninguno, todos lo rechazaron.
+ */
+const FULL_WAIT_MS = 3000
+
+/**
  * El silencio que hace falta para dar por ido a alguien. En la terminal son
  * tres segundos; una pagina puede quedarse congelada mas que eso mientras arma
  * un mapa, o un telefono cambiar de app un momento. Una pestana cerrada no
@@ -135,12 +142,20 @@ class WebRtcPresence extends net.Presence {
     this.error = ''
     /** Llego a una sala privada llena: no enlaza a nadie mas. */
     this.full = false
+    /**
+     * Ya le hablo algun enlace: es de la sala y nunca se declara el que
+     * sobra, aunque despues se queden callados todos.
+     */
+    this.heard = false
+    this.fullTimer = null
   }
 
   start() {
     if (this.started) return this.online
     this.started = true
     if (this.offline) return false
+    this.full = false
+    this.heard = false
 
     try {
       const channel = this.joinRoom({ appId: APP_ID }, this.topicName, {
@@ -152,7 +167,9 @@ class WebRtcPresence extends net.Presence {
       const line = channel.makeAction(LINE)
       line.onMessage = (data, { peerId } = {}) => {
         const conn = this.links.get(peerId)
-        if (conn && !conn.destroyed) conn.emit('data', data)
+        if (!conn || conn.destroyed) return
+        this.heard = true
+        conn.emit('data', data)
       }
       // onPeerJoin repite enseguida a los que ya estan: va despues de onPeerLeave.
       channel.onPeerLeave = (peerId) => this.unlink(peerId)
@@ -171,6 +188,8 @@ class WebRtcPresence extends net.Presence {
   }
 
   stop() {
+    if (this.fullTimer) clearTimeout(this.fullTimer)
+    this.fullTimer = null
     const channel = this.channel
     this.channel = null
     this.links.clear()
@@ -193,7 +212,7 @@ class WebRtcPresence extends net.Presence {
     this.unlink(peerId, false)
     if (this.full) return false
     if (!shardOf(this.room) && this.links.size >= PRIVATE_CAP - 1) {
-      this.refuse()
+      this.overflow()
       return false
     }
     const handlers = {}
@@ -225,17 +244,42 @@ class WebRtcPresence extends net.Presence {
   }
 
   /**
-   * Un enlace de mas en una sala privada. Los que ya estaban solo lo rechazan.
-   * El que llega lo nota porque ninguno de los que enlazo le hablo todavia
-   * (ellos tambien lo rechazaron): ese es el que sobra, suelta a todos y avisa
-   * una sola vez que la sala esta llena.
+   * Un enlace de mas en una sala privada. El que ya es de la sala (le hablo
+   * alguien) solo lo rechaza. El que acaba de llegar no decide en el momento:
+   * las lineas y los enlaces llegan en paralelo, asi que espera FULL_WAIT_MS
+   * y recien ahi mira si alguno de sus enlaces le hablo (ver checkFull).
+   *
+   * Sin servidor, cada uno cuenta solo sus enlaces. Dos que entran a la vez a
+   * una sala de once pueden quedar cada uno con parte de la malla, y en una
+   * sala mezclada con paginas viejas (que no tienen tope) el nuevo puede
+   * quedar con once de doce: se tolera, porque el APP_ID no cambia y no hay
+   * forma de dejar afuera a las viejas.
    */
-  refuse() {
-    if (this.peers.size > 0 || this.full) return
+  overflow() {
+    if (this.heard || this.full || this.fullTimer) return
+    this.fullTimer = setTimeout(() => {
+      this.fullTimer = null
+      this.checkFull()
+    }, FULL_WAIT_MS)
+  }
+
+  /**
+   * Pasado FULL_WAIT_MS, el recien llegado al que ninguno le hablo es el que
+   * sobra: todos lo rechazaron. Sale de la sala de Trystero (asi se cierran
+   * tambien las conexiones que los de adentro tenian con el), queda fuera de
+   * linea con `error` en ROOM_FULL y avisa una sola vez.
+   *
+   * @returns {boolean} si quedo afuera
+   */
+  checkFull() {
+    if (this.fullTimer) clearTimeout(this.fullTimer)
+    this.fullTimer = null
+    if (this.heard || this.full || !this.channel) return false
     this.full = true
+    this.stop()
     this.error = ROOM_FULL
-    for (const peerId of [...this.links.keys()]) this.unlink(peerId, false)
     this.fire('full', { room: this.room, cap: PRIVATE_CAP })
+    return true
   }
 
   /**
@@ -275,6 +319,7 @@ module.exports = {
   SETTLE_MS,
   PRIVATE_CAP,
   ROOM_FULL,
+  FULL_WAIT_MS,
   publicCode,
   shardOf,
   reservedCode,
