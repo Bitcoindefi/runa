@@ -237,21 +237,25 @@ function start(opts = {}) {
     },
 
     /**
-     * Entrar a la sala `code` del Coliseo en linea (RUNA si falta). Los que
+     * Entrar a la sala `code` del Coliseo en linea (RUNA1 si falta). Los que
      * escriben el mismo codigo se ven en el mapa y se desafian con E. Cambiar
      * de sala en pleno duelo es rendirse en la anterior.
      *
+     * @param {object} [opts]
+     * @param {boolean} [opts.fresh] recien llegado a una sala publica
      * @returns {boolean} si la sala quedo abierta
      */
-    online(code) {
+    online(code, opts = {}) {
       const room = red.roomCode(code) || red.DEFAULT_ROOM
       if (!running || runa.title || runa.naming) return false
       const current = joined()
-      if (current && current.code === room) return true
+      // Recien llegado a una sala publica se vuelve a entrar siempre: la
+      // pagina pide fresh cuando empieza a buscar lugar.
+      if (current && current.code === room && !opts.fresh) return true
       leaveRoom()
       let presence = null
       try {
-        presence = new red.Presence({ name: runa.name, room })
+        presence = new red.Presence({ name: runa.name, room, fresh: !!opts.fresh })
       } catch {
         return false
       }
@@ -269,6 +273,12 @@ function start(opts = {}) {
     },
 
     offline: leaveRoom,
+
+    // Ya es de la sala publica: no se muda aunque despues llegue mas gente.
+    settle() {
+      const current = joined()
+      if (current) current.presence.settle()
+    },
     // Rendirse sin salir todavia de la sala: al cerrar la pagina el aviso al
     // rival tiene que salir antes de que se corten los canales de WebRTC.
     concede: () => {
@@ -298,12 +308,16 @@ function start(opts = {}) {
         id: presence.id,
         error: presence.error || '',
         links: presence.conns.size,
+        fresh: presence.self.fresh === 1,
+        // El numero de sala publica, o 0 si es una privada.
+        public: red.shardOf(current.code),
         players: all.map((peer) => ({
           id: peer.id,
           name: peer.name,
           level: peer.level,
           wins: peer.wins,
           losses: peer.losses,
+          fresh: peer.fresh,
           here: here.has(peer.id)
         }))
       }
@@ -371,6 +385,18 @@ module.exports = {
   SAVES,
   MAPS,
   meadow,
+  // Las salas publicas sin servidor: la pagina las recorre con esto.
+  lobby: {
+    publicCode: red.publicCode,
+    shardOf: red.shardOf,
+    reservedCode: red.reservedCode,
+    shardVerdict: red.shardVerdict,
+    roomCode: red.roomCode,
+    PUBLIC_CAP: red.PUBLIC_CAP,
+    PUBLIC_SHARDS: red.PUBLIC_SHARDS,
+    DISCOVER_MS: red.DISCOVER_MS,
+    SETTLE_MS: red.SETTLE_MS
+  },
   // false en la version sin wallet (Steam).
   wallet: WALLET
 }

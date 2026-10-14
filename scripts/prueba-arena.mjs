@@ -265,7 +265,8 @@ const KEYS = {
 }
 
 // Los juegos nuevos arrancan livianos (sin sombras, efectos bajos) y en ingles.
-const SETTINGS = JSON.stringify({ lang: 'en', effects: 'low', shadows: false })
+// Sin la sala publica al empezar: la prueba elige la sala con su codigo.
+const SETTINGS = JSON.stringify({ lang: 'en', effects: 'low', shadows: false, net: 'off' })
 
 async function launch(tag, origin) {
   const port = await freePort()
@@ -335,13 +336,13 @@ async function newGame(player, name) {
   await page.eval(`document.activeElement && document.activeElement.blur()`)
 }
 
-// Esc, Duelo en linea, el codigo y Entrar: como lo hace alguien con el teclado.
+// Esc, En linea, el codigo y Entrar: como lo hace alguien con el teclado.
 async function joinRoom(player, code) {
   const { page } = player
   await page.press('Escape')
   await page.waitFor(`!document.getElementById('pause').hidden`, 5000, 'el menu de pausa')
   await page.eval(
-    `[...document.querySelectorAll('#pause .sheet button')].find((b) => b.textContent.startsWith('Online duel')).click()`
+    `[...document.querySelectorAll('#pause .sheet button')].find((b) => b.textContent.startsWith('Online')).click()`
   )
   await page.waitFor(
     `document.querySelector('#pause .sheet form input')`,

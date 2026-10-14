@@ -113,7 +113,7 @@ test('un codigo distinto es otra sala', (t) => {
   t.is(ana.others().length, 0)
   t.is(ana.room, 'UNO')
   t.is(beto.room, 'DOS', 'el codigo queda en mayusculas, letras y numeros')
-  t.is(presence(net, 'Cele', '').room, 'RUNA', 'sin codigo, la sala RUNA')
+  t.is(presence(net, 'Cele', '').room, 'RUNA1', 'sin codigo, la primera sala publica')
 })
 
 test('quien deja la sala se avisa enseguida y una sola vez', (t) => {
@@ -214,4 +214,101 @@ test('en un duelo por WebRTC el invitado espera al host tanto como la sala', (t)
   guest.onTick()
   t.absent(guest.duel, 'despues sale del Coliseo')
   t.alike(guest.player.snapshot().pvp, { wins: 0, losses: 0 }, 'sin ganador')
+})
+
+test('las salas publicas se numeran y se reconocen', (t) => {
+  t.is(red.publicCode(1), 'RUNA1')
+  t.is(red.publicCode(12), 'RUNA12')
+  t.is(red.shardOf(red.publicCode(7)), 7, 'ida y vuelta')
+  t.is(red.shardOf('runa-3'), 3, 'el guion no cuenta')
+  t.is(red.shardOf('RUNA'), 0, 'RUNA sola no es una sala publica numerada')
+  t.is(red.shardOf('RUNA0'), 0)
+  t.is(red.shardOf('ABCD'), 0, 'un codigo privado')
+  t.ok(red.reservedCode('public'))
+  t.ok(red.reservedCode('RUNA'))
+  t.ok(red.reservedCode('runa-2'))
+  t.absent(red.reservedCode('AMIGOS'))
+  t.is(red.DEFAULT_ROOM, 'RUNA1')
+})
+
+test('el veredicto de sala publica: solo se mudan los recien llegados que sobran', (t) => {
+  const peers = (n, fresh = []) =>
+    Array.from({ length: n }, (_, i) => ({ id: 'p' + i, fresh: fresh.includes(i) ? 1 : 0 }))
+  t.is(red.shardVerdict({ selfId: 'z', fresh: true, others: peers(7) }), 'stay', '8 caben')
+  t.is(
+    red.shardVerdict({ selfId: 'z', fresh: false, others: peers(12) }),
+    'stay',
+    'un asentado no se va'
+  )
+  // 9 en total, 2 recien llegados: se va solo el de id mas alto.
+  const nine = peers(7).concat({ id: 'q', fresh: 1 })
+  t.is(red.shardVerdict({ selfId: 'r', fresh: true, others: nine }), 'leave')
+  const nineLow = peers(7).concat({ id: 'r', fresh: 1 })
+  t.is(red.shardVerdict({ selfId: 'q', fresh: true, others: nineLow }), 'stay')
+  // 10 en total, 3 recien llegados: se van los dos mas altos.
+  const base = peers(7)
+  const verdict = (self, rest) =>
+    red.shardVerdict({
+      selfId: self,
+      fresh: true,
+      others: base.concat(rest.map((id) => ({ id, fresh: 1 })))
+    })
+  t.is(verdict('x', ['y', 'z']), 'stay')
+  t.is(verdict('y', ['x', 'z']), 'leave')
+  t.is(verdict('z', ['x', 'y']), 'leave')
+})
+
+test('fresh viaja en la linea y falta en las paginas viejas', (t) => {
+  const net = fakeTrystero()
+  const ana = new red.Presence({ name: 'Ana', room: 'X', fresh: true, joinRoom: net.joinRoom })
+  const beto = presence(net, 'Beto', 'X')
+  t.teardown(() => {
+    ana.stop()
+    beto.stop()
+  })
+  ana.start()
+  beto.start()
+  ana.beat()
+  beto.beat()
+  t.is(beto.others()[0].fresh, 1, 'Ana llega recien llegada')
+  t.is(ana.others()[0].fresh, 0, 'Beto no lo pidio')
+  ana.settle()
+  ana.beat()
+  t.is(beto.others()[0].fresh, 0, 'al asentarse deja de serlo')
+  beto.receive(JSON.stringify({ id: 'viejo', name: 'Viejo' }))
+  t.is(beto.others().find((peer) => peer.id === 'viejo').fresh, 0, 'sin el campo, asentado')
+})
+
+test('nueve recien llegados en RUNA1 terminan en 8 y 1', (t) => {
+  const net = fakeTrystero()
+  const all = []
+  t.teardown(() => {
+    for (const p of all) p.stop()
+  })
+  const join = (name, n) => {
+    const p = new red.Presence({
+      name,
+      room: red.publicCode(n),
+      fresh: true,
+      joinRoom: net.joinRoom
+    })
+    p.start()
+    return p
+  }
+  let current = []
+  for (let i = 0; i < 9; i++) current.push(join('J' + i, 1))
+  all.push(...current)
+  for (const p of current) p.beat()
+  const leavers = current.filter(
+    (p) => red.shardVerdict({ selfId: p.id, fresh: true, others: p.others() }) === 'leave'
+  )
+  t.is(leavers.length, 1, 'se va uno solo')
+  for (const p of leavers) p.stop()
+  const moved = leavers.map((p) => join(p.name, 2))
+  all.push(...moved)
+  current = current.filter((p) => !leavers.includes(p))
+  for (const p of current.concat(moved)) p.beat()
+  t.is(current[0].others().length + 1, 8, 'RUNA1 queda con 8')
+  t.is(moved[0].others().length + 1, 1, 'RUNA2 con 1')
+  t.is(moved[0].room, 'RUNA2')
 })

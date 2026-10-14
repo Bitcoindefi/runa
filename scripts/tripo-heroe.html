@@ -559,10 +559,60 @@
       #rivalbar .bar i {
         background: #e0583a;
       }
-      #stats .room {
+      /* En linea: la sala y cuantos hay; tocarla abre la hoja de la sala. */
+      #stats .online {
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
         margin-top: 6px;
+        padding: 6px 8px;
+        min-height: 32px;
+        border: 1px solid var(--line);
+        border-radius: var(--ui-r);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--dim);
+        font: inherit;
         font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      #stats .online::before {
+        content: '';
+        flex: none;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #777;
+      }
+      #stats .online[data-state='on'] {
         color: var(--accent);
+        border-color: var(--ui-edge);
+      }
+      #stats .online[data-state='on']::before {
+        background: #5fd38a;
+        box-shadow: 0 0 6px #5fd38a;
+      }
+      #stats .online[data-state='joining']::before {
+        background: #e0b850;
+        animation: net-blink 1s infinite;
+      }
+      #stats .online[data-state='error']::before {
+        background: #e0583a;
+      }
+      @keyframes net-blink {
+        50% {
+          opacity: 0.2;
+        }
+      }
+      /* Jugar en linea, en el menu de titulo: borde de oro como lo principal. */
+      #menu-main button.online {
+        border-color: var(--ui-edge);
+        box-shadow:
+          inset 0 0 14px rgba(255, 190, 80, 0.14),
+          0 2px 6px rgba(0, 0, 0, 0.45);
       }
       #gait {
         position: absolute;
@@ -903,6 +953,16 @@
         padding: 18px;
         background: rgba(11, 11, 12, 0.95);
         border: 1px solid var(--line);
+      }
+      /* Lo que no entra se desliza con la hoja, no se aplasta. */
+      #pause .sheet > * {
+        flex-shrink: 0;
+      }
+      /* Un grupo dentro de la hoja (el codigo privado, la lista de la sala). */
+      .room-box {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
 
       /* En pantallas tactiles: el texto con fondo y corto, los lugares en una
@@ -1285,14 +1345,33 @@
         camera: 'third',
         shadows: true,
         effects: matchMedia('(pointer: coarse)').matches ? 'low' : 'high',
-        // La ultima sala del Coliseo en linea.
-        room: 'RUNA'
+        // En linea al empezar: 'public' (la sala publica) u 'off'. En Steam
+        // (runa://) arranca apagado: se entra a mano desde el titulo o la insignia.
+        net: location.protocol === 'runa:' ? 'off' : 'public',
+        // Si ya se mostro el aviso de la primera vez en linea (la IP se ve).
+        netNoticed: false,
+        // La ultima sala privada del Coliseo en linea.
+        room: ''
       }
       try {
         Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS) || '{}'))
       } catch {
         // Sin almacenamiento: quedan las de siempre.
       }
+      // 'private' (volver a la ultima sala privada) ya no es un modo de arranque:
+      // una sala privada se retoma por su link (?room=CODIGO).
+      if (!['public', 'off'].includes(settings.net)) settings.net = 'public'
+      // RUNA era la sala de todos: ahora es la publica, no una privada (la misma
+      // regla que publicLike, mas abajo).
+      if (
+        /^(PUBLIC|RUNA|RUNA[1-9]\d?)$/.test(
+          String(settings.room || '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '')
+            .slice(0, 8)
+        )
+      )
+        settings.room = ''
       // La tercera persona llego despues: quien tenia guardada otra vista (la de
       // lejos era la de antes) pasa una vez a la nueva y puede volver en Opciones.
       if (settings.cameraV !== 2) {
@@ -2820,6 +2899,84 @@
         armOff.y += Math.max(0, ground + 0.8 - (camera.position.y + armOff.y))
         return armOff.lengthSq() > 1e-4 ? armOff : null
       }
+      // El heroe se desvanece si la camara le queda encima (el brazo de resorte la
+      // acerco contra una pared): opaco a mas de FADE.far metros del pecho, y a
+      // FADE.near queda en FADE.least. Solo en tercera persona dentro de un mapa.
+      // No toca los materiales del heroe, que pueden compartirse (el rival los
+      // clona, la vitrina los usa): mientras dura, cada malla lleva una copia
+      // transparente y al volver a opaco recupera la suya tal cual.
+      const FADE = { far: 2.2, near: 1.2, least: 0.25, speed: 8 }
+      const fadeChest = new THREE.Vector3()
+      // Opciones las vacia al cambiar las sombras: la copia se arma de nuevo.
+      let fadeCopies = new WeakMap()
+      let fadeNow = 1
+      let fadeShown = false
+      // La copia sigue a la suya en cada cuadro: opacidad, color y brillo (el
+      // destello al recibir un golpe).
+      function fadeSync(copy, own) {
+        copy.opacity = own.opacity * fadeNow
+        if (own.color && copy.color) copy.color.copy(own.color)
+        if (own.emissive && copy.emissive) {
+          copy.emissive.copy(own.emissive)
+          copy.emissiveIntensity = own.emissiveIntensity
+        }
+      }
+      function fadeCopy(material) {
+        let copy = fadeCopies.get(material)
+        if (!copy) {
+          copy = material.clone()
+          // clone() no copia el parche del shader.
+          copy.onBeforeCompile = material.onBeforeCompile
+          copy.customProgramCacheKey = material.customProgramCacheKey
+          copy.transparent = true
+          copy.depthWrite = false
+          fadeCopies.set(material, copy)
+        }
+        fadeSync(copy, material)
+        return copy
+      }
+      function fadeMesh(child) {
+        if (!child.isMesh) return
+        const data = child.userData
+        if (data.fadeCopy && child.material === data.fadeCopy) {
+          if (fadeShown) {
+            if (Array.isArray(data.fadeCopy)) {
+              for (let i = 0; i < data.fadeCopy.length; i++)
+                fadeSync(data.fadeCopy[i], data.fadeOwn[i])
+            } else fadeSync(data.fadeCopy, data.fadeOwn)
+          } else child.material = data.fadeOwn
+          return
+        }
+        // Una malla nueva (equipo, armadura) o lo que ya es transparente, como
+        // el tajo, que lleva su propio fundido.
+        if (!fadeShown) return
+        const own = child.material
+        if (Array.isArray(own) ? own.some((m) => m.transparent) : own.transparent) return
+        data.fadeOwn = own
+        data.fadeCopy = Array.isArray(own) ? own.map(fadeCopy) : fadeCopy(own)
+        child.material = data.fadeCopy
+      }
+      function fadeHero(dt) {
+        let want = 1
+        const applies = settings.camera === 'third' && world && screen !== 'menu' && !ground.visible
+        if (applies) {
+          hero.root.getWorldPosition(fadeChest)
+          fadeChest.y += 1.3
+          const k = (camera.position.distanceTo(fadeChest) - FADE.near) / (FADE.far - FADE.near)
+          want = FADE.least + (1 - FADE.least) * Math.min(1, Math.max(0, k))
+        }
+        // Fuera de la tercera persona (titulo, vitrina, 2.5D) vuelve opaco de una.
+        fadeNow =
+          !applies || (want === 1 && !fadeShown)
+            ? 1
+            : fadeNow + (want - fadeNow) * ease(dt, FADE.speed)
+        if (fadeNow > 0.995 && want === 1) fadeNow = 1
+        const show = fadeNow < 1
+        if (!show && !fadeShown) return
+        fadeShown = show
+        hero.root.traverse(fadeMesh)
+      }
+
       // Lo que mira la camara respecto del heroe: runaView.frame lo corre para
       // encuadrar una captura, y vuelve al pecho del heroe cuando camina.
       const framing = new THREE.Vector3(0, 1, 0)
@@ -3255,7 +3412,8 @@
           clip: '',
           rig: null,
           materials: [],
-          tag: label(who.name, duel ? '#e07a6a' : '#6fd3e0'),
+          // Con teclado, la etiqueta recuerda como desafiarlo.
+          tag: label(who.name + (duel || touchPad ? '' : ' [E]'), duel ? '#e07a6a' : '#6fd3e0'),
           bar: duel ? hpSprite() : null,
           hp: null,
           swinging: 0,
@@ -3638,6 +3796,8 @@
         // en el medio, solo para este cuadro.
         const pulled = springArm(dt)
         if (pulled) camera.position.add(pulled)
+        // Con la camara ya acercada: si le queda encima, el heroe se desvanece.
+        fadeHero(dt)
         sizeLabels()
         // El temblor de la pelea con el Coloso: se suma solo para este cuadro.
         const shook = shakeOffset(dt)
@@ -3691,6 +3851,19 @@
       const menuPage = document.getElementById('menu-page')
       const playBox = document.getElementById('play')
       const statsBox = document.getElementById('stats')
+      // La insignia En linea de la ficha abre la hoja de la sala.
+      statsBox.addEventListener('click', (event) => {
+        if (!event.target.closest('.online') || !session || paused) return
+        // Sin conexion por un error: tocarla reintenta, como dice.
+        const room = roomOf()
+        if (netState(room) === 'error') {
+          if (room.public || publicLike(room.code)) goPublic()
+          else joinPrivate(room.code)
+          return
+        }
+        openPause()
+        roomPage()
+      })
       const bossBox = document.getElementById('bossbar')
       const rivalBox = document.getElementById('rivalbar')
       const gaitBox = document.getElementById('gait')
@@ -3884,11 +4057,42 @@
         const latest = playable
           .slice()
           .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0]
+        wantNetNext = ''
         if (latest) {
           menuMain.append(
             button(L('Continue', 'Continuar'), slotNote(latest), () => play({ load: latest.slot }))
           )
         }
+        // Jugar en linea: la sala publica, o la sala privada del link de invitacion.
+        const link = linkedRoom()
+        const invite = link && link !== 'public' ? link : ''
+        const online = button(
+          L('Play online', 'Jugar en linea'),
+          invite
+            ? L('Invited to room ', 'Te invitaron a la sala ') + invite
+            : link === 'public'
+              ? L(
+                  `Public room, up to ${publicCap()} players`,
+                  `Sala publica, hasta ${publicCap()} jugadores`
+                )
+              : L(
+                  'Meet other players and duel them in the Coliseum',
+                  'Cruzate con otros jugadores y desafialos en el Coliseo'
+                ),
+          () => {
+            const want = invite || 'public'
+            if (latest) {
+              wantNetNext = want
+              play({ load: latest.slot })
+            } else {
+              newGamePage()
+              wantNetNext = want
+            }
+          },
+          !juego
+        )
+        online.classList.add('online')
+        menuMain.append(online)
         menuMain.append(
           button(
             L('New game', 'Partida nueva'),
@@ -3924,7 +4128,10 @@
           location.href = 'models.html'
         })
         menuMain.append(gallery)
-        menuMain.querySelector('button:not([disabled])').focus()
+        // Con un link a una sala, lo primero es entrar en linea.
+        const first =
+          link && !online.disabled ? online : menuMain.querySelector('button:not([disabled])')
+        first.focus()
       }
 
       function subPage(build) {
@@ -4164,6 +4371,28 @@
             again()
           }
         )
+        line(box, L('Online', 'En linea'))
+        choice(
+          box,
+          [
+            ['public', L('Public room on start', 'Sala publica al empezar')],
+            ['off', L('Offline', 'Sin conexion')]
+          ],
+          settings.net === 'off' ? 'off' : 'public',
+          (value) => {
+            settings.net = value
+            keepSettings()
+            again()
+          }
+        )
+        line(
+          box,
+          L(
+            'Other players see your name and connect to you directly (peer to peer).',
+            'Los otros jugadores ven tu nombre y se conectan directo con vos (peer to peer).'
+          ),
+          'note'
+        )
         done()
       }
 
@@ -4188,6 +4417,8 @@
         }
         if (what === 'shadows') {
           renderer.shadowMap.enabled = settings.shadows
+          // Las copias del fundido del heroe no estan en la escena: se rehacen.
+          fadeCopies = new WeakMap()
           scene.traverse((object) => {
             const list = object.material ? [object.material].flat() : []
             for (const material of list) material.needsUpdate = true
@@ -4208,6 +4439,13 @@
             L('talk, use, enter, challenge a player', 'hablar, usar, entrar, desafiar a un jugador')
           ],
           ['I', L('inventory and gear', 'inventario y equipo')],
+          [
+            'O',
+            L(
+              'online: room, players, invite a friend',
+              'en linea: sala, jugadores, invitar a un amigo'
+            )
+          ],
           ['F', L('attack the Colossus or your rival', 'atacar al Coloso o a tu rival')],
           ['T', L('back to town', 'volver a la ciudad')],
           ['V', juego && juego.wallet === false ? 'PvP' : L('wallet and PvP', 'wallet y PvP')],
@@ -4341,8 +4579,17 @@
           return
         }
         if (how.begin) session.begin(how.begin)
-        // Con ?room=CODIGO en la direccion, la partida entra sola a esa sala.
-        roomLink = linkedRoom()
+        // En linea al arrancar: lo que pidio el menu de titulo, la direccion
+        // (?sala=CODIGO) o la publica. Opciones lo apaga, y con ahorro de datos
+        // se espera a que el jugador lo pida.
+        const saveData = !!(navigator.connection && navigator.connection.saveData)
+        wantNet = wantNetNext || linkedRoom()
+        wantNetAuto = false
+        if (!wantNet && settings.net !== 'off' && !saveData) {
+          wantNet = 'public'
+          wantNetAuto = true
+        }
+        wantNetNext = ''
         setupActions()
         actionsKey = ''
         fitTerm()
@@ -4351,7 +4598,10 @@
       function stopPlay() {
         for (const entry of [...peers.values()]) dropPeer(entry)
         duelView.set(0, 0, 0)
+        stopLobby()
+        joinTicket++
         roomJoining = ''
+        wantNet = ''
         if (!session) return
         const ending = session
         session = null
@@ -4384,11 +4634,25 @@
         fightFrame(dt, time, st)
         othersFrame(dt, st)
         tickBits(dt)
-        if (roomLink && !st.title && !st.naming) {
-          const code = roomLink
-          roomLink = ''
-          joinRoom(code)
+        if (wantNet && !st.title && !st.naming) {
+          const want = wantNet
+          wantNet = ''
+          if (want === 'public') goPublic()
+          else joinPrivate(want)
+          // La primera vez que entra solo, avisa que es en linea y como apagarlo.
+          if (wantNetAuto && !settings.netNoticed) {
+            settings.netNoticed = true
+            keepSettings()
+            say(
+              L(
+                'You are online: players in your room connect to you directly and can see your IP. Turn it off in Settings.',
+                'Estas en linea: los de tu sala se conectan directo con vos y ven tu IP. Lo apagas en Opciones.'
+              )
+            )
+          }
+          wantNetAuto = false
         }
+        arrivals()
         if (meadow && world && at && world.map === at.map) meadow.update(time, dt, st, world)
         // La pantalla de texto del juego, salvo lo que la pagina ya muestra: el
         // inventario (inventario.js) y el combate en 3D (pradera.js).
@@ -4472,7 +4736,9 @@
       function refreshPlayHud(force = false) {
         if (screen !== 'play' || !live) return
         const st = live
-        const roomLine = roomText(roomOf())
+        const room = roomOf()
+        const onlineLine = netLine(room)
+        const onlineState = netState(room)
         const arena = st.arena
         const key = [
           st.name,
@@ -4491,7 +4757,8 @@
           st.field,
           settings.lang,
           gaitName(),
-          roomLine,
+          onlineLine,
+          onlineState,
           arena
             ? [
                 arena.rival.name,
@@ -4518,7 +4785,7 @@
           `<div class="purse">${L('Gold', 'Oro')} ${st.gold} &middot; ${L('Potions', 'Pociones')} ${st.potions}</div>` +
           (wornText ? `<div class="worn">${wornText}</div>` : '') +
           questLine(st.story) +
-          (roomLine ? `<div class="room">${esc(roomLine)}</div>` : '')
+          `<button type="button" class="online" data-state="${onlineState}">${esc(onlineLine)}</button>`
         const boss = st.boss
         bossBox.hidden = !boss || boss.defeated
         if (boss && !boss.defeated) {
@@ -4934,6 +5201,13 @@
           else session.press('escape')
           return
         }
+        // O abre la hoja En linea: la sala, quien mas esta, invitar a un amigo.
+        if (key === 'o' && roaming && !event.repeat) {
+          event.preventDefault()
+          openPause()
+          roomPage()
+          return
+        }
         if (event.key === 'Tab') {
           event.preventDefault()
           if (roaming && st.world) peek = !peek
@@ -4958,63 +5232,221 @@
       }
 
       // --- El Coliseo en linea ------------------------------------------------
-      // Una sala es un codigo corto: los que escriben el mismo se ven en la
-      // ciudad, se desafian con E y pelean en el Coliseo (juego.js online, sobre
-      // WebRTC). Sin sala se juega solo, como siempre.
+      // Se juega en linea por defecto: al empezar, la partida entra sola a la
+      // sala publica (Opciones lo apaga). Una sala privada es un codigo corto
+      // para jugar con amigos. Los de la misma sala se ven en la ciudad, se
+      // desafian con E y pelean en el Coliseo (juego.js online, sobre WebRTC).
 
       const roomCodeOf = (value) =>
         String(value || '')
           .toUpperCase()
           .replace(/[^A-Z0-9]/g, '')
           .slice(0, 8)
-      // La sala de la direccion (?room=CODIGO): la partida entra sola.
+      // PUBLIC, RUNA y RUNA1, RUNA2... son de la sala publica, no privados.
+      const publicLike = (value) => /^(PUBLIC|RUNA|RUNA[1-9]\d?)$/.test(roomCodeOf(value))
+      // Lo que pide la direccion: ?sala=public, ?online=1 o ?sala=RUNA3 llevan a
+      // la publica ('public'); otro codigo, a esa sala privada.
       function linkedRoom() {
         const params = new URLSearchParams(location.search)
-        return roomCodeOf(params.get('room') || params.get('sala'))
+        if (params.get('online') === '1') return 'public'
+        const code = roomCodeOf(params.get('room') || params.get('sala'))
+        if (!code) return ''
+        return publicLike(code) ? 'public' : code
       }
-      let roomLink = ''
+      // Lo que la partida pide al arrancar, y lo que pidio el menu de titulo.
+      let wantNet = ''
+      // Si wantNet salio de Opciones (entrar solo) y no de un pedido del jugador.
+      let wantNetAuto = false
+      let wantNetNext = ''
       let roomJoining = ''
+      let joinTicket = 0
+      // El primer RTCPeerConnection congela la pagina: se paga una sola vez.
+      let rtcWarm = false
       const roomOf = () => (session && session.room ? session.room() : null)
+      const publicCap = () => (juego && juego.lobby ? juego.lobby.PUBLIC_CAP : 8)
 
-      // La sala en una linea: el codigo y cuantos hay, contando a quien mira.
-      function roomText(room) {
-        if (roomJoining) return L('Joining room ', 'Entrando a la sala ') + roomJoining + '...'
-        if (!room) return ''
-        if (!room.id)
-          return `${L('Room', 'Sala')} ${room.code}: ${L('no connection', 'sin conexion')}`
-        const count = room.players.length + 1
-        const who = count === 1 ? L('player', 'jugador') : L('players', 'jugadores')
-        return `${L('Room', 'Sala')} ${room.code} · ${count} ${who}`
+      // --- La sala publica ----------------------------------------------------
+      // Sin servidor: se entra a RUNA1, se espera a los que ya estan y, si sobra
+      // gente, el recien llegado de id mas alto se muda a la siguiente. Todos
+      // calculan lo mismo (juego.lobby.shardVerdict), asi las salas se acomodan.
+      // Entrar a mano no cambia Opciones (settings.net): eso solo lo elige ahi.
+      let lobby = null
+      function goPublic(n = 1) {
+        if (!session || !juego || !juego.lobby) return
+        stopLobby()
+        lobby = { n, since: 0, decided: false, timer: setInterval(lobbyTick, 1000) }
+        joinRoom(juego.lobby.publicCode(n), { fresh: true })
+      }
+      function lobbyTick() {
+        if (!lobby || !session) return stopLobby()
+        const room = roomOf()
+        if (!lobby.since || roomJoining || !room || !room.id) return
+        const api = juego.lobby
+        const age = performance.now() - lobby.since
+        if (age < api.DISCOVER_MS) return
+        // Con un desafio o un duelo abierto no se muda nadie: se queda y listo.
+        const busy = !!(live && (live.duel || live.invite))
+        const verdict = busy
+          ? 'stay'
+          : api.shardVerdict({ selfId: room.id, fresh: room.fresh, others: room.players })
+        if (verdict === 'leave' && lobby.n < api.PUBLIC_SHARDS) return goPublic(lobby.n + 1)
+        if (!lobby.decided) {
+          lobby.decided = true
+          refreshPlayHud(true)
+        }
+        if (busy || age >= api.SETTLE_MS) {
+          session.settle()
+          stopLobby()
+        }
+      }
+      function stopLobby() {
+        if (lobby) clearInterval(lobby.timer)
+        lobby = null
       }
 
+      // Ya en la sala publica (o buscandola): no se vuelve a recorrer.
+      function inPublic() {
+        const room = roomOf()
+        return !!(lobby || (room && room.id && room.public) || publicLike(roomJoining))
+      }
+      // Con un desafio o un duelo abierto, cambiar de sala lo pierde.
+      const duelBusy = () => !!(live && (live.duel || live.invite))
+
+      // Una sala privada: un codigo de la publica lleva a la publica; vacio, nada.
+      function joinPrivate(value) {
+        const code = roomCodeOf(value)
+        if (!code) return
+        if (publicLike(code)) return inPublic() ? undefined : goPublic()
+        const room = roomOf()
+        if (roomJoining === code || (room && room.id && !room.error && room.code === code)) return
+        stopLobby()
+        settings.room = code
+        keepSettings()
+        joinRoom(code)
+      }
+
+      // Un codigo privado al azar, sin letras que se confundan al dictarlo.
+      function randomCode() {
+        const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+        let code = ''
+        while (!code || publicLike(code)) {
+          code = ''
+          for (let i = 0; i < 4; i++) code += abc[Math.floor(Math.random() * abc.length)]
+        }
+        return code
+      }
+
+      // Invitar a un amigo: el link a una sala privada (la de ahora, o una nueva).
+      // share y el portapapeles piden el toque del jugador: van antes de entrar,
+      // y se cambia de sala recien cuando el link salio (compartido, copiado o
+      // mostrado). Fuera de http (Steam, runa://game) el link es el del sitio.
+      const SITE = 'https://playruna.vercel.app/jugar'
+      function inviteFriend() {
+        const room = roomOf()
+        const mine = room && room.id && !room.public ? room.code : ''
+        if (!mine && duelBusy()) return
+        const code = mine || randomCode()
+        const base = /^https?:$/.test(location.protocol)
+          ? location.origin + location.pathname
+          : SITE
+        const url = base + '?sala=' + code
+        const enter = () => {
+          if (!mine) joinPrivate(code)
+          if (pausePage === 'room') roomPage()
+        }
+        const copied = () => {
+          say(L('Link copied: send it to a friend', 'Link copiado: mandaselo a un amigo'))
+          enter()
+        }
+        const shown = () => {
+          say(L('Send this link: ', 'Manda este link: ') + url)
+          enter()
+        }
+        const copy = () => {
+          if (navigator.clipboard) navigator.clipboard.writeText(url).then(copied, shown)
+          else shown()
+        }
+        try {
+          if (navigator.share)
+            navigator.share({ url }).then(enter, (error) => {
+              // Cancelar la hoja de compartir no cambia nada.
+              if (!error || error.name !== 'AbortError') copy()
+            })
+          else copy()
+        } catch {
+          shown()
+        }
+      }
+
+      // Lo que dice la insignia EN LINEA, y su estado para el color.
+      function netState(room) {
+        if (roomJoining || (lobby && !lobby.decided)) return 'joining'
+        if (!room) return 'off'
+        return room.id && !room.error ? 'on' : 'error'
+      }
+      function netLine(room) {
+        if ((roomJoining && publicLike(roomJoining)) || (lobby && !lobby.decided))
+          return L('Finding a public room...', 'Buscando sala publica...')
+        if (roomJoining) return L('Joining room ', 'Entrando a la sala ') + roomJoining + '...'
+        if (!room) return L('Offline · Play online', 'Sin conexion · Jugar en linea')
+        if (!room.id || room.error)
+          return L('No connection · Tap to retry', 'Sin conexion · Toca para reintentar')
+        const count = room.players.length + 1
+        const on = L('ONLINE', 'EN LINEA')
+        // En un telefono parado la etiqueta corta, para que el conteo no baje.
+        const pub = innerWidth < 480 ? L('Public', 'Publica') : L('Public room', 'Sala publica')
+        if (room.public) return `${on} · ${pub} ${room.public} · ${count}/${publicCap()}`
+        const who = count === 1 ? L('player', 'jugador') : L('players', 'jugadores')
+        return `${on} · ${L('Room', 'Sala')} ${room.code} · ${count} ${who}`
+      }
+
+      // La direccion lleva el codigo de una sala privada, para compartirla; la
+      // publica no: al recargar se vuelve a buscar lugar.
       function linkRoom(code) {
         const url = new URL(location.href)
         if (code) url.searchParams.set('room', code)
         else url.searchParams.delete('room')
         url.searchParams.delete('sala')
+        url.searchParams.delete('online')
         history.replaceState(null, '', url)
       }
 
-      function joinRoom(value) {
+      function joinRoom(code, opts = {}) {
         if (!session) return
-        const code = roomCodeOf(value) || 'RUNA'
-        settings.room = code
-        keepSettings()
+        // Sin WebRTC (modo bloqueo de iOS, algunos visores) no hay sala posible.
+        if (typeof RTCPeerConnection === 'undefined') {
+          stopLobby()
+          say(
+            L(
+              'This browser cannot play online (no WebRTC)',
+              'Este navegador no puede jugar en linea (sin WebRTC)'
+            )
+          )
+          refreshPlayHud(true)
+          return
+        }
+        const ticket = ++joinTicket
         roomJoining = code
         refreshPlayHud(true)
         // El primer RTCPeerConnection de la pagina la congela un par de segundos:
         // se pinta el aviso y recien despues se entra, con la pausa ya pagada.
         setTimeout(() => {
-          if (!session) return
-          try {
-            new RTCPeerConnection().close()
-          } catch {
-            // Sin WebRTC no hay sala: lo dice el juego al intentar.
+          if (!session || ticket !== joinTicket) return
+          if (!rtcWarm) {
+            rtcWarm = true
+            try {
+              new RTCPeerConnection().close()
+            } catch {
+              // Si falla igual, lo dice el juego al intentar.
+            }
           }
-          const ok = session.online(code)
+          const ok = session.online(code, { fresh: !!opts.fresh })
           roomJoining = ''
-          if (ok) linkRoom(code)
-          else {
+          if (ok) {
+            linkRoom(publicLike(code) ? '' : code)
+            if (lobby && opts.fresh) lobby.since = performance.now()
+          } else {
+            stopLobby()
             const room = roomOf()
             say(
               L('Could not join the room', 'No pude entrar a la sala') +
@@ -5028,57 +5460,137 @@
 
       function leaveRoom() {
         if (!session) return
+        stopLobby()
+        joinTicket++
+        roomJoining = ''
         session.offline()
         linkRoom('')
         refreshPlayHud(true)
+      }
+
+      // Alguien llego a la sala: un aviso con como desafiarlo, uno cada 4 s.
+      let arrivalRoom = ''
+      let arrivalSeen = new Set()
+      let arrivalAt = 0
+      let arrivalCheck = 0
+      function arrivals() {
+        const now = performance.now()
+        if (now - arrivalCheck < 1000) return
+        arrivalCheck = now
+        const room = roomOf()
+        if (!room || !room.id) {
+          arrivalRoom = ''
+          return
+        }
+        // Al cambiar de sala, los que ya estaban no llegaron: el que llego es uno.
+        // Mientras se busca lugar en la publica tampoco se anuncia a nadie.
+        if (room.code !== arrivalRoom || (lobby && !lobby.decided)) {
+          arrivalRoom = room.code
+          arrivalSeen = new Set(room.players.map((peer) => peer.id))
+          return
+        }
+        for (const peer of room.players) {
+          if (arrivalSeen.has(peer.id)) continue
+          arrivalSeen.add(peer.id)
+          if (now - arrivalAt < 4000 || (live && (live.duel || live.invite))) continue
+          arrivalAt = now
+          const how = touchPad
+            ? L('Walk up to them and tap DUEL.', 'Acercate y toca DESAFIAR.')
+            : L('Walk up to them and press E to duel.', 'Acercate y apreta E para un duelo.')
+          say(L(`${peer.name} joined. ${how}`, `Llego ${peer.name}. ${how}`))
+        }
       }
 
       let roomTimer = 0
       function roomPage() {
         pausePage = 'room'
         clearInterval(roomTimer)
-        const done = sheet(pauseSheet, L('Online duel', 'Duelo en linea'), pauseMain)
+        const done = sheet(pauseSheet, L('Online', 'En linea'), pauseMain)
+        const how = touchPad
+          ? L('Walk up to one and tap DUEL', 'Acercate a uno y toca DESAFIAR')
+          : L('Walk up to one and press E', 'Acercate a uno y apreta E')
         line(
           pauseSheet,
           L(
-            'Players who type the same room code meet in the city. Walk up to one and press E, or challenge from this list; the duel is fought in the Coliseum.',
-            'Los que escriben el mismo codigo de sala se encuentran en la ciudad. Acercate a uno y pulsa E, o desafialo desde esta lista; el duelo se pelea en el Coliseo.'
+            `Players in your room meet in the city. ${how}, or challenge from this list; the duel is fought in the Coliseum.`,
+            `Los jugadores de tu sala se encuentran en la ciudad. ${how}, o desafialo desde esta lista; el duelo se pelea en el Coliseo.`
           )
         )
+        const status = line(pauseSheet, '')
         const room = roomOf()
+        // Con un desafio o un duelo abierto no se cambia de sala desde aca: se
+        // pierde. Desconectarse lo avisa.
+        const busyNow = duelBusy()
+        const mineCode = room && room.id && !room.public ? room.code : ''
+        if (busyNow) {
+          line(
+            pauseSheet,
+            L(
+              'You are in a duel: finish it to change rooms.',
+              'Estas en un duelo: terminalo para cambiar de sala.'
+            ),
+            'note'
+          )
+        }
+        if (!inPublic()) {
+          pauseSheet.append(
+            button(
+              L('Join the public room', 'Entrar a la sala publica'),
+              L(
+                `Up to ${publicCap()} players, found automatically`,
+                `Hasta ${publicCap()} jugadores, se elige sola`
+              ),
+              () => {
+                goPublic()
+                roomPage()
+              },
+              busyNow
+            )
+          )
+        }
+        pauseSheet.append(
+          button(
+            L('Invite a friend', 'Invitar a un amigo'),
+            mineCode
+              ? L('Copies the link to this room', 'Copia el link a esta sala')
+              : L('Copies a link to a new private room', 'Copia un link a una sala privada nueva'),
+            () => {
+              inviteFriend()
+              roomPage()
+            },
+            busyNow && !mineCode
+          )
+        )
         const form = document.createElement('form')
-        form.className = 'sheet'
+        form.className = 'room-box'
         const input = document.createElement('input')
         input.type = 'text'
         input.maxLength = 8
         input.autocomplete = 'off'
         input.spellcheck = false
-        input.value = (room && room.code) || settings.room || 'RUNA'
+        input.value = room && room.id && !room.public ? room.code : settings.room || ''
         const label = document.createElement('label')
-        label.append(L('Room code', 'Codigo de sala'), input)
+        label.append(L('Private room code', 'Codigo de sala privada'), input)
         form.append(label)
         const join = document.createElement('button')
         join.type = 'submit'
-        join.textContent =
-          room && room.id
-            ? L('Switch room', 'Cambiar de sala')
-            : L('Join the room', 'Entrar a la sala')
+        join.textContent = L('Join', 'Entrar')
+        join.disabled = busyNow
         form.append(join)
         form.addEventListener('submit', (event) => {
           event.preventDefault()
-          joinRoom(input.value)
+          if (duelBusy()) return
+          joinPrivate(input.value)
           roomPage()
         })
         pauseSheet.append(form)
-        const status = line(pauseSheet, '')
         const list = document.createElement('div')
-        list.className = 'sheet'
+        list.className = 'room-box'
         pauseSheet.append(list)
         let shown = null
         const paint = () => {
           const now = roomOf()
-          status.textContent =
-            roomText(now) || L('Not in a room: you play alone.', 'Sin sala: jugas solo.')
+          status.textContent = netLine(now)
           const busy = !!(live && (live.duel || live.invite))
           const players = now && now.id ? now.players : []
           const key = JSON.stringify([players, busy, settings.lang])
@@ -5088,7 +5600,12 @@
           if (now && now.id && !players.length) {
             line(
               list,
-              L('Nobody else yet: share the code.', 'Todavia nadie mas: comparti el codigo.')
+              now.public
+                ? L(
+                    'Nobody else here yet. Send a friend the link or wait a moment.',
+                    'Todavia no hay nadie. Mandale el link a un amigo o espera un momento.'
+                  )
+                : L('Nobody else yet: share the code.', 'Todavia nadie mas: comparti el codigo.')
             )
           }
           for (const peer of players) {
@@ -5109,10 +5626,10 @@
           }
         }
         paint()
-        if (room && room.id) {
+        if ((room && room.id) || roomJoining || lobby) {
           pauseSheet.append(
             button(
-              L('Leave the room', 'Salir de la sala'),
+              L('Go offline', 'Desconectarse'),
               live && live.duel
                 ? L(
                     'You are in a duel: leaving concedes it',
@@ -5127,7 +5644,9 @@
           )
         }
         done()
-        input.focus()
+        // El foco empieza en Volver: un Enter de mas no cambia de sala.
+        const first = pauseSheet.lastElementChild
+        if (first) first.focus()
         roomTimer = setInterval(() => {
           if (pausePage !== 'room' || pause.hidden) clearInterval(roomTimer)
           else paint()
@@ -5172,14 +5691,7 @@
             })
           )
         }
-        pauseSheet.append(
-          button(
-            L('Online duel', 'Duelo en linea'),
-            roomText(roomOf()) ||
-              L('Play someone with a room code', 'Juga con alguien con un codigo de sala'),
-            roomPage
-          )
-        )
+        pauseSheet.append(button(L('Online', 'En linea'), netLine(roomOf()), roomPage))
         pauseSheet.append(
           button(
             L('Combat strategy', 'Estrategia de combate'),

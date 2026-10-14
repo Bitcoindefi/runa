@@ -18,13 +18,66 @@ const net = require('../../lib/net.js')
 /** La version va en el appId: una pagina vieja no se cruza con una nueva. */
 const APP_ID = 'runa-arena-v1'
 
-/** La sala RUNA es el topic runa:arena:RUNA. */
+/** La sala RUNA1 es el topic runa:arena:RUNA1. */
 const ROOM_TOPIC = 'runa:arena:'
-
-const DEFAULT_ROOM = 'RUNA'
 
 /** Letras y numeros, hasta 8: un codigo que se dicta en voz alta. */
 const ROOM_MAX = 8
+
+// --- Las salas publicas -----------------------------------------------------
+// No hay servidor que reparta: cada uno entra a RUNA1, espera a los que ya
+// estan y, si sobra gente, el recien llegado de id mas alto se muda a RUNA2, y
+// asi. Trystero arma una malla completa (cada uno conectado con todos), por eso
+// el tope es chico: 8 son 7 conexiones por telefono.
+
+/** Sala publica: RUNA1, RUNA2... (roomCode le quita el guion a RUNA-1). */
+const PUBLIC_PREFIX = 'RUNA'
+/** Jugadores por sala publica, contando a uno. */
+const PUBLIC_CAP = 8
+/** Hasta donde se busca antes de quedarse en la ultima. */
+const PUBLIC_SHARDS = 50
+/** Lo que se espera a los que ya estan antes de decidir. */
+const DISCOVER_MS = 5000
+/** Mientras dura, el recien llegado puede mudarse; despues ya es de la sala. */
+const SETTLE_MS = 15000
+
+const publicCode = (n) => PUBLIC_PREFIX + Math.max(1, Math.floor(Number(n) || 1))
+
+/** El numero de sala publica de un codigo (RUNA3 es 3), o 0 si es privada. */
+function shardOf(code) {
+  const match = /^RUNA([1-9]\d?)$/.exec(roomCode(code))
+  return match ? Number(match[1]) : 0
+}
+
+/** Los codigos que no pueden ser privados: escribirlos lleva a la publica. */
+function reservedCode(code) {
+  const room = roomCode(code)
+  return room === 'PUBLIC' || room === PUBLIC_PREFIX || shardOf(room) > 0
+}
+
+/**
+ * Quedarse o mudarse de una sala publica. Solo se muda un recien llegado
+ * (fresh); los asentados nunca. Si la sala pasa el tope, se van los recien
+ * llegados de id mas alto, tantos como sobren: todos calculan lo mismo.
+ *
+ * @param {object} opts
+ * @param {string} opts.selfId el id de presencia propio
+ * @param {boolean} opts.fresh si uno todavia es recien llegado
+ * @param {Array<{id: string, fresh?: number|boolean}>} opts.others los demas de la sala
+ * @param {number} [opts.cap]
+ * @returns {'stay'|'leave'}
+ */
+function shardVerdict({ selfId, fresh, others = [], cap = PUBLIC_CAP }) {
+  const total = others.length + 1
+  if (!fresh || total <= cap) return 'stay'
+  const over = total - cap
+  const newest = [selfId, ...others.filter((peer) => peer.fresh).map((peer) => peer.id)]
+    .sort()
+    .reverse()
+  return newest.indexOf(selfId) < over ? 'leave' : 'stay'
+}
+
+const DEFAULT_ROOM = publicCode(1)
 
 /**
  * El silencio que hace falta para dar por ido a alguien. En la terminal son
@@ -56,7 +109,8 @@ function joinTrystero(config, roomId, callbacks) {
 class WebRtcPresence extends net.Presence {
   /**
    * @param {object} [opts] los de Presence, mas:
-   * @param {string} [opts.room] el codigo de la sala (RUNA si falta)
+   * @param {string} [opts.room] el codigo de la sala (RUNA1 si falta)
+   * @param {boolean} [opts.fresh] recien llegado a una sala publica
    * @param {Function} [opts.joinRoom] el joinRoom de Trystero, o uno falso
    */
   constructor(opts = {}) {
@@ -181,5 +235,14 @@ module.exports = {
   ROOM_TOPIC,
   DEFAULT_ROOM,
   ROOM_MAX,
-  roomCode
+  roomCode,
+  PUBLIC_PREFIX,
+  PUBLIC_CAP,
+  PUBLIC_SHARDS,
+  DISCOVER_MS,
+  SETTLE_MS,
+  publicCode,
+  shardOf,
+  reservedCode,
+  shardVerdict
 }
