@@ -3937,7 +3937,13 @@ function colorsFor(style, look) {
 // cerca de la linea que los une, se cala con un tramado (dither de Bayer 4x4):
 // se ve a traves. El heroe esta donde mira la camara, a un metro del piso (la
 // pagina apunta ahi), asi que sale de la propia camara: no hace falta pasarlo.
-function seeThrough(shader) {
+// tripo-mundo.js lo usa tambien para las casas y los modelos grandes.
+// seeView.y es la altura de ese punto: la pagina lo sube cuando levanta lo que
+// mira la camara (la pelea con el Coloso), asi el corte termina en el heroe y no
+// metros detras de el.
+export const seeView = { y: { value: 1 } }
+export function seeThrough(shader) {
+  shader.uniforms.seeY = seeView.y
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vCutAt;')
     .replace(
@@ -3949,6 +3955,7 @@ function seeThrough(shader) {
       '#include <common>',
       `#include <common>
       varying vec3 vCutAt;
+      uniform float seeY;
       const float BAYER[ 16 ] = float[ 16 ]( 0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0 );`
     )
     .replace(
@@ -3956,7 +3963,7 @@ function seeThrough(shader) {
       `#include <clipping_planes_fragment>
       vec3 ahead = -vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] );
       if ( ahead.y < -0.2 && vCutAt.y > 0.3 ) {
-        vec3 hero = cameraPosition + ahead * ( ( 1.0 - cameraPosition.y ) / ahead.y );
+        vec3 hero = cameraPosition + ahead * ( ( seeY - cameraPosition.y ) / ahead.y );
         vec3 span = hero - cameraPosition;
         float along = clamp( dot( vCutAt - cameraPosition, span ) / dot( span, span ), 0.0, 1.0 );
         float left = ( 1.0 - along ) * length( span );

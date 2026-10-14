@@ -1210,6 +1210,9 @@ export function buildTerrain(world) {
     made.push(grass.mask.texture)
   }
   return {
+    // La altura del paisaje en (x, z): 0 dentro del mapa. La camara de la
+    // pagina la usa para no bajar dentro de los cerros.
+    height: mesh.userData.height,
     dispose() {
       for (const texture of made) texture.dispose()
     }

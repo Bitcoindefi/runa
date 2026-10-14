@@ -256,6 +256,7 @@ class Page {
 const KEYS = {
   Escape: { code: 'Escape', keyCode: 27 },
   Enter: { code: 'Enter', keyCode: 13, text: '\r' },
+  ArrowUp: { code: 'ArrowUp', keyCode: 38 },
   ArrowLeft: { code: 'ArrowLeft', keyCode: 37 },
   ArrowRight: { code: 'ArrowRight', keyCode: 39 },
   e: { code: 'KeyE', keyCode: 69, text: 'e' },
@@ -440,7 +441,12 @@ async function runFight() {
     check(rivalFigure && rivalFigure.name === 'Beto', 'Ana ve a Beto en el Coliseo', failures)
 
     const arena = first.live.arena
-    const toward = arena.rival.x > arena.self.x ? 'ArrowRight' : 'ArrowLeft'
+    // En tercera persona la camara va detras del heroe mirando al rival: arriba
+    // camina hacia el y los costados lo rodean. En 2.5D la pantalla no gira.
+    const third = await a.page.eval(
+      `(() => { try { return (JSON.parse(localStorage.getItem('runa:web:settings')) || {}).camera || 'third' } catch { return 'third' } })() === 'third'`
+    )
+    const toward = third ? 'ArrowUp' : arena.rival.x > arena.self.x ? 'ArrowRight' : 'ArrowLeft'
     const walk = Date.now()
     await a.page.key(toward, 'keyDown')
     await a.page.waitFor(

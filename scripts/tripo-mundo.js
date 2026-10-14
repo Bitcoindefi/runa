@@ -5,8 +5,11 @@
 // mallas para que ande liviano: los edificios de un mapa son una sola.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { buildRamparts } from './murallas.js'
+import { buildRamparts, seeThrough } from './murallas.js'
 import { buildTerrain } from './terreno.js'
+
+// La pagina mueve la altura del calado (ver seeThrough en murallas.js).
+export { seeView } from './murallas.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { document } = globalThis
@@ -231,6 +234,22 @@ function material(spec) {
         )
     }
   }
+  // Lo suelto que pasa de metro y medio se cala como las murallas si tapa al
+  // heroe. El parche de las letras va primero.
+  if (spec.h > 1.5) seeThroughMaterial(m)
+  return m
+}
+
+// Suma el calado de murallas.js al shader de un material, despues de lo que ya
+// tuviera. La clave del programa cambia para no compartirlo con el sin calar.
+function seeThroughMaterial(m) {
+  const prev = m.onBeforeCompile
+  const key = m.customProgramCacheKey.call(m)
+  m.onBeforeCompile = (shader, renderer) => {
+    prev.call(m, shader, renderer)
+    seeThrough(shader)
+  }
+  m.customProgramCacheKey = () => key + '|see'
   return m
 }
 
@@ -3000,6 +3019,8 @@ export function buildWorld(data, extras = {}) {
     vein: new THREE.Color(palette.vein || palette.glow),
     windows: []
   }
+  // Las cajas de los edificios, para que la camara de la pagina no entre en ellos.
+  const blocks = []
   for (const box of buildings) {
     const rect = {
       x0: box.x0 * CX + 0.25,
@@ -3015,6 +3036,7 @@ export function buildWorld(data, extras = {}) {
     }
     const big = Math.min(rect.x1 - rect.x0, rect.z1 - rect.z0) >= 30
     const top = big ? fortress(site, rect, opts) : house(site, rect, opts)
+    blocks.push({ x0: rect.x0, x1: rect.x1, z0: rect.z0, z1: rect.z1, top: top + 1 })
     if (name) {
       const tag = label(text(name))
       tag.position.set((rect.x0 + rect.x1) / 2, top + 1.2, (rect.z0 + rect.z1) / 2)
@@ -3022,10 +3044,10 @@ export function buildWorld(data, extras = {}) {
     }
   }
   if (site.m.count()) {
-    const houses = new THREE.Mesh(
-      site.m.geometry(),
-      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
-    )
+    // Las casas se calan como las murallas si tapan al heroe.
+    const houseMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
+    houseMat.onBeforeCompile = seeThrough
+    const houses = new THREE.Mesh(site.m.geometry(), houseMat)
     houses.castShadow = true
     houses.receiveShadow = true
     group.add(houses)
@@ -3277,6 +3299,21 @@ export function buildWorld(data, extras = {}) {
   // Modelos de Tripo como hitos: la estatua de los heroes es el heroe de Tripo,
   // y el Coloso vive en su arena.
   const loads = []
+  // La estatua y el Coloso se calan como las murallas si tapan al heroe. Sus
+  // materiales son los del GLB en cache (el menu de titulo usa el mismo): se
+  // copian para este mapa y se liberan con el.
+  const seeMaterials = []
+  const seeThroughModel = (object) => {
+    object.traverse((child) => {
+      if (!child.isMesh) return
+      const own = [child.material].flat().map((mat) => {
+        const copy = seeThroughMaterial(mat.clone())
+        seeMaterials.push(copy)
+        return copy
+      })
+      child.material = Array.isArray(child.material) ? own : own[0]
+    })
+  }
   // Tripo entrega los modelos mirando hacia +x: yaw los gira hacia donde tienen
   // que mirar.
   const place = (file, center, size, yaw = 0, done = null) => {
@@ -3354,7 +3391,7 @@ export function buildWorld(data, extras = {}) {
     plaque.position.set(cx, 1.0, south - 2.2 + 0.07)
     group.add(plaque)
     // La estatua mira al sur, hacia la plaza.
-    place('heroe.glb', new THREE.Vector3(cx, top, cz), 12, -Math.PI / 2)
+    place('heroe.glb', new THREE.Vector3(cx, top, cz), 12, -Math.PI / 2, seeThroughModel)
     const tag = label(text('heroes runa'))
     tag.position.set(cx, 2.6, south - 1.4)
     group.add(tag)
@@ -3365,6 +3402,7 @@ export function buildWorld(data, extras = {}) {
   let colossus = null
   if (data.boss) {
     place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI, (object) => {
+      seeThroughModel(object)
       colossus = object
     })
     sponsors(toWorld(data.boss.x, data.boss.y))
@@ -3464,6 +3502,8 @@ export function buildWorld(data, extras = {}) {
     toWorld,
     colossus: () => colossus,
     buildings: buildings.length,
+    blocks,
+    terrainHeight: terrain && terrain.height,
     loading: Promise.all(loads),
     // Los NPC respiran: se estiran apenas desde los pies, cada uno a su ritmo.
     // Las murallas y el terreno pueden moverse solos (antorchas, viento, agua).
@@ -3478,6 +3518,7 @@ export function buildWorld(data, extras = {}) {
     dispose() {
       if (ramparts && ramparts.dispose) ramparts.dispose()
       if (terrain && terrain.dispose) terrain.dispose()
+      for (const mat of seeMaterials) mat.dispose()
       const free = (node) => {
         if (node.userData.shared) return
         // Las instancias tienen sus propios buffers de posiciones y colores.

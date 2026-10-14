@@ -24,6 +24,35 @@
         --panel: rgba(11, 11, 12, 0.84);
         --hp: #c8483a;
         --xp: #5f9fd0;
+        /* Zonas seguras (isla, muesca, barra de inicio); 0 en la PC. */
+        --sat: env(safe-area-inset-top, 0px);
+        --sab: env(safe-area-inset-bottom, 0px);
+        --sal: env(safe-area-inset-left, 0px);
+        --sar: env(safe-area-inset-right, 0px);
+        /* Controles tactiles: escalan con el lado corto de la pantalla. */
+        --gut: clamp(10px, 3vmin, 16px);
+        --gap: clamp(6px, 2vmin, 10px);
+        --btn: clamp(48px, 13.5vmin, 58px);
+        --big: calc(var(--btn) * 1.36);
+        --chip: 44px;
+        --pad: clamp(112px, 32vmin, 148px);
+        --ctl-w: calc(2 * var(--btn) + var(--big) + 2 * var(--gap));
+        --ctl-h: calc(var(--chip) + var(--btn) + var(--big) + 2 * var(--gap));
+        --above-ctl: calc(var(--sab) + var(--gut) + max(var(--ctl-h), var(--pad)) + var(--gap));
+        --log-h: 84px;
+        --stats-w: min(290px, 36vw);
+        --ui-surface: rgba(18, 14, 9, 0.84);
+        --ui-surface-press: rgba(52, 40, 16, 0.92);
+        --ui-edge: #a8843a;
+        --ui-edge-hi: #f0d27a;
+        --ui-ink: #efe6cc;
+        --ui-label: #cfc4a4;
+        --ui-outline: 0 0 0 1px rgba(0, 0, 0, 0.7);
+        --ui-drop: 0 6px 14px rgba(0, 0, 0, 0.45);
+        --ui-r: 14px;
+        --ui-gold-hi: #f6dc8f;
+        --ui-gold-lo: #b8862e;
+        --ui-gold-ink: #1a1409;
       }
       html,
       body {
@@ -42,6 +71,7 @@
         display: block;
         width: 100vw;
         height: 100vh;
+        height: 100dvh;
       }
       [hidden] {
         display: none !important;
@@ -134,8 +164,7 @@
         margin-top: 8px;
         pointer-events: auto;
       }
-      #places button,
-      #actions button {
+      #places button {
         color: var(--fg);
         background: rgba(11, 11, 12, 0.72);
         border: 1px solid var(--line);
@@ -161,30 +190,27 @@
          sigue al pulgar. */
       #pad {
         position: fixed;
-        left: calc(18px + env(safe-area-inset-left));
-        bottom: calc(18px + env(safe-area-inset-bottom));
-        width: 148px;
-        height: 148px;
+        left: calc(var(--sal) + var(--gut));
+        bottom: calc(var(--sab) + var(--gut));
+        width: var(--pad);
+        height: var(--pad);
         border-radius: 50%;
-        background: radial-gradient(
-          circle,
-          rgba(224, 192, 96, 0.12) 0%,
-          rgba(11, 11, 12, 0.55) 70%
-        );
-        border: 2px solid rgba(224, 192, 96, 0.45);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        background: radial-gradient(circle, rgba(224, 192, 96, 0.14) 0%, rgba(18, 14, 9, 0.6) 70%);
+        border: 2px solid var(--ui-edge);
+        box-shadow: var(--ui-outline), var(--ui-drop);
         touch-action: none;
+        -webkit-tap-highlight-color: transparent;
         z-index: 3;
       }
       #pad .knob {
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 62px;
-        height: 62px;
-        margin: -31px 0 0 -31px;
+        width: calc(var(--pad) * 0.42);
+        height: calc(var(--pad) * 0.42);
+        margin: calc(var(--pad) * -0.21) 0 0 calc(var(--pad) * -0.21);
         border-radius: 50%;
-        background: radial-gradient(circle at 35% 30%, #f3d273, #b8862e);
+        background: radial-gradient(circle at 35% 30%, var(--ui-gold-hi), var(--ui-gold-lo));
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
         pointer-events: none;
         transition: transform 0.12s;
@@ -195,16 +221,21 @@
       #rotate {
         position: fixed;
         left: 50%;
-        top: calc(10px + env(safe-area-inset-top));
+        top: calc(10px + var(--sat));
         transform: translateX(-50%);
         z-index: 6;
         padding: 8px 14px;
-        border-radius: 999px;
+        border-radius: 14px;
         border: 1px solid var(--accent);
         background: rgba(11, 11, 12, 0.88);
         color: var(--fg);
         font-size: 13px;
-        white-space: nowrap;
+        white-space: normal;
+        text-align: center;
+        width: max-content;
+        max-width: calc(100vw - var(--sal) - var(--sar) - 2 * var(--gut));
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
       }
       #talk {
         position: fixed;
@@ -587,69 +618,185 @@
       #hint:empty {
         display: none;
       }
-      /* Los botones tactiles, abajo a la derecha: atacar grande en la esquina,
-         usar y la mochila al lado, y los secundarios mas chicos arriba. */
+      /* Los botones tactiles, abajo a la derecha. Cuadrados con borde dorado;
+         redonda y dorada solo la accion principal (atacar, o usar caminando). */
       #actions {
         position: fixed;
-        right: calc(16px + env(safe-area-inset-right));
-        bottom: calc(16px + env(safe-area-inset-bottom));
+        right: calc(var(--sar) + var(--gut));
+        bottom: calc(var(--sab) + var(--gut));
         display: grid;
-        grid-template-columns: 58px 58px 74px;
-        grid-template-rows: 40px 58px 74px;
+        grid-template-columns: var(--btn) var(--btn) var(--big);
+        grid-template-rows: var(--chip) var(--btn) var(--big);
         grid-template-areas:
           'peek t menu'
           'escape i e'
           'enter gait f';
-        gap: 8px;
+        gap: var(--gap);
+        place-items: center;
         pointer-events: auto;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
         z-index: 3;
       }
       #actions button {
+        width: var(--btn);
+        height: var(--btn);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
+        gap: 3px;
         padding: 0;
-        border-radius: 50%;
-        border: 2px solid rgba(224, 192, 96, 0.4);
-        background: rgba(11, 11, 12, 0.66);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-        font-size: 21px;
-        line-height: 1;
-        touch-action: manipulation;
+        border-radius: var(--ui-r);
+        border: 1.5px solid var(--ui-edge);
+        background: var(--ui-surface);
+        color: var(--ui-ink);
+        box-shadow:
+          var(--ui-outline),
+          inset 0 1px 0 rgba(240, 210, 122, 0.18),
+          var(--ui-drop);
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition:
+          transform 0.06s,
+          filter 0.06s,
+          opacity 0.15s;
+      }
+      #actions .ico {
+        display: flex;
+      }
+      #actions .ico svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       #actions button small {
-        font-size: 9px;
+        font:
+          600 10px/1 ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: var(--dim);
+        color: var(--ui-label);
+        text-shadow: 0 1px 1px #000;
+        max-width: calc(100% - 4px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      #actions button[data-act='f'] {
-        font-size: 30px;
-        color: #1a1409;
-        background: radial-gradient(circle at 35% 30%, #f6dc8f, #c99a36);
-        border-color: #f6dc8f;
-      }
-      #actions button[data-act='f'] small {
-        color: #3a2a0c;
-      }
+      /* Texto, Ciudad y Menu son fichas bajas a proposito (44 px, el minimo
+         tactil): no son acciones del juego y asi la grilla no sube y tapa menos
+         la escena. */
       #actions button[data-act='peek'],
       #actions button[data-act='t'],
-      #actions button[data-act='menu'],
-      #actions button[data-act='gait'] {
+      #actions button[data-act='menu'] {
+        width: 100%;
+        height: var(--chip);
+        gap: 2px;
         border-radius: 12px;
-        font-size: 15px;
       }
-      #actions button[data-act='gait'] {
-        font-size: 12px;
+      #actions button[data-act='peek'] .ico svg,
+      #actions button[data-act='t'] .ico svg,
+      #actions button[data-act='menu'] .ico svg {
+        width: 18px;
+        height: 18px;
       }
+      #actions button[data-act='peek'] small,
+      #actions button[data-act='t'] small,
+      #actions button[data-act='menu'] small {
+        font-size: 10px;
+      }
+      #actions button.primary {
+        width: var(--big);
+        height: var(--big);
+        border-radius: 50%;
+        color: var(--ui-gold-ink);
+        background: radial-gradient(circle at 35% 28%, var(--ui-gold-hi), var(--ui-gold-lo) 75%);
+        border: 2px solid #fff0bf;
+        box-shadow:
+          0 0 0 2px rgba(20, 14, 4, 0.85),
+          0 0 18px rgba(240, 200, 90, 0.35),
+          var(--ui-drop);
+      }
+      #actions button.primary .ico svg {
+        width: 32px;
+        height: 32px;
+        stroke-width: 2.25;
+      }
+      #actions button.primary small {
+        font-size: 11px;
+        color: #2a1e07;
+        text-shadow: none;
+      }
+      /* Listo para usar: brilla el borde (sin transform, que es del toque). */
+      #actions button.hot {
+        animation: act-hot 0.9s ease-in-out infinite alternate;
+      }
+      @keyframes act-hot {
+        to {
+          box-shadow:
+            0 0 0 2px rgba(20, 14, 4, 0.85),
+            0 0 0 5px rgba(246, 220, 143, 0.45),
+            0 0 22px rgba(246, 220, 143, 0.6),
+            var(--ui-drop);
+        }
+      }
+      #actions button.dim {
+        opacity: 0.45;
+        filter: saturate(0.3);
+      }
+      #actions button[data-tone='go'] {
+        border-color: #7fd08a;
+        color: #c8f2cc;
+      }
+      #actions button[data-tone='stop'] {
+        border-color: #e0583a;
+        color: #ffb4a6;
+      }
+      #actions button[data-tone='go'] small,
+      #actions button[data-tone='stop'] small {
+        color: inherit;
+      }
+      #actions button.off {
+        visibility: hidden;
+        pointer-events: none;
+      }
+      /* .down lo pone pointerdown: en iOS :active no siempre se aplica. */
+      #actions button.down,
       #actions button:active {
-        transform: scale(0.94);
+        transform: scale(0.92);
+        filter: brightness(1.3);
+      }
+      #actions button:not(.primary).down,
+      #actions button:not(.primary):active {
+        background: var(--ui-surface-press);
+        border-color: var(--ui-edge-hi);
       }
       #actions button[aria-pressed='true'] {
-        color: var(--accent);
-        border-color: var(--accent);
+        color: var(--ui-edge-hi);
+        border-color: var(--ui-edge-hi);
+        background:
+          linear-gradient(rgba(240, 210, 122, 0.18), rgba(240, 210, 122, 0.06)), var(--ui-surface);
+      }
+      #actions button[aria-pressed='true'] small {
+        color: var(--ui-edge-hi);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #actions button {
+          transition: none;
+        }
+        #actions button.hot {
+          animation: none;
+        }
+        #actions button.down {
+          transform: none;
+        }
       }
 
       /* La pantalla de texto del juego, cuando el mapa 3D no alcanza. */
@@ -660,6 +807,7 @@
         transform: translate(-50%, -50%);
         width: min(1240px, calc(100vw - 24px));
         height: min(820px, calc(100vh - 24px));
+        height: min(820px, calc(100dvh - 24px));
         box-sizing: border-box;
         margin: 0;
         padding: 10px 12px;
@@ -743,10 +891,13 @@
         place-items: center;
         background: rgba(5, 5, 6, 0.6);
         z-index: 4;
+        padding: var(--sat) var(--sar) var(--sab) var(--sal);
+        box-sizing: border-box;
       }
       #pause .sheet {
         width: min(460px, calc(100vw - 32px));
         max-height: calc(100vh - 32px);
+        max-height: calc(100dvh - var(--sat) - var(--sab) - 32px);
         overflow-y: auto;
         box-sizing: border-box;
         padding: 18px;
@@ -780,62 +931,64 @@
           flex-direction: column;
           gap: 8px;
           max-width: calc(100vw - 216px);
+          left: calc(var(--sal) + var(--gut));
+          bottom: calc(var(--sab) + var(--gut));
+        }
+        /* En el recorrido el joystick ocupa la esquina: los enlaces suben. */
+        body:has(#pad:not([hidden])) #links {
+          bottom: calc(var(--sab) + var(--gut) + var(--pad) + var(--gap));
         }
         #links a {
           padding: 6px 0;
         }
+        #stats {
+          top: calc(var(--sat) + var(--gut));
+          left: calc(var(--sal) + var(--gut));
+        }
+        /* Todo lo de abajo se apoya sobre los controles, nunca encima. */
         #toast,
-        #talk {
-          bottom: 200px;
-        }
-        #bag {
-          top: auto;
-          bottom: 200px;
-        }
+        #talk,
+        #bag,
         #log {
-          bottom: 190px;
+          top: auto;
+          bottom: var(--above-ctl);
         }
-        /* La ayuda de la tecla E arriba, debajo de la ficha: abajo esta el
-           registro. El paso se ve en el boton Run. */
         #hint {
-          top: 196px;
-          bottom: auto;
+          top: auto;
+          bottom: calc(var(--above-ctl) + var(--log-h) + var(--gap));
+        }
+        /* El registro no pasa de su alto (la ayuda va encima): se ven las dos
+           ultimas lineas enteras, sin una cortada arriba. */
+        #log {
+          max-height: var(--log-h);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+        }
+        #log li {
+          flex: none;
+        }
+        #log li.old {
+          display: none;
         }
         #gait {
           display: none;
         }
         #term {
-          height: calc(100vh - 196px);
-          top: 8px;
+          top: calc(var(--sat) + 8px);
+          bottom: calc(var(--above-ctl) - var(--gap));
+          height: auto;
           transform: translateX(-50%);
         }
-      }
-      /* El celular acostado tiene poca altura: el registro, la ayuda y los
-         avisos bajan al hueco entre el joystick y los botones. */
-      @media (pointer: coarse) and (max-height: 520px) {
-        #log {
-          left: calc(184px + env(safe-area-inset-left));
-          bottom: calc(10px + env(safe-area-inset-bottom));
-          width: calc(100vw - 184px - 260px);
-          font-size: 12px;
+        /* Con un dialogo abierto el registro no se transparenta detras. */
+        body:has(#talk:not([hidden])) :is(#log, #hint, #rotate),
+        body:has(#bag:not([hidden])) :is(#log, #hint) {
+          visibility: hidden;
         }
-        #hint {
-          top: auto;
-          bottom: calc(96px + env(safe-area-inset-bottom));
-          left: calc(50% - 38px);
-          font-size: 13px;
-        }
-        #toast,
-        #talk {
-          bottom: calc(132px + env(safe-area-inset-bottom));
-          left: calc(50% - 38px);
-          max-width: calc(100vw - 460px);
-        }
-        #bag {
-          bottom: calc(16px + env(safe-area-inset-bottom));
-          right: calc(260px + env(safe-area-inset-right));
-          max-height: calc(100vh - 32px);
-          overflow-y: auto;
+        /* El menu de pausa ya tapa los toques: los controles no se ven detras. */
+        body.paused :is(#actions, #pad) {
+          visibility: hidden;
         }
       }
       @media (pointer: fine) {
@@ -873,6 +1026,131 @@
         #stats .worn,
         #stats .purse {
           display: none;
+        }
+      }
+      /* Celular parado: arriba respeta la isla; abajo, todo se apila sobre los
+         controles. */
+      @media (pointer: coarse) and (orientation: portrait) {
+        #log {
+          left: calc(var(--sal) + var(--gut));
+          right: calc(var(--sar) + var(--gut));
+          width: auto;
+          bottom: var(--above-ctl);
+          font-size: 12px;
+        }
+        /* Hasta dos renglones por linea: las dos entran en el alto del registro. */
+        #log li {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        #talk,
+        #bag {
+          left: calc(var(--sal) + var(--gut));
+          right: calc(var(--sar) + var(--gut));
+          width: auto;
+          transform: none;
+          top: auto;
+          bottom: var(--above-ctl);
+          max-height: calc(100dvh - var(--above-ctl) - var(--sat) - 190px);
+          overflow-y: auto;
+          box-sizing: border-box;
+        }
+        #toast {
+          bottom: calc(var(--above-ctl) + var(--log-h) + var(--gap));
+        }
+        #hint {
+          top: auto;
+          bottom: calc(var(--above-ctl) + var(--log-h) + var(--gap));
+          max-width: calc(100vw - var(--sal) - var(--sar) - 2 * var(--gut));
+          box-sizing: border-box;
+          white-space: normal;
+          text-align: center;
+        }
+        #bossbar,
+        #rivalbar {
+          top: calc(var(--sat) + var(--gut));
+          left: calc(var(--sal) + var(--gut));
+          right: calc(var(--sar) + var(--gut));
+          width: auto;
+          transform: none;
+        }
+        body:has(#bossbar:not([hidden])) #stats,
+        body:has(#rivalbar:not([hidden])) #stats {
+          top: calc(var(--sat) + var(--gut) + 44px);
+        }
+      }
+      /* Celular acostado: el registro, la ayuda y los dialogos en la columna
+         libre entre el joystick y los botones. */
+      @media (pointer: coarse) and (max-height: 520px) {
+        #stats {
+          width: var(--stats-w);
+        }
+        #bossbar,
+        #rivalbar {
+          top: calc(var(--sat) + var(--gut));
+          left: calc(var(--sal) + var(--gut) + var(--stats-w) + var(--gap));
+          right: calc(var(--sar) + var(--gut));
+          width: auto;
+          transform: none;
+          font-size: 12px;
+        }
+        #log,
+        #talk,
+        #bag,
+        #toast {
+          left: calc(var(--sal) + var(--gut) + var(--pad) + var(--gap));
+          right: calc(var(--sar) + var(--gut) + var(--ctl-w) + var(--gap));
+          bottom: calc(var(--sab) + var(--gut));
+          top: auto;
+          width: auto;
+          max-width: none;
+          transform: none;
+          box-sizing: border-box;
+        }
+        #toast {
+          bottom: calc(var(--sab) + var(--gut) + var(--log-h) + var(--gap));
+        }
+        #log {
+          font-size: 12px;
+        }
+        #log li {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        #talk,
+        #bag {
+          font-size: 13px;
+          max-height: calc(100dvh - var(--sat) - var(--sab) - 2 * var(--gut) - 150px);
+          overflow-y: auto;
+        }
+        #hint {
+          top: auto;
+          left: auto;
+          transform: none;
+          right: calc(var(--sar) + var(--gut));
+          bottom: calc(var(--sab) + var(--gut) + var(--ctl-h) + var(--gap));
+          max-width: var(--ctl-w);
+          box-sizing: border-box;
+          white-space: normal;
+          font-size: 13px;
+        }
+        /* La pantalla de texto termina antes de la columna de los botones, asi
+           Aceptar, Comprar y los demas se leen enteros; el joystick (sin
+           letras) queda tenue encima del texto. */
+        #term {
+          top: calc(var(--sat) + 6px);
+          bottom: calc(var(--sab) + 6px);
+          left: calc(var(--sal) + 6px);
+          right: calc(var(--sar) + var(--gut) + var(--ctl-w) + var(--gap));
+          width: auto;
+          height: auto;
+          transform: none;
+        }
+        body:has(#term:not([hidden])) #pad {
+          opacity: 0.35;
         }
       }
     </style>
@@ -945,7 +1223,7 @@
       import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
       import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
-      import { buildWorld, label, labels, CX, CZ } from './mundo.js'
+      import { buildWorld, label, labels, seeView, CX, CZ } from './mundo.js'
       import { buildTitle } from './titulo.js'
       import { createEffects } from './efectos.js'
       import { createMeadow } from './pradera.js'
@@ -2087,6 +2365,9 @@
         camera.updateProjectionMatrix()
         controls.minDistance = on ? 2.4 : third ? 3 : 14
         controls.maxDistance = on ? 11 : third ? 16 : 110
+        // En tercera persona ni cenital ni a ras del pasto.
+        controls.minPolarAngle = third ? Math.PI * 0.22 : 0
+        controls.maxPolarAngle = third ? Math.PI * 0.44 : Math.PI * 0.49
       }
 
       function showcase(on) {
@@ -2118,6 +2399,9 @@
         world.built.group.traverse((object) => labels.delete(object))
         world = null
         if (marks) marks.visible = false
+        duelAim = null
+        bossAim = null
+        bossLift = 0
       }
 
       // Los mapas no cambian mientras la pagina corre: cada uno se pide una vez.
@@ -2185,6 +2469,7 @@
         }
         if (token !== worldToken) return
         loadingMap = null
+        const cameFrom = world ? world.map : null
         leaveWorld()
         let built
         try {
@@ -2214,11 +2499,31 @@
         ember.color.setHex(data.kind === 'boss' ? 0xff6a20 : 0xe0c060)
         // La vitrina se vuelve a armar al salir del mapa.
         sceneName = null
+        // El giro de la camara en el mapa anterior, alrededor del heroe.
+        const lastAz = Math.atan2(
+          camera.position.x - controls.target.x,
+          camera.position.z - controls.target.z
+        )
         heroTarget.copy(built.toWorld(at.x, at.y))
         hero.root.position.copy(heroTarget)
         controls.target.copy(heroTarget).setY(1)
         // La camara arranca al sur del heroe, mirando al norte como la terminal.
-        camera.position.copy(heroTarget).add(cameraOffset())
+        // Al pasar de un mapa a otro en tercera persona, con adelante sostenido
+        // queda detras de hacia donde caminaba el heroe; con otra tecla conserva
+        // el giro que tenia, asi la tecla sigue yendo al mismo lado y no lo
+        // vuelve a la puerta.
+        const off = cameraOffset()
+        if (cameFrom && settings.camera === 'third') {
+          const az = rawForward ? hero.root.rotation.y + Math.PI : lastAz
+          off.set(Math.sin(az) * VIEWS.third[1], VIEWS.third[0], Math.cos(az) * VIEWS.third[1])
+        }
+        camera.position.copy(heroTarget).add(off)
+        // Sin el arrastre ni el giro que quedaban del mapa anterior.
+        lead.set(0, 0, 0)
+        walkingFor = 0
+        armLen = -1
+        if (controls._sphericalDelta) controls._sphericalDelta.set(0, 0, 0)
+        if ('_scale' in controls) controls._scale = 1
         if (screen === 'tour' && !avatarBody) {
           mode.textContent =
             placeName(at.map) +
@@ -2343,18 +2648,18 @@
           sprite.scale.set(size.x * k, size.y * k, 1)
         }
       }
-      // En tercera persona la camara gira despacio hasta quedar detras del heroe
-      // cuando camina hacia donde ella mira; de costado o hacia atras no gira, asi
-      // no da vueltas sola. Con el mouse o el dedo se la sigue girando a mano.
+      // En tercera persona la camara gira despacio hasta quedar detras de
+      // `facing` (un rumbo del piso, como rotation.y del heroe) si ya esta dentro
+      // del cono; fuera de el no gira, asi no da vueltas sola. Con el mouse o el
+      // dedo se la sigue girando a mano.
       const behind = new THREE.Vector3()
-      function alignBehind(dt) {
+      function alignTo(facing, dt, cone, rate = CAM.turn) {
         behind.subVectors(camera.position, controls.target)
         const flat = Math.hypot(behind.x, behind.z)
         if (flat < 0.01) return
         const now = Math.atan2(behind.x, behind.z)
-        const facing = hero.root.rotation.y
-        if (Math.abs(wrap(now + Math.PI - facing)) > (Math.PI * 5) / 12) return
-        const turn = now + wrap(facing + Math.PI - now) * ease(dt, CAM.turn)
+        if (Math.abs(wrap(now + Math.PI - facing)) > cone) return
+        const turn = now + wrap(facing + Math.PI - now) * ease(dt, rate)
         behind.x = Math.sin(turn) * flat
         behind.z = Math.cos(turn) * flat
         camera.position.copy(controls.target).add(behind)
@@ -2384,11 +2689,30 @@
       const chase = new THREE.Vector3()
       let walkingFor = 0
       let handsUntil = 0
+      // Mientras el mouse o el dedo giran la camara, nada la acomoda sola; al
+      // soltar espera CAM.hands segundos.
+      let dragging = false
+      // La entrada cruda (respecto de la pantalla) apunta derecho adelante.
+      let rawForward = false
+      // El rumbo del piso de esa entrada, solo con rawForward; si no, null.
+      let steerYaw = null
+      // El ultimo sector del joystick, para que no titile en el borde.
+      let lastSector = null
+      // En un duelo o contra el Coloso, el rumbo hacia el rival (o null).
+      let duelAim = null
+      let bossAim = null
+      // Cuanto sube lo que mira la camara en la pelea con el Coloso.
+      let bossLift = 0
       controls.addEventListener('start', () => {
+        dragging = true
+        handsUntil = Infinity
+      })
+      controls.addEventListener('end', () => {
+        dragging = false
         handsUntil = performance.now() + CAM.hands * 1000
       })
-      function floatCamera(dt, going) {
-        walkingFor = going ? walkingFor + dt : 0
+      function floatCamera(dt, going, speed = 0) {
+        walkingFor = going && rawForward ? walkingFor + dt : 0
         // Adelante de la marcha: hacia donde mira el heroe, solo caminando.
         if (going) {
           const facing = hero.root.rotation.y
@@ -2401,11 +2725,100 @@
           // Otro mapa o un portal: sin arrastre.
           lead.set(0, 0, 0)
           chase.set(follow.x, follow.y, follow.z).sub(controls.target)
-        } else if (gap <= CAM.dead) chase.set(0, 0, 0)
-        else chase.multiplyScalar(((gap - CAM.dead) / gap) * ease(dt, CAM.lag))
+          armLen = -1
+        } else {
+          // La zona muerta solo con el heroe quieto; caminando, el retraso crece
+          // con la velocidad para que a la carrera no quede metros atras.
+          const dead = going ? 0 : CAM.dead
+          if (gap <= dead) chase.set(0, 0, 0)
+          else chase.multiplyScalar(((gap - dead) / gap) * ease(dt, CAM.lag + speed * 0.6))
+        }
         camera.position.add(chase)
         controls.target.add(chase)
-        if (going && walkingFor > CAM.wait && performance.now() > handsUntil) alignBehind(dt)
+        // Se acomoda sola solo sin manos encima. En un duelo o contra el Coloso,
+        // detras del heroe mirando al rival; caminando, solo si la entrada va
+        // derecho adelante (una diagonal no la gira: asi no da vueltas sola) y
+        // detras del rumbo pedido, no del cuerpo (una pared o una puerta que
+        // corre al heroe de costado no la tuercen).
+        const t = performance.now()
+        // Con adelante sostenido la espera despues de soltar es de un segundo.
+        const early = going && rawForward ? (CAM.hands - 1) * 1000 : 0
+        const free = !dragging && t > handsUntil - early
+        const src = screen === 'tour' ? demo : mover
+        const blocked =
+          t < (src.blockedX || 0) || t < (src.blockedY || 0) || t < (src.nudgedUntil || 0)
+        if (duelAim !== null) {
+          if (free) alignTo(duelAim, dt, Math.PI, 2.5)
+        } else if (bossAim !== null) {
+          if (free) alignTo(bossAim, dt, Math.PI, 1.5)
+        } else if (going && free && !blocked && steerYaw !== null && walkingFor > CAM.wait)
+          alignTo(steerYaw, dt, Math.PI / 8 + 0.02)
+      }
+      // El brazo de resorte de la tercera persona: si una casa queda entre lo que
+      // mira la camara y la camara, se la acerca hasta antes de la pared (y no
+      // baja dentro del cerro del borde). Se suma solo al dibujar, como el
+      // temblor: los controles nunca ven la distancia acortada. Se acerca de
+      // golpe y vuelve a alejarse despacio.
+      let armLen = -1
+      const armDir = new THREE.Vector3()
+      const armOff = new THREE.Vector3()
+      let armT0 = 0
+      let armT1 = 0
+      // Recorta [armT0, armT1] con una franja del rayo sobre un eje.
+      function armSlab(p, v, lo, hi) {
+        if (Math.abs(v) < 1e-6) {
+          if (p < lo || p > hi) armT0 = Infinity
+          return
+        }
+        let a = (lo - p) / v
+        let c = (hi - p) / v
+        if (a > c) [a, c] = [c, a]
+        if (a > armT0) armT0 = a
+        if (c < armT1) armT1 = c
+      }
+      // Las cajas llevan un margen por los zocalos y marcos que salen de la pared.
+      const ARM_PAD = 0.2
+      function armHit(o, d, want) {
+        let best = want
+        for (const b of world.built.blocks || []) {
+          // Parado en la puerta de una casa: esa casa no cuenta.
+          if (o.x > b.x0 && o.x < b.x1 && o.z > b.z0 && o.z < b.z1) continue
+          // Pegado a la pared (dentro del margen) cuenta la pared misma.
+          const near =
+            o.x > b.x0 - ARM_PAD &&
+            o.x < b.x1 + ARM_PAD &&
+            o.z > b.z0 - ARM_PAD &&
+            o.z < b.z1 + ARM_PAD
+          const pad = near ? 0 : ARM_PAD
+          armT0 = 0
+          armT1 = best
+          armSlab(o.x, d.x, b.x0 - pad, b.x1 + pad)
+          armSlab(o.y, d.y, 0, b.top)
+          armSlab(o.z, d.z, b.z0 - pad, b.z1 + pad)
+          if (armT0 <= armT1 && armT0 < best) best = armT0
+        }
+        return best
+      }
+      function springArm(dt) {
+        if (settings.camera !== 'third' || !world || screen === 'menu') {
+          armLen = -1
+          return null
+        }
+        armDir.subVectors(camera.position, controls.target)
+        const want = armDir.length()
+        if (want < 0.01) return null
+        armDir.divideScalar(want)
+        // Hasta 0,3 m antes de la casa, solo si hay una en el medio.
+        const hit = armHit(controls.target, armDir, want)
+        const free = hit < want ? Math.min(want, Math.max(1.4, hit - 0.3)) : want
+        armLen = armLen < 0 || free < armLen ? free : armLen + (free - armLen) * ease(dt, 2.2)
+        armLen = Math.min(armLen, want)
+        armOff.copy(armDir).multiplyScalar(armLen - want)
+        const ground = world.built.terrainHeight
+          ? world.built.terrainHeight(camera.position.x + armOff.x, camera.position.z + armOff.z)
+          : 0
+        armOff.y += Math.max(0, ground + 0.8 - (camera.position.y + armOff.y))
+        return armOff.lengthSq() > 1e-4 ? armOff : null
       }
       // Lo que mira la camara respecto del heroe: runaView.frame lo corre para
       // encuadrar una captura, y vuelve al pecho del heroe cuando camina.
@@ -2474,6 +2887,9 @@
           if (!child.isMesh) return
           const own = [child.material].flat().map((material) => {
             const copy = material.clone()
+            // clone() no copia el parche del shader (el calado de tripo-mundo.js).
+            copy.onBeforeCompile = material.onBeforeCompile
+            copy.customProgramCacheKey = material.customProgramCacheKey
             copy.userData.emissive = copy.emissive ? copy.emissive.clone() : null
             copy.userData.intensity = copy.emissiveIntensity ?? 1
             materials.push(copy)
@@ -2642,6 +3058,8 @@
       function fightFrame(dt, time, st) {
         const boss = st && st.boss
         if (!world || world.map !== 'boss' || !boss) {
+          bossAim = null
+          bossLift = 0
           if (fight.built) {
             fightReset()
             fight.built = null
@@ -2652,6 +3070,19 @@
         const chest = rig
           ? new THREE.Vector3().setFromMatrixPosition(rig.turn.matrixWorld).setY(rig.height * 0.62)
           : null
+        // En tercera persona la camara va detras del heroe mirando al Coloso, y
+        // un poco mas alta para que entren su cabeza y los numeros del dano.
+        bossAim =
+          chest && settings.camera === 'third'
+            ? Math.atan2(chest.x - hero.root.position.x, chest.z - hero.root.position.z)
+            : null
+        // Mas cerca del Coloso sube mas (de 2 m a 12 m hasta 2,8 m a 4 m), para
+        // que su cabeza no salga por arriba.
+        const near = chest
+          ? Math.hypot(chest.x - hero.root.position.x, chest.z - hero.root.position.z)
+          : 99
+        const wantLift = bossAim !== null ? 2 + 0.8 * Math.min(1, Math.max(0, (12 - near) / 8)) : 0
+        bossLift += (wantLift - bossLift) * Math.min(1, dt * 2)
         // Lo que paso desde el cuadro anterior, en los numeros del juego.
         if (fight.bossHp !== null && boss.hp < fight.bossHp && chest) {
           fight.hit = 1
@@ -2766,6 +3197,7 @@
       // Cuanto se corre la camara hacia el rival durante un duelo.
       const duelView = new THREE.Vector3()
       const duelWant = new THREE.Vector3()
+      const duelToward = new THREE.Vector3()
       // Lo ultimo que se vio del heroe en el duelo, para notar golpes y tajos.
       const duelSelf = { hp: null, swinging: 0 }
 
@@ -2966,20 +3398,27 @@
         const rival = arena && peers.get(arena.rival.id)
         if (!rival) {
           duelView.set(0, 0, 0)
+          duelAim = null
           duelSelf.hp = null
           duelSelf.swinging = 0
           return
         }
+        // En 2.5D la camara mira entre los dos; en tercera persona va detras del
+        // heroe, sobre la linea hacia el rival, asi el rival queda adelante.
+        duelToward.subVectors(rival.root.position, hero.root.position).setY(0)
         duelWant
-          .subVectors(rival.root.position, hero.root.position)
-          .setY(0)
-          .multiplyScalar(0.5)
+          .copy(duelToward)
+          .multiplyScalar(settings.camera === 'third' ? 0 : 0.5)
           .clampLength(0, 12)
         duelView.lerp(duelWant, Math.min(1, dt * 3))
+        duelAim =
+          settings.camera === 'third' && duelToward.lengthSq() > 0.01
+            ? Math.atan2(duelToward.x, duelToward.z)
+            : null
         // Quieto, el heroe mira al rival.
         if (velocity < 0.3) {
-          const yaw = Math.atan2(duelWant.x, duelWant.z)
-          if (duelWant.lengthSq() > 0.01) {
+          const yaw = Math.atan2(duelToward.x, duelToward.z)
+          if (duelToward.lengthSq() > 0.01) {
             hero.root.rotation.y += wrap(yaw - hero.root.rotation.y) * Math.min(1, dt * 8)
           }
         }
@@ -2998,6 +3437,9 @@
       // Hacia donde apuntan las teclas (o los dedos en la cruceta), en el piso:
       // una de 8 direcciones, sin el eje que una pared frena. Null si no se camina.
       function steerDir() {
+        // Lo que heading anota para la camara vale solo para este cuadro.
+        rawForward = false
+        steerYaw = null
         let source = null
         if (screen === 'play') {
           if (!session || !exploring(live) || peek || !live.world) return null
@@ -3037,8 +3479,22 @@
           // ventaja va a la velocidad del paso; si la alcanzo (una pared), frena.
           const along = step.dot(dir)
           lateral.copy(step).addScaledVector(dir, -along)
-          const forward = speed * Math.min(1.4, Math.max(0, along / 0.55))
-          const sideways = Math.min(1, dt * 3)
+          // Jugando, el paso va parejo (entre 0,8 y 1,2 del ritmo) y nunca pasa
+          // la celda del juego: no se acelera y frena en cada celda. La
+          // correccion de costado es suave mientras el desvio es chico.
+          const cellLen = Math.abs(dir.x) * CX + Math.abs(dir.z) * CZ
+          const forward =
+            screen === 'mirror'
+              ? speed * Math.min(1.4, Math.max(0, along / 0.55))
+              : along > 0.01
+                ? Math.min(
+                    along / Math.max(dt, 1e-3),
+                    speed * THREE.MathUtils.clamp(1 + (along - 0.5 * cellLen) * 0.8, 0.8, 1.2)
+                  )
+                : 0
+          const lat = lateral.length()
+          const sideways =
+            THREE.MathUtils.smoothstep(lat, 0.25, 0.5) * Math.min(1, dt * 3) + Math.min(1, dt * 0.6)
           const x = dir.x * forward * dt + lateral.x * sideways
           const z = dir.z * forward * dt + lateral.z * sideways
           pos.x += x
@@ -3063,7 +3519,9 @@
           if (!going) setGait('Idle', 1)
           else {
             const spec = screen === 'mirror' ? (velocity > 3.5 ? GAITS.run : GAITS.walk) : pace()
-            const base = screen === 'mirror' ? Math.max(velocity, 1) : spec.speed
+            // Las piernas siguen la velocidad real del cuerpo.
+            const base =
+              screen === 'mirror' ? Math.max(velocity, 1) : Math.min(spec.speed * 1.25, velocity)
             setGait(spec.clip, Math.min(spec.most, Math.max(0.8, base / spec.pace)))
           }
         }
@@ -3079,8 +3537,12 @@
         }
         if (going) framing.set(0, 1, 0)
         // En un duelo la camara mira entre los dos, para que el rival entre en cuadro.
-        follow.set(pos.x + framing.x + duelView.x, framing.y, pos.z + framing.z + duelView.z)
-        if (settings.camera === 'third') floatCamera(dt, going)
+        follow.set(
+          pos.x + framing.x + duelView.x,
+          framing.y + bossLift,
+          pos.z + framing.z + duelView.z
+        )
+        if (settings.camera === 'third') floatCamera(dt, going, speed)
         else {
           camera.position.add(step.subVectors(follow, controls.target))
           controls.target.copy(follow)
@@ -3169,13 +3631,23 @@
         // El mundo puede tener movimiento propio: viento, agua, NPC.
         if (world && world.built.update) world.built.update(t)
         if (title && screen === 'menu') title.update(t, dt)
+        // La inercia del giro no depende de los fps (0,05 a 60 cuadros).
+        controls.dampingFactor = 1 - Math.exp(-3.1 * dt)
         controls.update()
+        // El brazo de resorte: la camara se acerca si una casa o el cerro quedan
+        // en el medio, solo para este cuadro.
+        const pulled = springArm(dt)
+        if (pulled) camera.position.add(pulled)
         sizeLabels()
         // El temblor de la pelea con el Coloso: se suma solo para este cuadro.
         const shook = shakeOffset(dt)
         if (shook) camera.position.add(shook)
+        // El calado de murallas y casas termina donde mira la camara, aunque la
+        // pelea con el Coloso la suba: lo que esta detras del heroe no se cala.
+        seeView.y.value = world ? controls.target.y : 1
         effects.render(dt, screen)
         if (shook) camera.position.sub(shook)
+        if (pulled) camera.position.sub(pulled)
       })
 
       // En el menu de titulo la escena se corre a la derecha (una fraccion del
@@ -3198,6 +3670,9 @@
         effects.setSize(clientWidth, clientHeight)
         camera.aspect = clientWidth / clientHeight
         camera.fov = lens()
+        // En el celular el giro con el dedo es mas lento: un barrido corto no da
+        // media vuelta.
+        controls.rotateSpeed = touchPad ? (camera.aspect > 1 ? 0.5 : 0.75) : 1
         shiftView()
         camera.updateProjectionMatrix()
       }
@@ -3249,7 +3724,11 @@
         playBox.hidden = true
         actions.hidden = true
         term.hidden = true
+        // La pausa no sigue en la pantalla que viene (el stick la mira).
         pause.hidden = true
+        paused = false
+        pausePage = ''
+        document.body.classList.remove('paused')
         pad.hidden = true
         talkBox.hidden = true
         bagBox.hidden = true
@@ -3840,6 +4319,7 @@
         live = null
         peek = false
         paused = false
+        document.body.classList.remove('paused')
         session = juego.start({
           language: settings.lang,
           cols: termCols || 120,
@@ -3864,6 +4344,7 @@
         // Con ?room=CODIGO en la direccion, la partida entra sola a esa sala.
         roomLink = linkedRoom()
         setupActions()
+        actionsKey = ''
         fitTerm()
       }
 
@@ -3917,6 +4398,9 @@
         setTerm(text || peek)
         playBox.hidden = termShown
         refreshPlayHud()
+        syncActions(st)
+        // Un menu que se abre o se cierra bajo el pulgar cambia el modo del stick ya.
+        if (stickId !== null) stickSet(stickDir)
         showCell(st)
         stepGame(dt, st)
         if (termShown && termDirty) drawTerm()
@@ -4058,38 +4542,30 @@
           settings.run ? L('sprint', 'esprintar') : L('run', 'correr')
         }`
         let hint = ''
-        const use = touchPad ? '✋' : 'E'
+        // En el celular el boton ya dice que hace: la ayuda no nombra iconos.
+        const use = touchPad ? '' : 'E · '
         if (arena) {
           // Lo mismo que la linea COLISEO de la terminal: alcance y recarga.
           const ready =
             arena.self.cooldownLeft > 0 ? L('reloading', 'recargando') : L('ready', 'listo')
-          hint =
-            (touchPad ? '⚔ ' : 'F ') +
-            L('attack', 'atacar') +
-            (touchPad ? ' · ☰ ' : ' · R ') +
-            L('surrender', 'rendirse') +
-            ` · ${L('reach', 'alcance')} ${arena.distance}/${arena.self.reach} · ${ready}`
+          const state = `${L('reach', 'alcance')} ${arena.distance}/${arena.self.reach} · ${ready}`
+          hint = touchPad
+            ? state
+            : 'F ' + L('attack', 'atacar') + ' · R ' + L('surrender', 'rendirse') + ' · ' + state
         } else if (st.invite && st.invite.direction === 'out')
           hint =
             L('Waiting for ', 'Esperando a ') +
             st.invite.name +
-            (touchPad ? ' · ↩' : ' · N') +
-            L(' cancels', ' cancela')
+            (touchPad ? '' : ' · N' + L(' cancels', ' cancela'))
         else if (st.near && st.near.kind === 'player')
-          hint = use + L(' · challenge ', ' · desafiar a ') + st.near.name
+          hint = use + L('challenge ', 'desafiar a ') + st.near.name
         else if (st.near && st.near.kind === 'npc')
-          hint = use + L(' · talk to ', ' · hablar con ') + tr(st.near.name)
-        else if (st.near && st.near.kind === 'ranking')
-          hint = use + L(' · leaderboard', ' · ranking')
+          hint = use + L('talk to ', 'hablar con ') + tr(st.near.name)
+        else if (st.near && st.near.kind === 'ranking') hint = use + L('leaderboard', 'ranking')
         else if (st.boss && !st.boss.defeated)
-          hint = (touchPad ? '⚔' : 'F') + L(' · strike the Colossus', ' · golpear al Coloso')
+          hint = (touchPad ? '' : 'F · ') + L('strike the Colossus', 'golpear al Coloso')
         hintBox.textContent = hint
         drawLog()
-        const gaitButton = actions.querySelector('[data-act="gait"]')
-        if (gaitButton) {
-          gaitButton.textContent = settings.run ? L('Run', 'Corre') : L('Walk', 'Camina')
-          gaitButton.setAttribute('aria-pressed', String(settings.run))
-        }
       }
 
       // --- La pantalla de texto ---------------------------------------------
@@ -4226,6 +4702,20 @@
         d: 'right'
       }
       function heading(held, fingers) {
+        // En tercera persona el joystick usa el angulo del pulgar, no su sector:
+        // se redondea una sola vez, ya girado con la camara.
+        if (
+          !held.size &&
+          stickAngle !== null &&
+          stickId !== null &&
+          fingers.has(stickId) &&
+          settings.camera === 'third' &&
+          world
+        ) {
+          // Angulo de pantalla: 0 a la derecha, y hacia abajo; arriba es -PI/2.
+          rawForward = Math.abs(wrap(stickAngle + Math.PI / 2)) < Math.PI / 8
+          return turnToCamera(Math.cos(stickAngle), Math.sin(stickAngle), true)
+        }
         let dx = 0
         let dy = 0
         for (const dir of [...held, ...fingers.values()]) {
@@ -4233,24 +4723,45 @@
           dx += DIRS[dir][0]
           dy += DIRS[dir][1]
         }
-        return turnToCamera(Math.sign(dx), Math.sign(dy))
+        const sx = Math.sign(dx)
+        const sy = Math.sign(dy)
+        rawForward = sx === 0 && sy < 0
+        return turnToCamera(sx, sy, false)
       }
       // Adelante (W, la flecha o el joystick hacia arriba) es hacia donde mira la
       // camara: la direccion se gira con ella y vuelve a una de las 8 del juego.
       // Con la camara mirando al norte (la vista 2.5D de siempre) no cambia nada.
-      function turnToCamera(dx, dy) {
-        if (!dx && !dy) return [0, 0]
+      // sticky: el sector anterior se queda cerca de su borde (el joystick).
+      function turnToCamera(dx, dy, sticky) {
+        if (!dx && !dy) {
+          steerYaw = null
+          lastSector = null
+          return [0, 0]
+        }
         // Solo en tercera persona y con un mapa 3D: en la cripta, los campamentos
         // o la pantalla de texto la camara de fondo gira sola y torceria las flechas.
-        if (settings.camera !== 'third' || !world) return [dx, dy]
+        if (settings.camera !== 'third' || !world) {
+          steerYaw = null
+          return [Math.sign(dx), Math.sign(dy)]
+        }
         const yaw = Math.atan2(
           controls.target.x - camera.position.x,
           camera.position.z - controls.target.z
         )
         const wx = dx * Math.cos(yaw) - dy * Math.sin(yaw)
         const wy = dx * Math.sin(yaw) + dy * Math.cos(yaw)
-        const sector = (Math.round(Math.atan2(wy, wx) / (Math.PI / 4)) * Math.PI) / 4
-        return [Math.round(Math.cos(sector)), Math.round(Math.sin(sector))]
+        const angle = Math.atan2(wy, wx)
+        let sector = (Math.round(angle / (Math.PI / 4)) * Math.PI) / 4
+        if (
+          sticky &&
+          lastSector !== null &&
+          Math.abs(wrap(angle - lastSector)) < Math.PI / 8 + 0.14
+        )
+          sector = lastSector
+        lastSector = sticky ? sector : null
+        const out = [Math.round(Math.cos(sector)), Math.round(Math.sin(sector))]
+        steerYaw = rawForward ? Math.atan2(out[0], out[1]) : null
+        return out
       }
       const placeOfCell = (st) => (st.location ? st.location.mapId || st.field : '')
       function exploring(st) {
@@ -4360,6 +4871,7 @@
         if (mover.wait < -0.1) mover.wait = 0
         // Contra un muro con una puerta cerca: el paso va de costado, hacia ella.
         const side = st.combat || st.duel ? null : nudge(dx, dy)
+        if (side) mover.nudgedUntil = performance.now() + 400
         const [sx, sy, meters] = side
           ? [side[0], side[1], Math.abs(side[0]) * CX + Math.abs(side[1]) * CZ]
           : nextStep(dx, dy, mover)
@@ -4379,6 +4891,11 @@
       }
 
       // --- Teclas ------------------------------------------------------------
+
+      // El tajo del heroe contra el Coloso: el mismo con F, espacio o el boton.
+      function strikeFx(st) {
+        if (world && world.map === 'boss' && st && st.boss) swingSword()
+      }
 
       function playKey(event, down) {
         if (!session) return
@@ -4424,9 +4941,7 @@
           return
         }
         // En la arena del Coloso, F o espacio tambien hacen el tajo del heroe.
-        if ((key === 'f' || event.key === ' ') && world && world.map === 'boss' && st.boss) {
-          swingSword()
-        }
+        if (key === 'f' || event.key === ' ') strikeFx(st)
         const named = { Enter: 'enter', ' ': 'space', Backspace: 'backspace', Delete: 'delete' }[
           event.key
         ]
@@ -4626,15 +5141,22 @@
       let pausePage = ''
       function openPause() {
         paused = true
+        document.body.classList.add('paused')
         mover.held.clear()
         mover.fingers.clear()
+        clearInterval(padRepeat)
+        stopStrike()
+        stickMode = null
         pause.hidden = false
         pauseMain()
       }
       function closePause() {
         paused = false
+        document.body.classList.remove('paused')
         pause.hidden = true
         pausePage = ''
+        // El pulgar que sigue apoyado vuelve a mover al heroe en el proximo cuadro.
+        stickMode = null
       }
       function pauseMain() {
         pausePage = 'main'
@@ -4744,52 +5266,291 @@
 
       // --- Botones tactiles ---------------------------------------------------
 
+      // Iconos de trazo (24x24, currentColor): toman el color y el estado del
+      // boton, igual en iPhone, Android y Windows.
+      const SVG_NS = 'http://www.w3.org/2000/svg'
+      const ICONS = {
+        sword: 'M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2',
+        hand: 'M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15',
+        talk: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+        door: 'M6 21V4h12v17M3 21h18M14 12h.01',
+        shop: 'M3 9l1.5-5h15L21 9M3 9h18M5 9v11h14V9M10 20v-6h4v6',
+        trophy:
+          'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3',
+        bag: 'M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M8 14h8',
+        check: 'M20 6 9 17l-5-5',
+        x: 'M18 6 6 18M6 6l12 12',
+        back: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
+        flag: 'M5 22V4M5 4h12l-2 4 2 4H5',
+        home: 'M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5M10 21v-6h4v6',
+        text: 'M4 17l6-6-6-6M12 19h8',
+        menu: 'M4 6h16M4 12h16M4 18h16',
+        walk: 'm9 18 6-6-6-6',
+        run: 'm5 18 6-6-6-6M13 18l6-6-6-6'
+      }
+      function iconNode(name) {
+        const svg = document.createElementNS(SVG_NS, 'svg')
+        svg.setAttribute('viewBox', '0 0 24 24')
+        svg.setAttribute('aria-hidden', 'true')
+        svg.setAttribute('focusable', 'false')
+        const path = document.createElementNS(SVG_NS, 'path')
+        path.setAttribute('d', ICONS[name])
+        svg.append(path)
+        return svg
+      }
+      // Lo que hace E segun lo que hay al lado (nearOf en tripo-estado.js).
+      const NEAR_ACT = {
+        npc: ['talk', 'Talk', 'Hablar'],
+        player: ['sword', 'Duel', 'Desafiar'],
+        ranking: ['trophy', 'Ranks', 'Ranking'],
+        shop: ['shop', 'Shop', 'Tienda'],
+        travel: ['door', 'Go', 'Ir'],
+        home: ['door', 'Enter', 'Entrar'],
+        church: ['door', 'Enter', 'Entrar'],
+        tavern: ['door', 'Enter', 'Entrar']
+      }
+
       let actionsReady = false
+      let actionsKey = ''
+      const ACT = {}
+      // Atacar y usar salen al apoyar el dedo; el resto, con el click.
+      const STRIKE_ACTS = new Set(['f', 'e'])
+      let strikeRepeat = 0
+      function stopStrike() {
+        clearInterval(strikeRepeat)
+        strikeRepeat = 0
+      }
+
+      // Lo mismo que el teclado (playKey), boton por boton.
+      function runAct(act) {
+        if (!session) return
+        const st = live || session.state()
+        if (act === 'menu') return paused ? closePause() : openPause()
+        if (act === 'gait') {
+          settings.run = !settings.run
+          applySettings('run')
+          return
+        }
+        if (act === 'peek') {
+          if (exploring(st) && st.world) peek = !peek
+          return
+        }
+        if (act === 'escape') {
+          if (peek) {
+            peek = false
+            return
+          }
+          // El desafio enviado se cancela con N; Esc caminando abre el menu.
+          if (exploring(st) && st.invite && st.invite.direction === 'out') return session.press('n')
+          // En un duelo abre el menu: rendirse se confirma, no se toca al pasar.
+          if (exploring(st)) return openPause()
+          return session.press('escape')
+        }
+        if (act === 'f') strikeFx(st)
+        session.press(act)
+      }
+
       function setupActions() {
         if (actionsReady) return
         actionsReady = true
-        const list = [
-          ['f', '⚔', L('Attack', 'Atacar')],
-          ['e', '✋', L('Use', 'Usar')],
-          ['i', '🎒', L('Bag', 'Mochila')],
-          ['enter', '✔', 'OK'],
-          ['escape', '↩', L('Back', 'Volver')],
-          ['gait', '', ''],
-          ['t', '⌂', L('Town', 'Ciudad')],
-          ['peek', '≣', L('Text', 'Texto')],
-          ['menu', '☰', '']
-        ]
-        for (const [act, icon, name] of list) {
+        for (const act of ['peek', 't', 'menu', 'escape', 'i', 'e', 'enter', 'gait', 'f']) {
           const b = document.createElement('button')
           b.type = 'button'
           b.dataset.act = act
           b.style.gridArea = act
-          b.setAttribute('aria-label', name || act)
-          b.textContent = icon
-          if (name && act !== 't' && act !== 'peek') {
-            const small = document.createElement('small')
-            small.textContent = name
-            b.append(small)
+          const icon = document.createElement('span')
+          icon.className = 'ico'
+          const small = document.createElement('small')
+          b.append(icon, small)
+          ACT[act] = { b, icon, small, iconName: '' }
+          const release = () => {
+            b.classList.remove('down')
+            if (act === 'f') stopStrike()
           }
-          b.addEventListener('click', () => {
+          b.addEventListener('pointerdown', (event) => {
+            b.classList.add('down')
+            if (!STRIKE_ACTS.has(act)) return
+            event.preventDefault()
+            b.setPointerCapture(event.pointerId)
+            runAct(act)
+            // En el duelo, mantener apretado repite el ataque; la recarga
+            // (cooldownLeft) la impone el juego.
+            if (act === 'f' && live && live.arena) {
+              stopStrike()
+              strikeRepeat = setInterval(() => {
+                if (!session || paused || !live || !live.arena) return stopStrike()
+                runAct('f')
+              }, 260)
+            }
+          })
+          b.addEventListener('pointerup', release)
+          b.addEventListener('pointercancel', release)
+          b.addEventListener('pointerleave', release)
+          b.addEventListener('lostpointercapture', release)
+          b.addEventListener('contextmenu', (event) => event.preventDefault())
+          b.addEventListener('click', (event) => {
             b.blur()
-            if (!session) return
-            if (act === 'menu') return paused ? closePause() : openPause()
-            if (act === 'gait') {
-              settings.run = !settings.run
-              applySettings('run')
-              return
-            }
-            if (act === 'peek') {
-              peek = !peek
-              return
-            }
-            // En un duelo, volver abre el menu: rendirse se elige, no se toca al pasar.
-            if (act === 'escape' && live && live.duel && !paused) return openPause()
-            session.press(act)
+            // Con el dedo, atacar y usar ya salieron en pointerdown; el click
+            // solo cuenta si viene del teclado (detail 0).
+            if (STRIKE_ACTS.has(act) && event.detail > 0) return
+            runAct(act)
           })
           actions.append(b)
         }
+        actionsKey = ''
+        if (live) syncActions(live)
+      }
+
+      // Un boton: visible o no, su icono, su texto (tambien aria-label) y su estado.
+      function setAct(act, o) {
+        const a = ACT[act]
+        if (!a) return
+        const show = !!o
+        o = o || {}
+        a.b.classList.toggle('off', !show)
+        a.b.classList.toggle('primary', show && !!o.primary)
+        a.b.classList.toggle('dim', show && !!o.dim)
+        a.b.classList.toggle('hot', show && !!o.hot)
+        a.b.style.gridArea = o.area || act
+        a.b.dataset.tone = o.tone || ''
+        a.b.tabIndex = show ? 0 : -1
+        a.b.setAttribute('aria-hidden', String(!show))
+        if (o.icon && o.icon !== a.iconName) {
+          a.iconName = o.icon
+          a.icon.replaceChildren(iconNode(o.icon))
+        }
+        if (o.label && a.small.textContent !== o.label) {
+          a.small.textContent = o.label
+          a.b.setAttribute('aria-label', o.label)
+        }
+        if (o.pressed === undefined) a.b.removeAttribute('aria-pressed')
+        else a.b.setAttribute('aria-pressed', String(o.pressed))
+      }
+
+      // Los botones muestran solo lo que el juego acepta ahora. Se ocultan con
+      // visibility (.off): los demas no se mueven de lugar.
+      function syncActions(st) {
+        if (!actionsReady || actions.hidden || !st) return
+        const arena = st.arena
+        const inv = st.invite
+        const near = st.near
+        const inviteIn = !!(inv && inv.direction === 'in')
+        const inviteOut = !!(inv && inv.direction === 'out')
+        const screenUp = !!(st.title || st.naming || (st.overlay && !inviteIn))
+        const bossLive = !!(st.boss && !st.boss.defeated)
+        const inReach = !!(arena && arena.distance <= arena.self.reach)
+        const loaded = !arena || arena.self.cooldownLeft <= 0
+        const key = [
+          paused,
+          peek,
+          screenUp && (st.overlay || 'title'),
+          inviteIn,
+          inviteOut,
+          !!arena,
+          inReach,
+          loaded,
+          st.combat,
+          st.field,
+          bossLive,
+          near ? near.kind + (near.name || '') : '',
+          settings.run,
+          settings.lang,
+          !!st.world
+        ].join('|')
+        if (key === actionsKey) return
+        actionsKey = key
+        const roam = !screenUp && !inviteIn
+        setAct('menu', { icon: 'menu', label: L('Menu', 'Menu') })
+        setAct(
+          'gait',
+          roam && {
+            icon: settings.run ? 'run' : 'walk',
+            label: L('Run', 'Correr'),
+            pressed: settings.run
+          }
+        )
+        setAct(
+          'peek',
+          roam && (!!st.world || peek) && { icon: 'text', label: L('Text', 'Texto'), pressed: peek }
+        )
+        setAct(
+          't',
+          roam &&
+            !arena &&
+            st.field === 'field' &&
+            !st.combat && { icon: 'home', label: L('Town', 'Ciudad') }
+        )
+        if (inviteIn) {
+          for (const a of ['f', 'e', 'i']) setAct(a, null)
+          // Aceptar va en el lugar grande, bajo el pulgar, como Atacar y Usar.
+          setAct('enter', {
+            icon: 'check',
+            label: L('Accept', 'Aceptar'),
+            tone: 'go',
+            hot: true,
+            primary: true,
+            area: 'f'
+          })
+          setAct('escape', { icon: 'x', label: L('Decline', 'Rechazar'), tone: 'stop' })
+          return
+        }
+        if (screenUp) {
+          for (const a of ['f', 'e', 'i']) setAct(a, null)
+          // El inventario trae sus propios botones y tapa la grilla.
+          setAct(
+            'enter',
+            st.overlay !== 'inventory' && {
+              icon: 'check',
+              label: st.overlay === 'shop' ? L('Buy', 'Comprar') : L('OK', 'OK')
+            }
+          )
+          setAct('escape', {
+            icon: 'back',
+            label: st.title || st.naming ? L('Back', 'Volver') : L('Close', 'Cerrar')
+          })
+          return
+        }
+        if (arena) {
+          setAct('f', {
+            icon: 'sword',
+            primary: true,
+            label: loaded ? L('Attack', 'Atacar') : L('Reload', 'Recarga'),
+            hot: inReach && loaded,
+            dim: !inReach || !loaded
+          })
+          setAct('escape', { icon: 'flag', label: L('Give up', 'Rendirse'), tone: 'stop' })
+          for (const a of ['e', 'i', 'enter']) setAct(a, null)
+          return
+        }
+        if (st.combat || st.field === 'boss') {
+          setAct('f', {
+            icon: 'sword',
+            primary: true,
+            label: st.combat ? L('Attack', 'Atacar') : L('Strike', 'Golpear'),
+            hot: st.combat || bossLive,
+            dim: !st.combat && !bossLive
+          })
+          setAct('e', !st.combat && { icon: 'hand', label: L('Use', 'Usar') })
+          setAct('i', !st.combat && { icon: 'bag', label: L('Bag', 'Mochila') })
+          setAct('enter', null)
+          setAct('escape', null)
+          return
+        }
+        // Caminando (ciudad, mapas, pradera o cripta sin pelea): USE pasa al
+        // lugar grande y dice que va a hacer.
+        const [icon, en, es] = (near && NEAR_ACT[near.kind]) || ['hand', 'Use', 'Usar']
+        setAct('f', null)
+        setAct('e', {
+          icon,
+          label: L(en, es),
+          primary: true,
+          area: 'f',
+          hot: !!near,
+          dim: !near && !st.field
+        })
+        setAct('i', { icon: 'bag', label: L('Bag', 'Mochila') })
+        setAct('enter', null)
+        setAct('escape', inviteOut && { icon: 'x', label: L('Cancel', 'Cancelar'), tone: 'stop' })
       }
 
       // --- Recorrer: el mundo 3D sin reglas ----------------------------------
@@ -5558,6 +6319,9 @@
       const knob = pad.querySelector('.knob')
       let stickId = null
       let stickDir = null
+      let stickMode = null
+      // El angulo del pulgar (fuera de los menus), para caminar en tercera persona.
+      let stickAngle = null
       let padRepeat = 0
       const fingersNow = () => (screen === 'play' ? mover.fingers : demo.fingers)
       const inMenu = () => screen === 'play' && session && !exploring(live)
@@ -5573,24 +6337,45 @@
           dy *= reach / dist
         }
         knob.style.transform = `translate(${dx}px, ${dy}px)`
-        if (dist < 16) return null
+        if (dist < 16) {
+          stickAngle = null
+          return null
+        }
         const turn = Math.atan2(dy, dx)
-        if (inMenu())
-          return ['right', 'down', 'left', 'up'][((Math.round(turn / (Math.PI / 2)) % 4) + 4) % 4]
-        return SECTORS[((Math.round(turn / (Math.PI / 4)) % 8) + 8) % 8]
+        stickAngle = inMenu() ? null : turn
+        const names = inMenu() ? ['right', 'down', 'left', 'up'] : SECTORS
+        const step = (2 * Math.PI) / names.length
+        // Cerca del borde entre dos sectores se queda el que ya estaba (unos 10 grados).
+        const at = names.indexOf(stickDir)
+        if (at >= 0) {
+          const off = Math.atan2(Math.sin(turn - at * step), Math.cos(turn - at * step))
+          if (Math.abs(off) < step / 2 + 0.17) return stickDir
+        }
+        return names[((Math.round(turn / step) % names.length) + names.length) % names.length]
       }
       function stickSet(dir) {
-        if (dir === stickDir) return
+        const mode = inMenu() ? 'menu' : 'move'
+        if (dir === stickDir && mode === stickMode) return
+        // Un menu que se abre bajo el pulgar quieto no recibe esa direccion: solo
+        // cuenta un sector nuevo o un toque nuevo.
+        const held = mode === 'menu' && stickMode !== 'menu' && dir === stickDir
         stickDir = dir
+        stickMode = mode
         clearInterval(padRepeat)
-        if (inMenu()) {
-          if (!dir) return
+        fingersNow().delete(stickId)
+        // Bajo la hoja de pausa el pulgar no le manda nada al juego.
+        if (!dir || paused) return
+        if (mode === 'menu') {
+          // Una diagonal que quedo de caminar no es una tecla: espera al pulgar.
+          if (dir.includes('-') || held) return
           session.press(dir)
-          padRepeat = setInterval(() => session && session.press(dir), 160)
+          padRepeat = setInterval(() => {
+            if (!session || paused || !inMenu()) return clearInterval(padRepeat)
+            session.press(dir)
+          }, 160)
           return
         }
-        if (dir) fingersNow().set(stickId, dir)
-        else fingersNow().delete(stickId)
+        fingersNow().set(stickId, dir)
       }
       pad.addEventListener('pointerdown', (event) => {
         event.preventDefault()
@@ -5609,6 +6394,7 @@
         fingersNow().delete(stickId)
         stickId = null
         stickDir = null
+        stickAngle = null
         pad.classList.remove('held')
         knob.style.transform = ''
       }
@@ -5625,12 +6411,25 @@
         'Turn your phone sideways for a wider view · tap to hide',
         'Gira el celular para ver mas · toca para ocultar'
       )
+      let rotateTimer = 0
       function checkRotate() {
         rotate.hidden =
           rotateClosed ||
           !touchPad ||
           innerHeight <= innerWidth ||
           (screen !== 'play' && screen !== 'tour')
+        // Se ve unos segundos y se va solo: debajo esta la ficha. Solo cuenta el
+        // tiempo en que se ve.
+        if (rotate.hidden && rotateTimer) {
+          clearTimeout(rotateTimer)
+          rotateTimer = 0
+        }
+        if (!rotate.hidden && !rotateTimer) {
+          rotateTimer = setTimeout(() => {
+            rotateClosed = true
+            checkRotate()
+          }, 6000)
+        }
       }
       rotate.addEventListener('click', () => {
         rotateClosed = true

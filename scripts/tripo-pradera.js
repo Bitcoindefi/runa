@@ -2556,28 +2556,30 @@ class Effects {
       this.crowd.health(fight.id, share)
       hint.className = 'fight'
       hint.textContent = touch
-        ? L('F or the pad toward it: attack', 'F o la cruceta hacia el: atacar')
+        ? L('Attack or the pad toward it', 'Atacar o la cruceta hacia el')
         : L('F, Space or a step toward it: attack', 'F, Espacio o un paso hacia el: atacar')
       hint.hidden = false
       return
     }
     foebar.hidden = true
     hint.className = ''
-    const near = this.nearHint(st)
+    const near = this.nearHint(st, touch)
     hint.textContent = near
     hint.hidden = !near
   }
 
   // La ayuda fuera de la pelea: hablar con la guardabosques, entrar a la cripta
-  // o al portal, volver a la ciudad.
-  nearHint(st) {
+  // o al portal, volver a la ciudad. En el celular nombra los botones (Usar,
+  // Ciudad), no las teclas.
+  nearHint(st, touch = false) {
     const L = this.L
+    const key = (letter) => (touch ? '' : letter + ' · ')
     const meadow = this.crowd.world.data.meadow
     const at = st.location
     if (!at) return ''
     const close = (p, rx, ry) => Math.abs(p.x - at.x) <= rx && Math.abs(p.y - at.y) <= ry
     for (const guide of meadow.guides) {
-      if (close(guide, 2, 2)) return L('E · talk to ', 'E · hablar con ') + guide.name
+      if (close(guide, 2, 2)) return key('E') + L('talk to ', 'hablar con ') + guide.name
     }
     if (close(meadow.crypt, 6, 3)) {
       return L('X · step on it to go down to the crypt', 'X · pisala para bajar a la cripta')
@@ -2585,11 +2587,17 @@ class Effects {
     if (close(meadow.portal, 9, 5)) {
       return L('O · step into the portal of the Colossus', 'O · entra al portal del Coloso')
     }
-    if (close(meadow.gate, 7, 3)) return L('< or T · back to RUNA', '< o T · volver a RUNA')
+    if (close(meadow.gate, 7, 3)) {
+      return touch
+        ? L('Town · back to RUNA', 'Ciudad · volver a RUNA')
+        : L('< or T · back to RUNA', '< o T · volver a RUNA')
+    }
     if (close(meadow.nox, 7, 3)) return L('N · cross into NOX', 'N · cruzar a NOX')
     // Herido y lejos: T vuelve a la ciudad (en la iglesia se cura).
     if (st.maxhp && st.hp / st.maxhp < 0.4) {
-      return L('Low HP · T: back to RUNA to heal', 'Poca vida · T: volver a RUNA a curarte')
+      return touch
+        ? L('Low HP · Town: back to RUNA to heal', 'Poca vida · Ciudad: volver a RUNA a curarte')
+        : L('Low HP · T: back to RUNA to heal', 'Poca vida · T: volver a RUNA a curarte')
     }
     return ''
   }
