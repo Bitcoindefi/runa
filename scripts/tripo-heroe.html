@@ -3587,7 +3587,7 @@
       // Lo ultimo que se vio del heroe en el duelo, para notar golpes y tajos.
       // predicted: cuando el invitado mostro su tajo al apretar, antes de que el
       // host lo ordene (solo se ve; el dano lo decide el host).
-      const duelSelf = { hp: null, swinging: 0, predicted: -Infinity }
+      const duelSelf = { id: null, hp: null, swinging: 0, predicted: -Infinity }
       // Lo que tarda un tick del juego (lib/game.js TICK_MS): la recarga del
       // duelo se cuenta en ticks.
       const DUEL_TICK_MS = 1000 / 15
@@ -4037,10 +4037,15 @@
 
         const rival = arena && peers.get(arena.rival.id)
         if (!rival) {
-          // El duelo termino por vida y el heroe sigue en pie: gano (el ultimo
-          // golpe cierra el duelo antes de que se vea la vida del rival en 0).
-          const won = duelSelf.hp > 0 && st && st.lastDuel && st.lastDuel.reason === 'vida'
-          if (!arena && duelSelf.hp !== null && won) cue('kill')
+          // El duelo termino por vida: el ultimo golpe cierra el duelo antes de
+          // que se vea una vida en 0, asi que decide el ganador que anoto el
+          // juego. El que gano oye el remate; el que perdio, el golpe final.
+          const last = st && st.lastDuel
+          if (!arena && duelSelf.hp !== null && last && last.reason === 'vida') {
+            if (last.winner === duelSelf.id) cue('kill')
+            else cue('hurt', 1)
+          }
+          duelSelf.id = null
           duelView.set(0, 0, 0)
           duelAim = null
           duelSelf.hp = null
@@ -4078,6 +4083,7 @@
           duelImpact('hurt', (duelSelf.hp - arena.self.hp) / (arena.self.maxHp || 1))
         }
         duelSelf.hp = arena.self.hp
+        duelSelf.id = arena.self.id
         // El tajo que ordeno el host: si el invitado ya lo mostro al apretar, no
         // se repite.
         if (

@@ -532,6 +532,10 @@ async function runFight() {
       failures
     )
     check(same(sa.live.pvp, { wins: 1, losses: 0 }), 'Ana suma una victoria', failures)
+    // El remate suena solo en la pagina del que gano; el que perdio oye el golpe.
+    const kills = (state) => (state.sound && state.sound.counts && state.sound.counts.kill) || 0
+    check(kills(sa) === 1, 'Ana oye el remate una vez', failures)
+    check(kills(sb) === 0, 'Beto no oye el remate', failures)
     check(same(sb.live.pvp, { wins: 0, losses: 1 }), 'Beto suma una derrota', failures)
     check(same(home(sa.live.location), home(homes[0])), 'Ana vuelve a donde estaba', failures)
     check(same(home(sb.live.location), home(homes[1])), 'Beto vuelve a donde estaba', failures)
