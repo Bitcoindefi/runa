@@ -189,6 +189,9 @@ export function pinchStep(before, after, k, { min = 0.2, max = 40 } = {}) {
   return { k: next, from: mid(before), to: mid(after) }
 }
 
+// El relleno de los campamentos en la pestana Reino (tambien en su leyenda).
+const CAMP_BOX = { camp: 'rgba(120, 40, 30, 0.9)', cleared: 'rgba(90, 86, 78, 0.9)' }
+
 // Los colores de las marcas (tambien en la leyenda).
 const MARK = {
   hero: '#ffffff',
@@ -227,6 +230,12 @@ const CSS = `
     right: calc(var(--sar) + var(--gut) + var(--mini) + var(--gap));
   }
 }
+@media (pointer: coarse) and (orientation: portrait) {
+  body:has(#minimap:not([hidden])) #rotate {
+    left: calc(var(--sal) + var(--gut)); transform: none;
+    max-width: calc(100vw - var(--sal) - var(--sar) - 2 * var(--gut) - var(--mini) - var(--gap));
+  }
+}
 body:has(#minimap:not([hidden])) #gait { top: calc(16px + var(--mini) + 10px); }
 #atlas {
   position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
@@ -254,6 +263,7 @@ body:has(#minimap:not([hidden])) #gait { top: calc(16px + var(--mini) + 10px); }
 }
 #atlas .atlas-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }
 #atlas .atlas-legend i.sq { border-radius: 1px; transform: rotate(45deg) scale(.85); }
+#atlas .atlas-legend i.box { border-radius: 1px; }
 #atlas .atlas-legend i.tri { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 #atlas .atlas-legend i.star { border-radius: 0; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); width: 11px; height: 11px; }
 #atlas .atlas-hint { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: var(--dim, #7a7a72); pointer-events: none; }
@@ -294,8 +304,6 @@ export function createAtlas(ctx) {
   mini.id = 'minimap'
   mini.type = 'button'
   mini.hidden = true
-  mini.setAttribute('aria-label', L('Map (M)', 'Mapa (M)'))
-  mini.title = L('Map (M)', 'Mapa (M)')
   const miniCanvas = document.createElement('canvas')
   mini.append(miniCanvas)
   document.body.append(mini)
@@ -304,7 +312,6 @@ export function createAtlas(ctx) {
   panel.id = 'atlas'
   panel.hidden = true
   panel.setAttribute('role', 'dialog')
-  panel.setAttribute('aria-label', L('Map', 'Mapa'))
   const bar = document.createElement('div')
   bar.className = 'atlas-top'
   const tabs = document.createElement('div')
@@ -318,14 +325,13 @@ export function createAtlas(ctx) {
     tabs.append(b)
     return b
   }
-  tabButton('region', L('Region', 'Region'))
-  tabButton('kingdom', L('Kingdom', 'Reino'))
+  const regionTab = tabButton('region', '')
+  const kingdomTab = tabButton('kingdom', '')
   const title = document.createElement('div')
   title.className = 'atlas-title'
   const closer = document.createElement('button')
   closer.type = 'button'
   closer.className = 'atlas-close'
-  closer.textContent = L('Close (M)', 'Cerrar (M)')
   closer.addEventListener('click', () => close())
   bar.append(tabs, title, closer)
   const goal = document.createElement('div')
@@ -337,13 +343,24 @@ export function createAtlas(ctx) {
   legend.className = 'atlas-legend'
   const hint = document.createElement('div')
   hint.className = 'atlas-hint'
-  hint.textContent = L(
-    'Drag to move, wheel or pinch to zoom · Tab switches · M or Esc closes',
-    'Arrastra para mover, rueda o pellizco para el zoom · Tab cambia · M o Esc cierra'
-  )
   stage.append(canvas, legend, hint)
   panel.append(bar, goal, stage)
   document.body.append(panel)
+  // Los textos fijos, en el idioma de ahora: se rearman al abrir el mapa y al
+  // volver a mostrar el minimapa (el idioma se cambia desde la pausa).
+  function fillChrome() {
+    mini.setAttribute('aria-label', L('Map (M)', 'Mapa (M)'))
+    mini.title = L('Map (M)', 'Mapa (M)')
+    panel.setAttribute('aria-label', L('Map', 'Mapa'))
+    regionTab.textContent = L('Region', 'Region')
+    kingdomTab.textContent = L('Kingdom', 'Reino')
+    closer.textContent = L('Close (M)', 'Cerrar (M)')
+    hint.textContent = L(
+      'Drag to move, wheel or pinch to zoom · Tab switches · M or Esc closes',
+      'Arrastra para mover, rueda o pellizco para el zoom · Tab cambia · M o Esc cierra'
+    )
+  }
+  fillChrome()
   // Safari hace zoom de la pagina con un pellizco aunque el lienzo lo atienda.
   for (const name of ['gesturestart', 'gesturechange']) {
     panel.addEventListener(name, (event) => event.preventDefault())
@@ -813,13 +830,35 @@ export function createAtlas(ctx) {
           ? 'rgba(76, 112, 56, 0.35)'
           : camp
             ? camp.cleared
-              ? 'rgba(90, 86, 78, 0.9)'
-              : 'rgba(120, 40, 30, 0.9)'
+              ? CAMP_BOX.cleared
+              : CAMP_BOX.camp
             : 'rgba(24, 22, 18, 0.92)'
       g.fillRect(x, y, w, h)
       g.lineWidth = here ? 3 : 1.2
       g.strokeStyle = here ? MARK.hero : onRoute.has(id) ? MARK.next : '#6a5a3a'
       g.strokeRect(x, y, w, h)
+    }
+    // Lo que hay adentro de la pradera: la cripta y el portal, como en el juego.
+    // Van antes de los nombres para no taparlos.
+    const inMeadow = atlas.links.filter((l) => l.from === 'field')
+    const gatePoints = []
+    for (const gate of inMeadow) {
+      if (gate.to.startsWith('camp:')) continue
+      const [x, y] = P(...Object.values(meadowPoint(gate.x, gate.y)))
+      gatePoints.push([x, y])
+      diamond(g, x, y, 5, onRoute.has(gate.to) ? MARK.next : MARK.exit)
+    }
+    // Si un porton cae donde iria el nombre (x0..x1, y0..y1), el nombre se corre.
+    const hitsGate = (x0, y0, x1, y1) =>
+      gatePoints.some(([gx, gy]) => gx >= x0 - 6 && gx <= x1 + 6 && gy >= y0 - 6 && gy <= y1 + 6)
+    for (const id of ids) {
+      const b = box(id)
+      if (!b) continue
+      const [x, y] = P(b.x, b.y)
+      const w = b.w * k
+      const h = b.h * k
+      const here = id === atlas.region
+      const camp = b.camp ? camps.find((c) => 'camp:' + c.id === id) : null
       g.font = `${fontPx}px ui-monospace, monospace`
       g.textAlign = 'center'
       g.textBaseline = id === 'field' ? 'top' : 'middle'
@@ -827,9 +866,27 @@ export function createAtlas(ctx) {
       const label = named(id)
       const ly = id === 'field' ? y + 4 : y + h / 2
       if (camp) {
-        g.font = `${Math.max(9, fontPx - 2)}px ui-monospace, monospace`
+        // Abajo de su caja, o arriba si ahi abajo hay un porton.
+        const small = Math.max(9, fontPx - 2)
+        g.font = `${small}px ui-monospace, monospace`
+        const half = g.measureText(label).width / 2
+        const below = !hitsGate(x + w / 2 - half, y + h, x + w / 2 + half, y + h + small + 2)
+        g.textBaseline = below ? 'top' : 'bottom'
+        g.fillText(label, x + w / 2, below ? y + h + 2 : y - 2)
+      } else if (id !== 'field' && g.measureText(label).width > w - 4) {
+        // Una caja angosta (el Coliseo): el nombre va abajo, alineado con la
+        // caja y sobre un fondo, por si pisa el borde de la caja de al lado.
+        const small = Math.max(9, fontPx - 2)
+        g.font = `${small}px ui-monospace, monospace`
+        g.textAlign = 'left'
         g.textBaseline = 'top'
-        g.fillText(label, x + w / 2, y + h + 2)
+        const tw = g.measureText(label).width
+        const lx = Math.max(2, Math.min(x, rect.width - tw - 2))
+        g.fillStyle = 'rgba(8, 8, 10, 0.85)'
+        g.fillRect(lx - 2, y + h + 1, tw + 4, small + 3)
+        g.fillStyle = here ? MARK.hero : '#efe6cc'
+        g.fillText(label, lx, y + h + 2)
+        g.textAlign = 'center'
       } else g.fillText(label, x + w / 2, ly)
       const count = atlas.players[id] || 0
       if (count) {
@@ -839,13 +896,6 @@ export function createAtlas(ctx) {
         g.textBaseline = 'middle'
         g.fillText(String(count), x + w - 2, y + 2.5)
       }
-    }
-    // Lo que hay adentro de la pradera: la cripta y el portal, como en el juego.
-    const inMeadow = atlas.links.filter((l) => l.from === 'field')
-    for (const gate of inMeadow) {
-      if (gate.to.startsWith('camp:')) continue
-      const [x, y] = P(...Object.values(meadowPoint(gate.x, gate.y)))
-      diamond(g, x, y, 5, onRoute.has(gate.to) ? MARK.next : MARK.exit)
     }
     // El heroe en su region y el objetivo.
     const hereBox = box(atlas.region)
@@ -861,8 +911,12 @@ export function createAtlas(ctx) {
     if (t) {
       let at = null
       if (t.region === 'field' && t.x !== null) at = P(...Object.values(meadowPoint(t.x, t.y)))
-      else if (box(t.region)) at = center(box(t.region))
-      if (at) star(g, at[0], at[1] - (t.region === atlas.region ? 12 : 0), 10, MARK.goal)
+      else if (box(t.region)) {
+        // En la esquina de arriba a la derecha de su caja: el centro es del nombre.
+        const b = box(t.region)
+        at = P(b.x + b.w, b.y)
+      }
+      if (at) star(g, at[0], at[1], 10, MARK.goal)
     }
   }
 
@@ -885,14 +939,14 @@ export function createAtlas(ctx) {
             ['goal', L('Goal', 'Objetivo'), 'star'],
             ['next', L('Route', 'Camino')],
             ['player', L('Players in the region', 'Jugadores en la region')],
-            ['camp', L('Camp', 'Campamento'), 'tri'],
-            ['cleared', L('Cleared camp', 'Campamento despejado'), 'tri']
+            ['camp', L('Camp', 'Campamento'), 'box', CAMP_BOX.camp],
+            ['cleared', L('Cleared camp', 'Campamento despejado'), 'box', CAMP_BOX.cleared]
           ]
     legend.replaceChildren(
-      ...items.map(([mark, text, square]) => {
+      ...items.map(([mark, text, square, color]) => {
         const li = document.createElement('li')
         const i = document.createElement('i')
-        i.style.background = MARK[mark]
+        i.style.background = color || MARK[mark]
         if (square) i.className = square
         li.append(i, text)
         return li
@@ -940,6 +994,7 @@ export function createAtlas(ctx) {
     panel.hidden = false
     cam = null
     fullKey = ''
+    fillChrome()
     show(which)
     fillHeader()
     if (ctx.onOpen) ctx.onOpen()
@@ -1048,11 +1103,16 @@ export function createAtlas(ctx) {
       cam = null
     }
     const showMini = !!data && !hidden && !opened
-    if (mini.hidden === showMini) mini.hidden = !showMini
+    if (mini.hidden === showMini) {
+      mini.hidden = !showMini
+      if (showMini) fillChrome()
+    }
     const now = performance.now()
     if (showMini) paintMini(now)
     if (opened) {
-      if (!state || state.title || !state.atlas) {
+      // Un duelo que empieza o un menu que aparece (un desafio que llega) lo
+      // cierran: el mapa no tapa la pelea ni se traga las teclas.
+      if (!state || state.title || !state.atlas || state.duel || state.overlay) {
         close()
         return
       }
