@@ -178,11 +178,28 @@ export function createTrack() {
 }
 
 /**
+ * Cuanto mas cerca tiene que estar otro jugador para quitarle el heroe animado
+ * a uno que ya lo lleva: KEEP_GAP metros o KEEP_RATIO veces mas cerca, lo que
+ * le de mas margen al que lo lleva (de cerca cuentan los metros, de lejos la
+ * proporcion). Sin este margen, jugadores a distancias parecidas (todos entre
+ * 4 y 6 m) se turnan el rig en cada vuelta y el modelo salta y reinicia su
+ * animacion.
+ */
+export const KEEP_GAP = 1.5
+export const KEEP_RATIO = 1.6
+
+/**
  * Los ids de los `count` jugadores mas cercanos: list es [{ id, d }], con d la
  * distancia al heroe. A igual distancia gana el id menor, asi la eleccion no
- * salta entre dos cuadros iguales.
+ * salta entre dos cuadros iguales. `kept` son los que ya lo llevan: cuentan
+ * como si estuvieran mas cerca (ver KEEP_GAP), asi solo pierden el lugar
+ * contra uno claramente mas cercano.
  */
-export function nearest(list, count) {
-  const sorted = [...list].sort((a, b) => a.d - b.d || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+export function nearest(list, count, kept = null) {
+  const near = (entry) =>
+    kept && kept.has(entry.id) ? Math.min(entry.d - KEEP_GAP, entry.d / KEEP_RATIO) : entry.d
+  const sorted = [...list].sort(
+    (a, b) => near(a) - near(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  )
   return new Set(sorted.slice(0, Math.max(0, count)).map((entry) => entry.id))
 }

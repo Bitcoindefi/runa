@@ -732,3 +732,36 @@ test('pose: late 10 veces por segundo caminando y 2 quieto', (t) => {
   )
   t.ok(net.RATE_LINES >= 1000 / net.POSE_FAST_MS, 'caminar entra en el cupo de lineas')
 })
+
+test('pose: si la pagina deja de dibujar, el paso vuelve a quieto', (t) => {
+  const c = clock()
+  const ana = new Presence({ name: 'ana', offline: true, now: c.now })
+  const beto = new Presence({ name: 'beto', offline: true, now: c.now })
+  connect(ana, beto)
+  const run = (ms) => {
+    let lines = 0
+    const end = c.at + ms
+    while (c.at < end) {
+      c.at += net.PULSE_MS
+      if (ana.pulse()) lines++
+    }
+    return lines
+  }
+  c.at += net.POSE_IDLE_MS
+  ana.pose({ px: 71.87, pz: 130.5, yaw: 0, g: 2 })
+  t.ok(ana.pulse(), 'corriendo late')
+  t.is(beto.others()[0].pose.g, 2)
+  // Pestana oculta: nadie vuelve a llamar pose(). Pasado el margen, quieto.
+  run(1000)
+  t.is(run(3000), 3000 / net.POSE_IDLE_MS, 'late al ritmo de quieto, no a 10 por segundo')
+  t.is(ana.self.g, 0, 'el paso viejo queda en cero')
+  const wire = beto.others()[0].pose
+  t.is(wire.g, 0, 'el otro lo ve quieto')
+  t.is(wire.px, 71.87, 'en el mismo lugar')
+  // Vuelve a dibujar: el paso nuevo vale otra vez.
+  ana.pose({ px: 72, pz: 130.5, yaw: 0, g: 1 })
+  c.at += net.PULSE_MS
+  t.ok(ana.pulse())
+  t.is(beto.others()[0].pose.g, 1)
+  t.ok(net.POSE_STALE_MS < net.POSE_IDLE_MS)
+})

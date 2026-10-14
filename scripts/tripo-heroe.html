@@ -3465,6 +3465,19 @@
       const peers = new Map()
       const rivalTint = new THREE.Color(1, 0.5, 0.45)
       const peerTint = new THREE.Color(0.45, 0.88, 1.15)
+      // Con poca luz (la cripta) el tenido casi no se ve: el heroe de otro
+      // jugador brilla un poco de cian propio y pisa un aro cian que no depende
+      // de la luz, asi no se confunde con el heroe de uno. Geometria y material
+      // compartidos por todos los de la sala.
+      const peerGlow = new THREE.Color(0.06, 0.26, 0.34)
+      const peerRingGeometry = new THREE.RingGeometry(0.42, 0.56, 40).rotateX(-Math.PI / 2)
+      const peerRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x5fe3f0,
+        transparent: true,
+        opacity: 0.75,
+        depthWrite: false,
+        toneMapped: false
+      })
       // Cuantos van con el heroe animado: menos en un telefono.
       const peerRigs = touchPad ? RIGS.phone : RIGS.desktop
       // A quienes vestir se decide cada tanto, no en cada cuadro.
@@ -3552,6 +3565,12 @@
         holder.add(entry.body)
         entry.tag.position.y = duel ? 2.95 : 2.4
         root.add(entry.tag)
+        if (!duel) {
+          const ring = new THREE.Mesh(peerRingGeometry, peerRingMaterial)
+          ring.position.y = 0.03
+          ring.renderOrder = 2
+          root.add(ring)
+        }
         if (entry.bar) {
           entry.bar.sprite.position.y = 2.6
           root.add(entry.bar.sprite)
@@ -3576,7 +3595,7 @@
       // ya esta en cache, asi que no baja nada nuevo. Materiales propios para que
       // el del jugador no cambie de color; la geometria se comparte y no se
       // libera.
-      function dressRival(entry, spec, tint) {
+      function dressRival(entry, spec, tint, glow = null) {
         entry.dressing = true
         const token = ++entry.dressToken
         loadRig(spec.file)
@@ -3601,6 +3620,7 @@
               const own = [child.material].flat().map((material) => {
                 const copy = material.clone()
                 if (copy.color) copy.color.multiply(tint)
+                if (glow && copy.emissive) copy.emissive.copy(glow)
                 entry.materials.push(copy)
                 return copy
               })
@@ -3792,11 +3812,12 @@
           const d = entry.root.position.distanceTo(hero.root.position)
           near.push({ id: entry.id, d })
         }
-        peerRanked = spec ? nearest(near, peerRigs) : new Set()
+        // Con memoria (los que ya lo llevan), asi no se turnan el rig.
+        peerRanked = spec ? nearest(near, peerRigs, peerRanked) : new Set()
         for (const entry of peers.values()) {
           if (entry.duel) continue
           const want = peerRanked.has(entry.id)
-          if (want && !entry.dressing) dressRival(entry, spec, peerTint)
+          if (want && !entry.dressing) dressRival(entry, spec, peerTint, peerGlow)
           else if (!want && entry.dressing) undressPeer(entry)
         }
       }
@@ -3804,22 +3825,38 @@
       // La pose del heroe para los de la sala (tripo-juego.js pose): donde esta
       // en metros del mapa 3D, hacia donde mira y su paso. Solo en el mapa que
       // el juego dice; si no, se borra y lo ven por su celda.
+      let sentPose = null
       function sendPose(st) {
         if (!session || typeof session.pose !== 'function') return
         if (!world || !st || !st.world || world.map !== st.world.map || paused) {
+          sentPose = null
           session.pose(null)
           return
         }
         const going = performance.now() - lastStep < 170
         const pos = hero.root.position
-        session.pose({
+        sentPose = {
           map: world.map,
           px: pos.x,
           pz: pos.z,
           yaw: hero.root.rotation.y,
           g: going ? (velocity > 3.5 ? 2 : 1) : 0
-        })
+        }
+        session.pose(sentPose)
       }
+
+      // La pagina deja de dibujar (pestana oculta, ventana sin foco): la ultima
+      // pose queda quieta, asi el otro no lo ve corriendo en el lugar. Si sigue
+      // dibujando, el proximo cuadro la vuelve a escribir. Presence ademas
+      // apaga sola un paso que nadie refresca (net.js POSE_STALE_MS).
+      function restPose() {
+        if (!session || typeof session.pose !== 'function' || !sentPose || !sentPose.g) return
+        sentPose = { ...sentPose, g: 0 }
+        session.pose(sentPose)
+      }
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) restPose()
+      })
 
       // Cada cuadro: quien de la sala esta en este mapa, o el rival del duelo.
       function othersFrame(dt, st) {
@@ -7257,6 +7294,7 @@
         // aca, con el turno guardado.
         if (meadow) meadow.attack('cancel')
         mover.striking = false
+        restPose()
       })
       // Cerrar la pagina es dejar la sala: con un duelo abierto, rendirse y
       // avisarle al rival, que se queda con la victoria y vuelve a la ciudad.

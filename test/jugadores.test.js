@@ -119,6 +119,54 @@ test('jugadores: el heroe animado va a los mas cercanos', (t) => {
   t.is(jugadores.RIGS.desktop, 5)
 })
 
+test('jugadores: el que ya lleva el heroe animado lo conserva salvo contra uno claramente mas cerca', (t) => {
+  const kept = nearest(
+    [
+      { id: 'a', d: 4.2 },
+      { id: 'b', d: 4.8 }
+    ],
+    1
+  )
+  t.alike([...kept], ['a'])
+  const swapped = [
+    { id: 'a', d: 5.9 },
+    { id: 'b', d: 4.1 }
+  ]
+  t.alike([...nearest(swapped, 1)], ['b'], 'sin memoria salta')
+  t.alike([...nearest(swapped, 1, kept)], ['a'], 'con memoria se queda')
+  const far = [
+    { id: 'a', d: 9 },
+    { id: 'b', d: 4 }
+  ]
+  t.alike([...nearest(far, 1, kept)], ['b'], 'uno mucho mas cerca: cambia')
+  const close = [
+    { id: 'a', d: 3.6 },
+    { id: 'b', d: 1.9 }
+  ]
+  t.alike([...nearest(close, 1, kept)], ['b'], 'de cerca alcanza con KEEP_GAP metros')
+  // Siete jugadores entrando y saliendo entre 4 y 6 m (como scratchpad
+  // churn.cjs), una vuelta cada medio segundo durante 12 s.
+  const churn = (count, memory) => {
+    let ranked = new Set()
+    let swaps = 0
+    for (let pass = 0; pass < 32; pass++) {
+      const list = []
+      for (let i = 0; i < 7; i++) {
+        const phase = (i * Math.PI * 2) / 7
+        list.push({ id: 'p' + i, d: 5 + Math.sin(pass * 0.45 + phase * 3) })
+      }
+      const next = nearest(list, count, memory ? ranked : null)
+      if (pass >= 8) for (const id of next) if (!ranked.has(id)) swaps++
+      ranked = next
+    }
+    return swaps
+  }
+  for (const count of [jugadores.RIGS.phone, jugadores.RIGS.desktop]) {
+    t.ok(churn(count, false) > 3, 'sin memoria se turnan: ' + churn(count, false))
+    t.is(churn(count, true), 0, 'con memoria nadie cambia en la banda de 4 a 6 m')
+  }
+})
+
 function connect(a, b) {
   const handlers = [{}, {}]
   const conns = handlers.map((own, i) => ({
