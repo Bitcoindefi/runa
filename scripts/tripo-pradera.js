@@ -20,10 +20,12 @@
 //                     la dibuja en 3D
 //   handlesCombat(st) true si el combate de ese momento se ve en 3D (la pagina no
 //                     abre la pantalla de texto)
-//   attack(mode)      la pagina pide atacar: true aprieta (repite mientras
-//                     siga), false suelta, 'tap' un turno solo. Sale una tecla F
-//                     por turno, al terminar la animacion del anterior
-//                     (tripo-combate.mjs CombatPace)
+//   attack(mode, from) la pagina pide atacar: true aprieta (repite mientras
+//                     siga), false suelta, 'tap' un turno solo, 'cancel' suelta
+//                     todo y olvida lo guardado (pausa). from es la fuente
+//                     ('key', 'button' o 'stick'): soltar una no corta las
+//                     otras. Sale una tecla F por turno, al terminar la
+//                     animacion del anterior (tripo-combate.mjs CombatPace)
 //   timeScale()       1, o casi 0 durante la pausa de un golpe (hit stop): la
 //                     pagina la aplica a las animaciones del heroe
 //   update(time, dt, st, world)  cada cuadro mientras se ve un mapa suyo:
@@ -3521,11 +3523,13 @@ export function createMeadow(ctx) {
     contact: () => pace.contact(fightTime)
   }
 
-  // attack(true) aprieta (y repite mientras siga), attack(false) suelta y
-  // attack('tap') pide un turno solo.
-  function attack(mode) {
+  // attack(true, from) aprieta (y repite mientras siga), attack(false, from)
+  // suelta esa fuente, attack('tap') pide un turno solo y attack('cancel')
+  // suelta todo y olvida el turno guardado.
+  function attack(mode, from = 'key') {
     if (mode === 'tap') pace.press()
-    else pace.hold(!!mode)
+    else if (mode === 'cancel') pace.release()
+    else pace.hold(!!mode, from)
   }
 
   function timeScale() {
@@ -3596,7 +3600,10 @@ export function createMeadow(ctx) {
       fx.settle()
       if (!st.fight) pace.clear()
       // Un turno por vez: la tecla sale cuando termino la animacion del anterior.
-      else if (handlesCombat(st) && game && pace.ready(fightTime, fx.busyUntil)) game.press('f')
+      // Con una pantalla encima (menu, mochila) no sale ninguno.
+      else if (handlesCombat(st) && !st.overlay && game && pace.ready(fightTime, fx.busyUntil)) {
+        game.press('f')
+      }
     } else if (!shownPlace) {
       const meadow = kit()
       if (meadow && tourField) crowd.tour(tourField, meadow, dt, fightTime)

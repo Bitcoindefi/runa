@@ -28,15 +28,18 @@ export const CONTACT_PAUSE = 0.45
 
 /**
  * El cursor del combate: guarda un pedido y avisa cuando mandarlo.
- * press() guarda un pedido (varios seguidos son uno solo); hold(true) repite
- * mientras siga apretado; ready(now, busyUntil) dice si toca mandar el turno
- * ahora (y lo consume).
+ * press() guarda un pedido (varios seguidos son uno solo); hold(true, from)
+ * repite mientras siga apretado; ready(now, busyUntil) dice si toca mandar el
+ * turno ahora (y lo consume). Cada fuente (tecla, boton, stick) se aprieta y
+ * se suelta por su lado: soltar una no corta las otras. release() suelta todo
+ * y olvida el pedido guardado (el menu de pausa, la ventana sin foco).
  */
 export class CombatPace {
   constructor({ minTurn = MIN_TURN } = {}) {
     this.minTurn = minTurn
     this.buffered = false
     this.held = false
+    this.sources = new Set()
     this.last = -Infinity
     this.notBefore = -Infinity
   }
@@ -45,9 +48,17 @@ export class CombatPace {
     this.buffered = true
   }
 
-  hold(on) {
-    this.held = !!on
+  hold(on, from = 'key') {
+    if (on) this.sources.add(from)
+    else this.sources.delete(from)
+    this.held = this.sources.size > 0
     if (on) this.buffered = true
+  }
+
+  release() {
+    this.sources.clear()
+    this.held = false
+    this.buffered = false
   }
 
   // La pelea empieza: el primer turno espera la pausa del contacto.
@@ -78,6 +89,43 @@ const num = (value, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback
 }
 
+// Lo que cura una pocion (lib/world.js applyIntent), sin pasar la vida maxima.
+export const POTION_HEAL = 8
+
+/**
+ * Cuantos golpes dio el monstruo entre dos lecturas: repite los ticks del
+ * juego (lib/world.js step) con las distancias, velocidades y recargas, y lo
+ * acepta solo si termina en la misma distancia y la misma recarga. null si no
+ * se puede saber.
+ * @param {object} before fightOf de antes
+ * @param {object} after fightOf de despues
+ * @returns {number|null}
+ */
+export function foeBlows(before, after) {
+  const ticks = num(after.tick, NaN) - num(before.tick, NaN)
+  const cdMax = num(before.foeCdMax)
+  if (!(ticks > 0) || ticks > 600 || cdMax <= 0 || !(num(before.foeHit) > 0)) return null
+  const reach = num(before.reach, 1)
+  const foeReach = num(before.foeReach, 1)
+  let hero = 0
+  let foe = num(before.dist)
+  let cd = Math.max(0, num(before.foeCd))
+  let blows = 0
+  for (let i = 0; i < ticks; i++) {
+    const dist = Math.abs(foe - hero)
+    if (cd > 0) cd--
+    if (dist > reach) hero += num(before.speed)
+    else if (dist < reach - 1) hero -= num(before.speed) * 0.7
+    if (dist > foeReach) foe -= num(before.foeSpeed)
+    else if (cd <= 0) {
+      blows++
+      cd = cdMax
+    }
+  }
+  const same = Math.abs(Math.abs(foe - hero) - num(after.dist)) < 0.05 && cd === num(after.foeCd)
+  return same ? blows : null
+}
+
 /**
  * Lo que paso entre dos lecturas de la pelea, por las vidas: el golpe del
  * heroe, la pocion y el golpe del monstruo, en el orden del juego (la pocion
@@ -91,9 +139,19 @@ const num = (value, fallback = 0) => {
 export function turnEvents(before, after) {
   const events = []
   const dealt = Math.max(0, num(before.foeHp) - num(after.foeHp))
-  const potion = num(before.potions) > num(after.potions)
-  const taken = Math.max(0, num(before.hp) - num(after.hp))
-  if (potion) events.push({ who: 'potion', amount: Math.max(0, num(after.hp) - num(before.hp)) })
+  const used = Math.max(0, num(before.potions) - num(after.potions))
+  const drop = num(before.hp) - num(after.hp)
+  // Sin pocion la vida perdida es el golpe. Con pocion la cura tapa el golpe:
+  // se cuentan los golpes del monstruo por su recarga y, si no se puede, se
+  // supone la cura entera.
+  let taken = Math.max(0, drop)
+  if (used > 0) {
+    const blows = foeBlows(before, after)
+    const hit = num(before.foeHit) * (blows || 0)
+    const fits = blows !== null && hit >= drop + used && hit <= drop + used * POTION_HEAL
+    taken = fits ? hit : Math.max(0, drop + used * POTION_HEAL)
+    events.push({ who: 'potion', amount: Math.max(0, taken - drop) })
+  }
   if (dealt > 0) {
     events.push({ who: 'hero', amount: dealt, share: dealt / Math.max(1, num(before.foeMaxhp, 1)) })
   }

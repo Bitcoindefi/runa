@@ -740,6 +740,10 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      #actions button small.long {
+        font-size: 9px;
+        letter-spacing: 0;
+      }
       /* Texto, Ciudad y Menu son fichas bajas a proposito (44 px, el minimo
          tactil): no son acciones del juego y asi la grilla no sube y tapa menos
          la escena. */
@@ -1139,6 +1143,18 @@
         body:has(#bossbar:not([hidden])) #stats,
         body:has(#rivalbar:not([hidden])) #stats {
           top: calc(var(--sat) + var(--gut) + 44px);
+        }
+        /* En una pelea, la ficha corta: nombre y vida, sin tapar al heroe. */
+        #stats.fighting {
+          width: min(200px, calc(100vw - 32px));
+        }
+        #stats.fighting .where,
+        #stats.fighting .bar.xp,
+        #stats.fighting .purse,
+        #stats.fighting .worn,
+        #stats.fighting .quest,
+        #stats.fighting .online {
+          display: none;
         }
       }
       /* Celular acostado: el registro, la ayuda y los dialogos en la columna
@@ -4887,6 +4903,9 @@
         const onlineLine = netLine(room)
         const onlineState = netState(room)
         const arena = st.arena
+        // En una pelea la ficha se achica en el celular parado (CSS .fighting):
+        // queda el nombre y la vida, y el heroe se ve.
+        statsBox.classList.toggle('fighting', !!st.combat)
         const key = [
           st.name,
           st.level,
@@ -5295,15 +5314,15 @@
         if (fightIn3d(st)) {
           const foe = (st.foes || []).find((f) => st.fight && f.id === st.fight.id)
           const toward = towardFoe(dx, dy, st.location, foe)
-          if (toward && !mover.striking) meadow.attack(true)
-          if (!toward && mover.striking) meadow.attack(false)
+          if (toward && !mover.striking) meadow.attack(true, 'stick')
+          if (!toward && mover.striking) meadow.attack(false, 'stick')
           mover.striking = toward
           mover.wait = 0
           return
         }
         if (mover.striking) {
           mover.striking = false
-          if (meadow) meadow.attack(false)
+          if (meadow) meadow.attack(false, 'stick')
         }
         if (!dx && !dy) {
           mover.wait = 0
@@ -5367,10 +5386,10 @@
         if (STRIKE_KEYS.has(key)) {
           if (down && roaming && fightIn3d(st)) {
             event.preventDefault()
-            if (!event.repeat) meadow.attack(true)
+            if (!event.repeat) meadow.attack(true, 'key:' + key)
             return
           }
-          if (!down && meadow) meadow.attack(false)
+          if (!down && meadow) meadow.attack(false, 'key:' + key)
         }
         if (dir && roaming) {
           event.preventDefault()
@@ -5863,8 +5882,9 @@
         mover.fingers.clear()
         clearInterval(padRepeat)
         stopStrike()
-        // La pelea en 3D no sigue pidiendo turnos detras del menu.
-        if (meadow) meadow.attack(false)
+        // La pelea en 3D no sigue pidiendo turnos detras del menu, ni los
+        // guardados.
+        if (meadow) meadow.attack('cancel')
         mover.striking = false
         stickMode = null
         pause.hidden = false
@@ -6100,7 +6120,7 @@
             b.classList.remove('down')
             if (act === 'f') {
               stopStrike()
-              if (meadow) meadow.attack(false)
+              if (meadow) meadow.attack(false, 'button')
             }
           }
           b.addEventListener('pointerdown', (event) => {
@@ -6111,7 +6131,7 @@
             // En una pelea en 3D, apoyar el dedo pide turnos hasta soltarlo:
             // igual que mantener F o Espacio.
             if (act === 'f' && session && fightIn3d(live || session.state())) {
-              meadow.attack(true)
+              meadow.attack(true, 'button')
               return
             }
             runAct(act)
@@ -6163,6 +6183,8 @@
         }
         if (o.label && a.small.textContent !== o.label) {
           a.small.textContent = o.label
+          // Un texto largo (Espera 12) achica la letra para entrar en el boton redondo.
+          a.small.classList.toggle('long', o.label.length > 8)
           a.b.setAttribute('aria-label', o.label)
         }
         if (o.pressed === undefined) a.b.removeAttribute('aria-pressed')
@@ -6182,7 +6204,7 @@
         const bossLive = !!(st.boss && !st.boss.defeated)
         const inReach = !!(arena && arena.distance <= arena.self.reach)
         const loaded = !arena || arena.self.cooldownLeft <= 0
-        // En la pelea del campo: Atacar, Esperar (n) o Recarga (como en el duelo:
+        // En la pelea del campo: Atacar, Espera n o Recarga (como en el duelo:
         // entra en el boton redondo del telefono).
         const next = st.combat ? readout(st.fight) : null
         const key = [
@@ -6273,7 +6295,7 @@
           // brillar pero no se apaga (apagado seria no hace nada).
           const waiting = !!next && next.state !== 'attack'
           let label = st.combat ? L('Attack', 'Atacar') : L('Strike', 'Golpear')
-          if (next && next.state === 'wait') label = L(`Wait (${next.n})`, `Esperar (${next.n})`)
+          if (next && next.state === 'wait') label = L(`Wait (${next.n})`, `Espera ${next.n}`)
           if (next && next.state === 'recharge') label = L('Reload', 'Recarga')
           setAct('f', {
             icon: 'sword',
@@ -7014,8 +7036,9 @@
         mover.held.clear()
         mover.fingers.clear()
         shiftHeld = false
-        // Una tecla de ataque soltada fuera de la ventana no llega: se suelta aca.
-        if (meadow) meadow.attack(false)
+        // Una tecla de ataque soltada fuera de la ventana no llega: se suelta
+        // aca, con el turno guardado.
+        if (meadow) meadow.attack('cancel')
         mover.striking = false
       })
       // Cerrar la pagina es dejar la sala: con un duelo abierto, rendirse y

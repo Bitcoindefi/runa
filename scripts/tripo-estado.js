@@ -178,7 +178,8 @@ const COMBAT_TURN = 6
 // pelea con su tick. Cada ataque resuelve varios ticks de una vez. Para leer el
 // turno (tripo-combate.mjs readout): la recarga de los dos (ticks que faltan y
 // el total), la distancia, el alcance y la velocidad de cada uno, si el heroe
-// esta en pleno golpe y las pociones que le quedan.
+// esta en pleno golpe, las pociones que le quedan y lo que pega el monstruo
+// (foeHit, para contar sus golpes cuando una pocion los tapa).
 function fightOf(field) {
   const combat = field && field.combat
   const world = combat && combat.world
@@ -193,6 +194,7 @@ function fightOf(field) {
     heroCdMax: mine.cooldown,
     foeCd: count(world.foe.cooldownLeft),
     foeCdMax: theirs.cooldown,
+    foeHit: Math.max(1, theirs.atk - mine.defense),
     dist: Math.round(Math.abs(world.foe.x - world.hero.x) * 100) / 100,
     reach: mine.reach,
     foeReach: theirs.reach,

@@ -109,9 +109,8 @@ test('la recarga sin golpe se ve como recarga, lejos como espera', (t) => {
     'el heroe pega primero'
   )
   t.is(hit[0].share, 3 / 9)
-  const potion = combate.turnEvents(base, { ...base, potions: 1, hp: 26 })
-  t.is(potion[0].who, 'potion')
-  t.is(potion.length, 1)
+  const potion = combate.turnEvents({ ...base, hp: 10 }, { ...base, potions: 1, hp: 18 })
+  t.alike(potion, [{ who: 'potion', amount: 8 }])
   t.alike(combate.readout(null), null)
   t.alike(combate.readout({ ...base, dist: 1, heroCd: 13, turn: 6 }), { state: 'recharge', n: 3 })
   t.alike(combate.readout({ ...base, dist: 1, heroCd: 6, turn: 6 }), { state: 'attack', n: 1 })
@@ -138,6 +137,73 @@ test('mantener el ataque da a lo sumo unos tres turnos por segundo, sin pisarse'
   }
   pace.hold(false)
   t.absent(pace.ready(5, -1), 'soltar corta los turnos')
+})
+
+test('soltar una fuente de ataque no corta las otras', (t) => {
+  const pace = new combate.CombatPace()
+  pace.hold(true, 'key: ')
+  pace.hold(true, 'stick')
+  pace.hold(false, 'stick')
+  t.ok(pace.held, 'soltar el stick deja la barra espaciadora')
+  t.ok(pace.ready(1), 'y sigue pidiendo turnos')
+  t.ok(pace.ready(2))
+  pace.hold(true, 'button')
+  pace.hold(false, 'key: ')
+  t.ok(pace.ready(3), 'soltar la tecla deja el boton')
+  pace.hold(false, 'button')
+  t.absent(pace.held)
+  t.absent(pace.ready(4), 'sin nada apretado, nada')
+})
+
+test('la pausa suelta todo y olvida el turno guardado', (t) => {
+  const pace = new combate.CombatPace()
+  pace.hold(true, 'stick')
+  pace.press()
+  pace.release()
+  t.absent(pace.held)
+  t.absent(pace.buffered)
+  t.absent(pace.ready(9, 0), 'detras del menu no sale ningun turno')
+})
+
+test('una pocion en el turno del golpe no tapa el golpe', (t) => {
+  let potionTurns = 0
+  let hidden = 0
+  let both = 0
+  for (const foe of ['golem', 'barbarian_raider', 'mosquito', 'skeleton_archer']) {
+    const world = new World(foe)
+    world.hero.base.hp = 60
+    world.hero.hp = 30
+    world.potions = 30
+    world.foe.base.hp = 999
+    world.foe.hp = 999
+    world.foe.x = 3
+    for (let turn = 0; turn < 60 && !world.over; turn++) {
+      const before = estado.fightOf(fieldWith(world))
+      // El guion toma una pocion en un tick del medio del turno, como el
+      // registro de la prueba (golem te pega, tomas una pocion, pegas).
+      for (let i = 0; i < COMBAT_TURN_TICKS && !world.over; i++) {
+        world.wanted.use = i === 2 ? 'potion' : null
+        world.applyIntent()
+        world.step()
+      }
+      if (world.over) break
+      const after = estado.fightOf(fieldWith(world))
+      if (after.potions === before.potions) continue
+      potionTurns++
+      const events = combate.turnEvents(before, after)
+      const theirs = events.filter((e) => e.who === 'foe').reduce((n, e) => n + e.amount, 0)
+      const log = said(world, before.tick)
+      if (log.theirs > 0) both++
+      if (log.theirs > 0 && theirs === 0) hidden++
+      if (theirs !== log.theirs) t.fail(`${foe}: ${theirs} contra ${log.theirs}`)
+      const heal = events.find((e) => e.who === 'potion').amount
+      if (heal !== after.hp - before.hp + theirs) t.fail(`${foe}: la cura ${heal} no cierra`)
+      world.hero.hp = Math.min(world.hero.hp, 30)
+    }
+  }
+  t.ok(potionTurns > 20, `${potionTurns} turnos con pocion`)
+  t.ok(both > 10, `${both} con golpe y pocion en el mismo turno`)
+  t.is(hidden, 0, 'ningun golpe tapado por la pocion')
 })
 
 test('los toques se guardan de a uno y el contacto espera un momento', (t) => {
