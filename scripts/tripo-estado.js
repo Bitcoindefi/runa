@@ -168,15 +168,38 @@ function foesOf(field) {
   return list
 }
 
+// Los ticks que resuelve cada ataque: el COMBAT_TURN_TICKS de lib/game.js (una
+// prueba los compara; game.js no se carga aca porque el visor lee este archivo
+// en Node).
+const COMBAT_TURN = 6
+
 // La pelea en curso, para animarla: contra quien, la vida de los dos, el arma en
 // la mano (la elige el guion entre golpe y golpe) y las ultimas lineas de la
-// pelea con su tick. Cada ataque resuelve varios ticks de una vez.
+// pelea con su tick. Cada ataque resuelve varios ticks de una vez. Para leer el
+// turno (tripo-combate.mjs readout): la recarga de los dos (ticks que faltan y
+// el total), la distancia, el alcance y la velocidad de cada uno, si el heroe
+// esta en pleno golpe y las pociones que le quedan.
 function fightOf(field) {
   const combat = field && field.combat
   const world = combat && combat.world
   if (!world) return null
   const held = world.held.left
+  const mine = world.hero.derive(Object.values(world.held))
+  const theirs = world.foe.derive([])
+  const count = (value) => Math.max(0, Math.floor(Number(value) || 0))
   return {
+    turn: COMBAT_TURN,
+    heroCd: count(world.hero.cooldownLeft),
+    heroCdMax: mine.cooldown,
+    foeCd: count(world.foe.cooldownLeft),
+    foeCdMax: theirs.cooldown,
+    dist: Math.round(Math.abs(world.foe.x - world.hero.x) * 100) / 100,
+    reach: mine.reach,
+    foeReach: theirs.reach,
+    speed: mine.speed,
+    foeSpeed: theirs.speed,
+    swinging: count(world.hero.swinging),
+    potions: count(world.potions),
     id: combat.foe.id,
     kind: combat.foe.kind,
     tick: world.tick,
@@ -259,6 +282,7 @@ function live(runa) {
 }
 
 module.exports = {
+  COMBAT_TURN,
   SLOTS,
   WORLD_MAPS,
   item,

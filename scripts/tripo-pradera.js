@@ -8,7 +8,8 @@
 // (lo que mide una celda), session() (la partida en marcha de juego.js, o null
 // en el recorrido), bundle() (el modulo juego.js, o null si no cargo), figure(color)
 // (una figura simple), label(texto) del mundo, text(nombre) (traduce) y L(en, es)
-// (los textos propios en el idioma elegido).
+// (los textos propios en el idioma elegido). Opcional: shake(amount), el
+// temblor de la camara de la pagina (el mismo del Coloso).
 //
 // Devuelve:
 //   provide(id)       los datos de un mapa que no viene del visor (como
@@ -19,6 +20,12 @@
 //                     la dibuja en 3D
 //   handlesCombat(st) true si el combate de ese momento se ve en 3D (la pagina no
 //                     abre la pantalla de texto)
+//   attack(mode)      la pagina pide atacar: true aprieta (repite mientras
+//                     siga), false suelta, 'tap' un turno solo. Sale una tecla F
+//                     por turno, al terminar la animacion del anterior
+//                     (tripo-combate.mjs CombatPace)
+//   timeScale()       1, o casi 0 durante la pausa de un golpe (hit stop): la
+//                     pagina la aplica a las animaciones del heroe
 //   update(time, dt, st, world)  cada cuadro mientras se ve un mapa suyo:
 //                     monstruos, golpes, numeros de dano (st es null en el
 //                     recorrido; world es { map, built, data } de la pagina)
@@ -58,6 +65,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { placeId, placeOfId } from './lugares.js'
 import { cryptPlace } from './cripta.js'
 import { campPlace } from './campamento.js'
+import {
+  turnEvents,
+  readout,
+  charge,
+  hitStopMs,
+  shakeOf,
+  numberScale,
+  nearFoes,
+  CombatPace,
+  HitStop
+} from './combate.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
 const { document, performance } = globalThis
@@ -2463,12 +2481,23 @@ const FOE_SHOT = {
 class Effects {
   // hint(st, touch), si viene, reemplaza la ayuda de la pradera (nearHint): la
   // de un lugar de adentro.
-  constructor(ctx, crowd, bits, L, hint = null) {
+  // feel, si viene: { stop(ms), shake(amount), contact() }, la pausa del golpe,
+  // el temblor de la camara y el aviso de que empezo una pelea (createMeadow).
+  constructor(ctx, crowd, bits, L, hint = null, feel = null) {
     this.ctx = ctx
     this.crowd = crowd
     this.bits = bits
     this.L = L
     this.hint = hint
+    this.feel = feel
+    // Hasta cuando dura la animacion del ultimo turno (el ritmo espera).
+    this.busyUntil = -10
+    this.heroBrace = -10
+    this.heroStep = -10
+    // La recarga que muestran los aros: lo cargado ahora y hacia donde va.
+    this.heroCharge = { k: 1, want: 1 }
+    this.foeCharge = { k: 1, want: 1 }
+    this.pies = new Map()
     this.group = new THREE.Group()
     ctx.scene.add(this.group)
     this.last = null
@@ -2534,7 +2563,34 @@ class Effects {
         depthWrite: false
       })
     )
-    for (const mesh of [this.slash, this.bolt, this.burst, this.foeRing, this.heroRing]) {
+    // La recarga sobre cada aro: un arco que se llena hasta cerrar el circulo
+    // (dorado el del heroe, rojo el del monstruo). La geometria sale de pie().
+    const pieMaterial = (color) =>
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    this.heroPie = new THREE.Mesh(this.pie(0.69, 0.8, 1), pieMaterial(0xffe9a0))
+    this.foePie = new THREE.Mesh(this.pie(0.89, 1.0, 1), pieMaterial(0xff8a70))
+    // El aviso antes del contacto: un aro rojo tenue bajo los que estan cerca.
+    this.aggro = []
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.62, 0.74, 32).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({
+          color: 0xff3a28,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false
+        })
+      )
+      this.aggro.push(ring)
+    }
+    const meshes = [this.slash, this.bolt, this.burst, this.foeRing, this.heroRing]
+    for (const mesh of [...meshes, this.heroPie, this.foePie, ...this.aggro]) {
       mesh.visible = false
       mesh.renderOrder = 4
       this.group.add(mesh)
@@ -2562,8 +2618,27 @@ class Effects {
     this.spark.material.color.setHex(hex)
   }
 
+  // Un arco del aro de recarga, lleno en k (0 a 1), en 32 pasos guardados: la
+  // geometria se comparte entre cuadros y se libera en dispose. Arranca arriba
+  // (lejos de la camara) y crece en el sentido del reloj.
+  pie(inner, outer, k) {
+    const step = Math.max(1, Math.round(Math.max(0, Math.min(1, k)) * 32))
+    const key = `${inner}:${step}`
+    if (!this.pies.has(key)) {
+      const length = (step / 32) * Math.PI * 2
+      const geometry = new THREE.RingGeometry(inner, outer, 40, 1, Math.PI / 2 - length, length)
+      this.pies.set(key, geometry.rotateX(-Math.PI / 2))
+    }
+    return this.pies.get(key)
+  }
+
   fighting() {
     return this.engaged !== null
+  }
+
+  // Si la animacion del ultimo turno sigue (el ritmo del combate la espera).
+  busy(time) {
+    return time < this.busyUntil
   }
 
   debug() {
@@ -2583,7 +2658,7 @@ class Effects {
   }
 
   // Un numero que sube y se apaga desde (x, y, z), `delay` segundos despues.
-  number(text, color, x, y, z, time, delay = 0) {
+  number(text, color, x, y, z, time, delay = 0, size = 1) {
     const { texture, w, h } = this.texture(text, color)
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -2598,7 +2673,7 @@ class Effects {
     sprite.visible = false
     sprite.position.set(x + (hash(this.numbers.length, Math.round(time * 100)) - 0.5) * 0.3, y, z)
     this.group.add(sprite)
-    this.numbers.push({ sprite, start: time + delay, y, w, h })
+    this.numbers.push({ sprite, start: time + delay, y, w: w * size, h: h * size })
     if (this.numbers.length > 10) this.drop(this.numbers[0])
   }
 
@@ -2623,16 +2698,21 @@ class Effects {
       this.barHp = fight.foeHp
       const spot = crowd.spot(fight.id)
       if (spot) this.number('!', '#ffd040', spot.x, spot.top + 0.9, spot.z, time)
+      this.charges(fight, true)
+      if (this.feel) this.feel.contact()
     } else if (fight && fight.tick !== this.last.tick) {
-      this.turn(this.last, fight, fight.log, time)
+      this.turn(this.last, fight, time)
+      this.charges(fight, false)
     } else if (!fight && this.last) {
       // Termino. Si gano el heroe, el juego ya anoto la pelea entera en
       // lastFight: se cuenta el ultimo turno y el monstruo cae despues del golpe.
       const ended = field && field.lastFight ? field.lastFight : null
       const won = !!ended && ended.over === 'ganaste'
       if (ended) {
-        const after = { ...this.last, tick: Infinity, foeHp: won ? 0 : this.last.foeHp, hp: st.hp }
-        const blow = this.turn(this.last, after, ended.log, time)
+        // Si cayo el heroe, la ficha ya lo curo en la iglesia: su vida es 0.
+        const hp = ended.over === 'moriste' ? 0 : st.hp
+        const after = { ...this.last, tick: Infinity, foeHp: won ? 0 : this.last.foeHp, hp }
+        const blow = this.turn(this.last, after, time)
         if (won) {
           crowd.fallAt = time + blow + 0.08
           this.victory(said, crowd.fallAt)
@@ -2644,7 +2724,22 @@ class Effects {
     }
     this.last = fight
     if (fight) this.spot = crowd.spot(fight.id) || this.spot
+    // Fuera de la pelea, los que estan por tocar al heroe (aro rojo tenue).
+    this.near = fight ? [] : nearFoes(st.foes, st.location, 3)
     this.hud(st, fight, touch)
+  }
+
+  // Lo cargado de las dos recargas: al empezar se ve como esta; despues de un
+  // turno el arco va hacia el valor nuevo (y vacio de golpe si recien pego).
+  charges(fight, snap) {
+    const pairs = [
+      [this.heroCharge, charge(fight.heroCd, fight.heroCdMax)],
+      [this.foeCharge, charge(fight.foeCd, fight.foeCdMax)]
+    ]
+    for (const [entry, want] of pairs) {
+      if (snap || want < entry.want) entry.k = want
+      entry.want = want
+    }
   }
 
   // Despues de crowd.sync: el que cayo ya quedo marcado.
@@ -2666,17 +2761,36 @@ class Effects {
       foebar.hidden = false
       this.crowd.health(fight.id, share)
       hint.className = 'fight'
-      hint.textContent = touch
-        ? L('Attack or the pad toward it', 'Atacar o la cruceta hacia el')
-        : L('F, Space or a step toward it: attack', 'F, Espacio o un paso hacia el: atacar')
+      const text = this.fightHint(fight, touch)
+      if (hint.textContent !== text) hint.textContent = text
       hint.hidden = false
       return
     }
     foebar.hidden = true
     hint.className = ''
-    const near = this.hint ? this.hint(st, touch) : this.nearHint(st, touch)
-    hint.textContent = near
+    let near = this.hint ? this.hint(st, touch) : this.nearHint(st, touch)
+    // Sin otra ayuda: si un monstruo esta por tocarlo, que tocarlo es pelear.
+    if (!near && this.near && this.near.length && this.near[0].d <= 2) {
+      near = L('Contact starts a fight', 'Tocarlo empieza la pelea')
+    }
+    if (hint.textContent !== near) hint.textContent = near
     hint.hidden = !near
+  }
+
+  // La ayuda durante la pelea: que hace el proximo ataque (tripo-combate.mjs
+  // readout). Atacar pasa el turno aunque el arma se este recargando.
+  fightHint(fight, touch) {
+    const L = this.L
+    const next = readout(fight) || { state: 'attack', n: 1 }
+    if (next.state === 'recharge') {
+      return L(`Recharging · hits in ${next.n} turns`, `Recargando · pega en ${next.n} turnos`)
+    }
+    if (next.state === 'wait') {
+      return L(`Out of reach · ${next.n} turns`, `Fuera de alcance · ${next.n} turnos`)
+    }
+    return touch
+      ? L('Attack or the stick toward it', 'Atacar o el stick hacia el')
+      : L('F, Space or a step toward it: attack', 'F, Espacio o un paso hacia el: atacar')
   }
 
   // La ayuda fuera de la pelea: hablar con la guardabosques, entrar a la cripta
@@ -2713,51 +2827,54 @@ class Effects {
     return ''
   }
 
-  // Un turno: lo que dicen las lineas nuevas de la pelea, en orden (el heroe
-  // pega primero dentro del mismo tick, world.js step). Devuelve cuando cae el
-  // ultimo golpe del heroe, en segundos desde ahora.
-  turn(before, after, log, time) {
-    const events = []
-    for (const entry of log || []) {
-      if (entry.tick <= before.tick) continue
-      const mine = /^pegas (\d+)/.exec(entry.text)
-      const theirs = / te pega (\d+)/.exec(entry.text)
-      if (mine) events.push({ who: 'hero', amount: Number(mine[1]) })
-      else if (theirs) events.push({ who: 'foe', amount: Number(theirs[1]) })
-      else if (/pocion/.test(entry.text)) events.push({ who: 'potion' })
-    }
-    if (!events.length) {
-      // Sin lineas: se cuenta por las vidas; si nada cambio, el heroe amaga.
-      const dealt = before.foeHp - after.foeHp
-      if (dealt > 0) events.push({ who: 'hero', amount: dealt })
-      if (after.hp < before.hp) events.push({ who: 'foe', amount: before.hp - after.hp })
-      if (!events.length) events.push({ who: 'feint' })
-    }
+  // Un turno: lo que paso entre dos lecturas de la pelea, contado por las vidas
+  // (tripo-combate.mjs turnEvents), en el orden del juego. Devuelve cuando cae
+  // el ultimo golpe del heroe, en segundos desde ahora, y deja en busyUntil
+  // cuando termina la animacion (el ritmo del combate espera hasta ahi).
+  turn(before, after, time) {
     let delay = 0
     let blow = 0
     let foeHp = before.foeHp
-    for (const event of events) {
+    for (const event of turnEvents(before, after)) {
       const at = time + delay
-      if (event.who === 'feint') {
+      if (event.who === 'advance') {
+        // Fuera de alcance: un paso corto hacia el monstruo.
         this.queue.push({ at, kind: 'advance' })
-        delay += 0.2
+        delay += 0.24
+      } else if (event.who === 'recharge') {
+        // El arma se recarga: el heroe se planta y el aro dorado se llena.
+        this.queue.push({ at, kind: 'recharge' })
+        delay += 0.26
       } else if (event.who === 'hero') {
         foeHp = Math.max(0, foeHp - event.amount)
         this.queue.push(
           { at, kind: 'swing', weapon: after.weapon, id: before.id },
-          { at: at + 0.12, kind: 'foe-hit', id: before.id, amount: event.amount, hp: foeHp }
+          {
+            at: at + 0.12,
+            kind: 'foe-hit',
+            id: before.id,
+            amount: event.amount,
+            share: event.share,
+            hp: foeHp
+          }
         )
         blow = delay + 0.12
-        delay += 0.26
+        delay += 0.28
       } else if (event.who === 'foe') {
         this.queue.push({ at, kind: 'foe-swing', id: before.id })
-        this.queue.push({ at: at + 0.16, kind: 'hero-hit', amount: event.amount })
-        delay += 0.3
+        this.queue.push({
+          at: at + 0.16,
+          kind: 'hero-hit',
+          amount: event.amount,
+          share: event.share
+        })
+        delay += 0.32
       } else {
         this.queue.push({ at, kind: 'potion' })
         delay += 0.2
       }
     }
+    this.busyUntil = Math.max(this.busyUntil, time + delay)
     return blow
   }
 
@@ -2816,6 +2933,16 @@ class Effects {
       forward -= k * 0.28
       lean -= k * 0.18
     }
+    // Fuera de alcance: medio paso hacia el monstruo, sin golpe.
+    const step = time - this.heroStep
+    if (step >= 0 && step < 0.3) forward += Math.sin((step / 0.3) * Math.PI) * 0.22
+    // Recargando: se planta, un poco hacia atras y erguido, y vuelve.
+    const brace = time - this.heroBrace
+    if (brace >= 0 && brace < 0.34) {
+      const k = Math.sin((brace / 0.34) * Math.PI)
+      forward -= k * 0.1
+      lean -= k * 0.12
+    }
     for (const child of hero.children) {
       child.position.z = forward
       child.rotation.x = lean
@@ -2860,7 +2987,12 @@ class Effects {
       this.foeRing.position.set(this.spot.x, 0.035, this.spot.z)
       this.foeRing.scale.setScalar(pulse * (this.spot.style === 'stomp' ? 1.35 : 1))
       this.heroRing.position.set(hero.position.x, 0.035, hero.position.z)
+      this.chargeRings(time, dt, hero.position)
+    } else {
+      this.heroPie.visible = false
+      this.foePie.visible = false
     }
+    this.aggroRings(time)
     for (const entry of [...this.numbers]) {
       const k = (time - entry.start) / 1.1
       if (k < 0) continue
@@ -2873,6 +3005,42 @@ class Effects {
       entry.sprite.material.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3
       const pop = k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : 1.15 - Math.min(0.15, (k - 0.12) * 0.5)
       entry.sprite.scale.set(entry.w * pop, entry.h * pop, 1)
+    }
+  }
+
+  // La recarga de los dos sobre sus aros: el arco se llena durante el turno y,
+  // lleno, el aro del heroe late (el proximo ataque pega).
+  chargeRings(time, dt, hero) {
+    const ease = Math.min(1, dt * 5)
+    for (const entry of [this.heroCharge, this.foeCharge]) {
+      entry.k += (entry.want - entry.k) * ease
+    }
+    const heroK = this.heroCharge.k
+    this.heroPie.geometry = this.pie(0.69, 0.8, heroK)
+    this.heroPie.position.set(hero.x, 0.04, hero.z)
+    const ready = this.heroCharge.want >= 1
+    this.heroPie.material.opacity = ready ? 0.75 + Math.sin(time * 9) * 0.2 : 0.95
+    this.heroPie.visible = true
+    this.foePie.geometry = this.pie(0.89, 1.0, this.foeCharge.k)
+    this.foePie.position.set(this.spot.x, 0.04, this.spot.z)
+    this.foePie.scale.copy(this.foeRing.scale)
+    this.foePie.visible = true
+  }
+
+  // El aviso antes del contacto: un aro rojo tenue bajo los monstruos a 3
+  // celdas o menos, mas fuerte cuanto mas cerca.
+  aggroRings(time) {
+    const near = this.engaged === null && this.near ? this.near : []
+    for (let i = 0; i < this.aggro.length; i++) {
+      const ring = this.aggro[i]
+      const foe = near[i]
+      const spot = foe ? this.crowd.spot(foe.id) : null
+      ring.visible = !!spot
+      if (!spot) continue
+      const strong = foe.d <= 1 ? 0.55 : foe.d === 2 ? 0.34 : 0.18
+      ring.material.opacity = strong * (0.85 + Math.sin(time * 4 + i) * 0.15)
+      ring.position.set(spot.x, 0.03, spot.z)
+      ring.scale.setScalar(spot.style === 'stomp' ? 1.35 : 1)
     }
   }
 
@@ -2898,8 +3066,11 @@ class Effects {
     const hero = this.ctx.hero.root.position
     const spot = item.id === undefined ? null : this.crowd.spot(item.id) || this.spot
     if (item.kind === 'advance') {
-      // Un turno sin golpe (el heroe se acerca o espera su arma): solo el paso.
-      this.heroLunge = time
+      // Un turno sin golpe con el monstruo lejos: medio paso.
+      this.heroStep = time
+    } else if (item.kind === 'recharge') {
+      // Un turno sin golpe con el arma recargando: se planta.
+      this.heroBrace = time
     } else if (item.kind === 'swing') {
       this.heroLunge = time
       const style = WEAPON_STYLE[item.weapon] || 'punch'
@@ -2922,8 +3093,10 @@ class Effects {
       this.burst.position.set(spot.x, Math.max(0.3, spot.top * 0.55), spot.z)
       this.burst.material.color.setHex(0xfff0c8)
       this.sparkle(spot.x, Math.max(0.6, spot.top * 0.6), spot.z, 0xfff0b0, time)
-      this.number(`-${item.amount}`, '#fff4e0', spot.x, spot.top + 0.3, spot.z, time)
+      const size = numberScale(item.share)
+      this.number(`-${item.amount}`, '#fff4e0', spot.x, spot.top + 0.3, spot.z, time, 0, size)
       this.barHp = item.hp
+      this.impact(item.share, 0.8)
     } else if (item.kind === 'foe-swing') {
       this.crowd.strike(item.id, time)
       const shot = spot ? FOE_SHOT[spot.kind] : undefined
@@ -2939,7 +3112,17 @@ class Effects {
       this.burst.position.set(hero.x, 1.0, hero.z)
       this.burst.material.color.setHex(0xff5040)
       this.sparkle(hero.x, 1.3, hero.z, 0xff7050, time)
-      this.number(`-${item.amount}`, '#ff6a50', hero.x, 2.6, hero.z, time)
+      this.number(
+        `-${item.amount}`,
+        '#ff6a50',
+        hero.x,
+        2.25,
+        hero.z,
+        time,
+        0,
+        numberScale(item.share)
+      )
+      this.impact(item.share, 1)
       const flash = this.bits.flash
       flash.hidden = false
       flash.classList.add('on')
@@ -2947,6 +3130,14 @@ class Effects {
     } else if (item.kind === 'potion') {
       this.number(this.L('+potion', '+pocion'), '#7fe08a', hero.x, 2.6, hero.z, time)
     }
+  }
+
+  // La pausa del golpe y el temblor, segun la parte de la vida que se llevo
+  // (el golpe al heroe tiembla un poco mas que el del heroe).
+  impact(share, weight) {
+    if (!this.feel) return
+    this.feel.stop(hitStopMs(share))
+    this.feel.shake(shakeOf(share) * weight)
   }
 
   dispose() {
@@ -2957,6 +3148,14 @@ class Effects {
       mesh.geometry.dispose()
       mesh.material.dispose()
     }
+    for (const mesh of this.aggro) {
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    }
+    this.heroPie.material.dispose()
+    this.foePie.material.dispose()
+    for (const geometry of this.pies.values()) geometry.dispose()
+    this.pies.clear()
     this.spark.material.map.dispose()
     this.spark.material.dispose()
     for (const child of this.ctx.hero.root.children) {
@@ -3308,6 +3507,31 @@ export function createMeadow(ctx) {
     return shownPlace ? st.field === shownPlace.mode : st.field === 'field'
   }
 
+  // El ritmo del combate (tripo-combate.mjs): la pagina pide ataques con
+  // attack() y aca sale una tecla F por turno, cuando termina la animacion del
+  // anterior. La pausa del golpe frena el reloj de la pelea (fightTime) y, por
+  // timeScale(), las animaciones del heroe en la pagina.
+  const pace = new CombatPace()
+  const stop = new HitStop()
+  let realTime = 0
+  let fightTime = 0
+  const feel = {
+    stop: (ms) => stop.kick(ms, realTime),
+    shake: (amount) => (ctx.shake ? ctx.shake(amount) : null),
+    contact: () => pace.contact(fightTime)
+  }
+
+  // attack(true) aprieta (y repite mientras siga), attack(false) suelta y
+  // attack('tap') pide un turno solo.
+  function attack(mode) {
+    if (mode === 'tap') pace.press()
+    else pace.hold(!!mode)
+  }
+
+  function timeScale() {
+    return stop.scale(realTime)
+  }
+
   // Que muestra el mapa de la pagina: la pradera ({ place: null }), un lugar de
   // adentro ({ place }) o nada de esto (null).
   function whose(world) {
@@ -3336,7 +3560,7 @@ export function createMeadow(ctx) {
     const hint = place
       ? (st, onTouch) => (place.hint ? place.hint(st, liveField(place.modes), onTouch, L) : '')
       : null
-    fx = new Effects(ctx, crowd, bits, L, hint)
+    fx = new Effects(ctx, crowd, bits, L, hint, feel)
   }
 
   function tearDown() {
@@ -3359,18 +3583,26 @@ export function createMeadow(ctx) {
     }
     const field = liveField(modesOf(shownPlace))
     if (places && places.update) places.update(time, st, field)
+    // El reloj de la pelea: el de la pagina, casi parado durante la pausa del
+    // golpe. Los monstruos y los golpes van con el; los lugares, con el otro.
+    realTime = time
+    const fdt = dt * stop.scale(time)
+    fightTime += fdt
     if (st) {
       const game = session()
       const said = game && game.runa && Array.isArray(game.runa.log) ? game.runa.log : []
-      fx.sync(st, field, said, time, touch)
-      crowd.sync(st.foes || [], time)
+      fx.sync(st, field, said, fightTime, touch)
+      crowd.sync(st.foes || [], fightTime)
       fx.settle()
+      if (!st.fight) pace.clear()
+      // Un turno por vez: la tecla sale cuando termino la animacion del anterior.
+      else if (handlesCombat(st) && game && pace.ready(fightTime, fx.busyUntil)) game.press('f')
     } else if (!shownPlace) {
       const meadow = kit()
-      if (meadow && tourField) crowd.tour(tourField, meadow, dt, time)
+      if (meadow && tourField) crowd.tour(tourField, meadow, dt, fightTime)
     }
-    crowd.update(time, dt)
-    fx.update(time, dt)
+    crowd.update(fightTime, fdt)
+    fx.update(fightTime, fdt)
     stats.foes = crowd.count()
   }
 
@@ -3392,7 +3624,8 @@ export function createMeadow(ctx) {
   globalThis.runaMeadow = () => ({
     ...stats,
     shown: shown ? shown.map : null,
-    fight: fx ? fx.debug() : null
+    fight: fx ? fx.debug() : null,
+    pace: { held: pace.held, buffered: pace.buffered, last: pace.last, now: fightTime }
   })
   globalThis.runaMeadowField = () => liveField(modesOf(shownPlace)) || tourField
   globalThis.runaMeadowRows = (x0, y0, x1, y1) =>
@@ -3408,5 +3641,5 @@ export function createMeadow(ctx) {
     return true
   }
 
-  return { provide, worldAt, handlesCombat, update, leave }
+  return { provide, worldAt, handlesCombat, attack, timeScale, update, leave }
 }

@@ -48,6 +48,9 @@ const MODULES = {
   // La red de seguridad para telefonos (atras, guardar al ocultar, WebGL
   // perdido, teclado): .mjs para que las pruebas lo carguen en Bare.
   'movil.js': path.join(__dirname, 'tripo-movil.mjs'),
+  // El ritmo y la lectura del combate en 3D (pradera, cripta, campamentos):
+  // .mjs para que las pruebas lo carguen en Bare.
+  'combate.js': path.join(__dirname, 'tripo-combate.mjs'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra

@@ -1290,6 +1290,7 @@
       import { createInventory } from './inventario.js'
       import { createShowcase } from './vitrina.js'
       import { createMobile, backStep, typing } from './movil.js'
+      import { readout, towardFoe } from './combate.js'
 
       // Runa en 2.5D. Desde el menu de titulo se elige como estar en el mundo:
       //  - Jugar: el juego de la terminal corre entero en esta pagina (juego.js es
@@ -3820,7 +3821,11 @@
         text: (name) => tr(name),
         L,
         // La cripta mide su niebla desde el heroe (efectos.js fogFromHero).
-        effects
+        effects,
+        // El temblor de los golpes en el campo: el mismo que el del Coloso.
+        shake: (amount) => {
+          fight.shake = Math.max(fight.shake, amount)
+        }
       })
       const inventory = createInventory({
         tr: (name) => tr(name),
@@ -3889,7 +3894,8 @@
         if (screen === 'play') playFrame(dt, t)
         if (world) walk(dt)
         else if (mixer && screen === 'menu') setGait('Idle', 1)
-        if (mixer && avatar.visible) mixer.update(dt)
+        // La pausa de un golpe en el campo (hit stop) tambien frena al heroe.
+        if (mixer && avatar.visible) mixer.update(dt * (meadow ? meadow.timeScale() : 1))
         // El mundo puede tener movimiento propio: viento, agua, NPC.
         if (world && world.built.update) world.built.update(t)
         if (title && screen === 'menu') title.update(t, dt)
@@ -5086,7 +5092,9 @@
         phase: 0,
         last: null,
         blockedX: 0,
-        blockedY: 0
+        blockedY: 0,
+        // Si el stick esta pidiendo ataques en una pelea en 3D.
+        striking: false
       }
       // Las cuatro flechas del teclado y, en la cruceta, tambien las diagonales.
       const DIRS = {
@@ -5282,6 +5290,21 @@
           return
         }
         const [dx, dy] = heading(mover.held, mover.fingers)
+        // Pelea en 3D: el stick o las flechas hacia el monstruo atacan al ritmo
+        // de los turnos (pradera.js attack); hacia otro lado no hacen nada.
+        if (fightIn3d(st)) {
+          const foe = (st.foes || []).find((f) => st.fight && f.id === st.fight.id)
+          const toward = towardFoe(dx, dy, st.location, foe)
+          if (toward && !mover.striking) meadow.attack(true)
+          if (!toward && mover.striking) meadow.attack(false)
+          mover.striking = toward
+          mover.wait = 0
+          return
+        }
+        if (mover.striking) {
+          mover.striking = false
+          if (meadow) meadow.attack(false)
+        }
         if (!dx && !dy) {
           mover.wait = 0
           mover.phase = 0
@@ -5313,11 +5336,18 @@
 
       // --- Teclas ------------------------------------------------------------
 
+      // La pelea del campo se ve en 3D (pradera, cripta, campamento): los ataques
+      // van por el ritmo de pradera.js, no directo al juego.
+      function fightIn3d(st) {
+        return !!(st && st.combat && meadow && meadow.handlesCombat(st))
+      }
+
       // El tajo del heroe contra el Coloso: el mismo con F, espacio o el boton.
       function strikeFx(st) {
         if (world && world.map === 'boss' && st && st.boss) swingSword()
       }
 
+      const STRIKE_KEYS = new Set(['f', ' ', 'Enter'])
       function playKey(event, down) {
         if (!session) return
         if (event.key === 'Shift') {
@@ -5332,6 +5362,16 @@
         const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
         const dir = MOVES[key]
         const roaming = exploring(st)
+        // F, Espacio o Enter en una pelea en 3D: apretar pide turnos, soltar
+        // los corta. La repeticion del teclado no cuenta: el ritmo es del juego.
+        if (STRIKE_KEYS.has(key)) {
+          if (down && roaming && fightIn3d(st)) {
+            event.preventDefault()
+            if (!event.repeat) meadow.attack(true)
+            return
+          }
+          if (!down && meadow) meadow.attack(false)
+        }
         if (dir && roaming) {
           event.preventDefault()
           if (down) mover.held.add(dir)
@@ -5823,6 +5863,9 @@
         mover.fingers.clear()
         clearInterval(padRepeat)
         stopStrike()
+        // La pelea en 3D no sigue pidiendo turnos detras del menu.
+        if (meadow) meadow.attack(false)
+        mover.striking = false
         stickMode = null
         pause.hidden = false
         pauseMain()
@@ -6035,6 +6078,8 @@
           return session.press('escape')
         }
         if (act === 'f') strikeFx(st)
+        // En una pelea en 3D el ataque va por el ritmo de los turnos.
+        if (act === 'f' && fightIn3d(st)) return meadow.attack('tap')
         session.press(act)
       }
 
@@ -6053,13 +6098,22 @@
           ACT[act] = { b, icon, small, iconName: '' }
           const release = () => {
             b.classList.remove('down')
-            if (act === 'f') stopStrike()
+            if (act === 'f') {
+              stopStrike()
+              if (meadow) meadow.attack(false)
+            }
           }
           b.addEventListener('pointerdown', (event) => {
             b.classList.add('down')
             if (!STRIKE_ACTS.has(act)) return
             event.preventDefault()
             b.setPointerCapture(event.pointerId)
+            // En una pelea en 3D, apoyar el dedo pide turnos hasta soltarlo:
+            // igual que mantener F o Espacio.
+            if (act === 'f' && session && fightIn3d(live || session.state())) {
+              meadow.attack(true)
+              return
+            }
             runAct(act)
             // En el duelo, mantener apretado repite el ataque; la recarga
             // (cooldownLeft) la impone el juego.
@@ -6128,7 +6182,11 @@
         const bossLive = !!(st.boss && !st.boss.defeated)
         const inReach = !!(arena && arena.distance <= arena.self.reach)
         const loaded = !arena || arena.self.cooldownLeft <= 0
+        // En la pelea del campo: Atacar, Esperar (n) o Recarga (como en el duelo:
+        // entra en el boton redondo del telefono).
+        const next = st.combat ? readout(st.fight) : null
         const key = [
+          next ? next.state + next.n : '',
           paused,
           peek,
           screenUp && (st.overlay || 'title'),
@@ -6211,11 +6269,17 @@
           return
         }
         if (st.combat || st.field === 'boss') {
+          // Esperar y Recargando tambien pasan el turno: el boton deja de
+          // brillar pero no se apaga (apagado seria no hace nada).
+          const waiting = !!next && next.state !== 'attack'
+          let label = st.combat ? L('Attack', 'Atacar') : L('Strike', 'Golpear')
+          if (next && next.state === 'wait') label = L(`Wait (${next.n})`, `Esperar (${next.n})`)
+          if (next && next.state === 'recharge') label = L('Reload', 'Recarga')
           setAct('f', {
             icon: 'sword',
             primary: true,
-            label: st.combat ? L('Attack', 'Atacar') : L('Strike', 'Golpear'),
-            hot: st.combat || bossLive,
+            label,
+            hot: (st.combat && !waiting) || bossLive,
             dim: !st.combat && !bossLive
           })
           setAct('e', !st.combat && { icon: 'hand', label: L('Use', 'Usar') })
@@ -6950,6 +7014,9 @@
         mover.held.clear()
         mover.fingers.clear()
         shiftHeld = false
+        // Una tecla de ataque soltada fuera de la ventana no llega: se suelta aca.
+        if (meadow) meadow.attack(false)
+        mover.striking = false
       })
       // Cerrar la pagina es dejar la sala: con un duelo abierto, rendirse y
       // avisarle al rival, que se queda con la victoria y vuelve a la ciudad.
