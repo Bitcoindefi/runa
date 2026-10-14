@@ -184,3 +184,57 @@ test('atlas: other players are counted per region', (t) => {
   t.is(estado.regionOfMapId('boss'), 'boss')
   t.is(estado.regionOfMapId(''), null)
 })
+
+test('dodge aid: the charge of the marked strike and the nearest free cell', (t) => {
+  const { WorldBossEvent, FRAME_TICKS } = require('../lib/world-boss-event.js')
+  const { TICK_MS } = require('../lib/game.js')
+  t.is(estado.TICK, TICK_MS, 'the same tick as lib/game.js')
+
+  const boss = new WorldBossEvent({ width: 120, height: 36 })
+  const player = { x: boss.x - 20, y: boss.y + 3, hp: 20 }
+  const field = { mode: 'boss', boss, time: 1, player, width: 120, height: 36 }
+  t.is(estado.bossDodge(field), null, 'no marked strike, no aid')
+  t.is(estado.bossDodge({ ...field, mode: 'field' }), null, 'only in the ruins')
+
+  boss.activate(0)
+  boss.nextAttackAt = 0
+  boss.tick(player, 1)
+  const total = boss.action.attack.frames.length * FRAME_TICKS
+  field.time = 2
+  let aid = estado.bossDodge(field)
+  t.is(aid.total, total, 'the windup is the frames of the attack')
+  t.is(aid.done, 1, 'one tick into the windup')
+  t.is(aid.leftMs, Math.round((total - 1) * TICK_MS))
+  t.is(aid.totalMs, Math.round(total * TICK_MS))
+
+  const marked = new Set(boss.action.telegraphs.map((cell) => cell.x + ',' + cell.y))
+  const off = { x: 0, y: 0 }
+  while (marked.has(off.x + ',' + off.y)) off.x++
+  Object.assign(player, off)
+  aid = estado.bossDodge(field)
+  t.is(aid.danger, false, 'off the marks there is no danger')
+  t.is(aid.safe, null)
+
+  const cell = boss.action.telegraphs[0]
+  player.x = cell.x
+  player.y = cell.y
+  aid = estado.bossDodge(field)
+  t.is(aid.danger, true, 'standing on a mark is danger')
+  t.ok(aid.safe, 'a free cell is offered')
+  const steps = Math.max(Math.abs(aid.safe.x - cell.x), Math.abs(aid.safe.y - cell.y))
+  t.ok(!marked.has(aid.safe.x + ',' + aid.safe.y), 'the free cell carries no mark')
+  t.ok(!boss.occupies(aid.safe.x, aid.safe.y), 'nor the body of the Colossus')
+  let closer = false
+  for (let dy = -steps + 1; dy < steps; dy++) {
+    for (let dx = -steps + 1; dx < steps; dx++) {
+      const x = cell.x + dx
+      const y = cell.y + dy
+      if (x < 0 || y < 0 || x >= 120 || y >= 36) continue
+      if (!marked.has(x + ',' + y) && !boss.occupies(x, y)) closer = true
+    }
+  }
+  t.is(closer, false, 'no free cell is fewer steps away')
+
+  field.time = 1 + total + 5
+  t.is(estado.bossDodge(field).leftMs, 0, 'the countdown never goes below zero')
+})

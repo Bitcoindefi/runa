@@ -162,6 +162,36 @@
       #toast.show {
         opacity: 1;
       }
+      /* El borde rojo cuando el heroe pisa donde va a pegar el Coloso. */
+      #peligro {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0;
+        /* El golpe carga en menos de un segundo: el borde aparece casi de una. */
+        transition: opacity 0.06s;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(255, 40, 16, 0) 45%,
+          rgba(255, 40, 16, 0.38) 75%,
+          rgba(255, 40, 16, 0.82) 100%
+        );
+        box-shadow: inset 0 0 0 3px rgba(255, 80, 40, 0.75);
+      }
+      #peligro.on {
+        animation: peligro 0.5s ease-in-out infinite alternate;
+      }
+      @keyframes peligro {
+        to {
+          filter: brightness(1.45);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #peligro.on {
+          animation: none;
+        }
+      }
       #hud > div:first-child {
         max-width: min(640px, 70vw);
       }
@@ -1304,6 +1334,7 @@
       <dl id="gear"></dl>
     </header>
     <div id="toast"></div>
+    <div id="peligro" aria-hidden="true"></div>
     <div id="failure" hidden></div>
     <script>
       // Antes del modulo, para que tambien se vea si el modulo no carga (un
@@ -2803,42 +2834,200 @@
         }
       }
 
-      // El Coloso marca en el piso donde va a pegar (rojo, late) y lo que ya
-      // quema (naranja): son las celdas que da el juego, sobre el mapa 3D.
+      // El Coloso marca en el piso donde va a pegar (rojo oscuro, y se llena de
+      // rojo vivo mientras carga el golpe) y lo que ya quema (naranja, late): son
+      // las celdas que da el juego, sobre el mapa 3D.
       let marks = null
+      let fills = null
       const markMatrix = new THREE.Matrix4()
-      const markRed = new THREE.Color(0xff3b1a)
+      const markScale = new THREE.Vector3()
+      const markAt = new THREE.Vector3()
+      const markTurn = new THREE.Quaternion()
+      const markRed = new THREE.Color(0x8a1608)
+      const fillRed = new THREE.Color(0xff3b1a)
       const markOrange = new THREE.Color(0xff9a20)
+      function markMesh(opacity) {
+        const mesh = new THREE.InstancedMesh(
+          new THREE.PlaneGeometry(CX * 0.94, CZ * 0.94).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ transparent: true, opacity, depthWrite: false }),
+          256
+        )
+        mesh.frustumCulled = false
+        mesh.renderOrder = 2
+        scene.add(mesh)
+        return mesh
+      }
       function bossMarks(boss, time) {
         const cells = boss && world && world.map === 'boss' ? boss : null
         if (!cells) {
-          if (marks) marks.visible = false
+          if (marks) marks.visible = fills.visible = false
           return
         }
         if (!marks) {
-          marks = new THREE.InstancedMesh(
-            new THREE.PlaneGeometry(CX * 0.94, CZ * 0.94).rotateX(-Math.PI / 2),
-            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthWrite: false }),
-            256
-          )
-          marks.frustumCulled = false
-          marks.renderOrder = 2
-          scene.add(marks)
+          marks = markMesh(0.6)
+          fills = markMesh(0.85)
+          fills.renderOrder = 3
         }
+        // La carga del golpe: de 0 (recien marcado) a 1 (cae).
+        const charge = bossCharge(cells.dodge).share
         let i = 0
+        let n = 0
         const put = (cell, color) => {
           if (i >= 256) return
           const p = world.built.toWorld(cell.x, cell.y)
           marks.setMatrixAt(i, markMatrix.makeTranslation(p.x, 0.07, p.z))
           marks.setColorAt(i++, color)
         }
-        for (const cell of cells.telegraphs || []) put(cell, markRed)
+        for (const cell of cells.telegraphs || []) {
+          put(cell, markRed)
+          if (n >= 256 || charge <= 0) continue
+          const p = world.built.toWorld(cell.x, cell.y)
+          const k = 0.15 + 0.85 * charge
+          markMatrix.compose(markAt.set(p.x, 0.08, p.z), markTurn, markScale.set(k, 1, k))
+          fills.setMatrixAt(n, markMatrix)
+          fills.setColorAt(n++, fillRed)
+        }
         for (const cell of cells.hazards || []) put(cell, markOrange)
         marks.count = i
-        marks.instanceMatrix.needsUpdate = true
-        if (marks.instanceColor) marks.instanceColor.needsUpdate = true
+        fills.count = n
+        for (const mesh of [marks, fills]) {
+          mesh.instanceMatrix.needsUpdate = true
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+        }
         marks.material.opacity = 0.45 + Math.sin(time * 9) * 0.2
         marks.visible = i > 0
+        fills.visible = n > 0
+      }
+
+      // Cuanto falta para que caiga el golpe marcado. El juego lo cuenta en ticks
+      // (tripo-estado.js bossDodge); entre tick y tick se corre con el reloj de la
+      // pagina para que el anillo y el relleno bajen parejo.
+      const charging = { done: -1, total: 0, at: 0 }
+      function bossCharge(dodge) {
+        if (!dodge) {
+          charging.done = -1
+          return { share: 0, leftMs: 0 }
+        }
+        const now = performance.now()
+        if (dodge.done !== charging.done || dodge.total !== charging.total) {
+          charging.done = dodge.done
+          charging.total = dodge.total
+          charging.at = now
+        }
+        const tick = dodge.totalMs / Math.max(1, dodge.total)
+        const leftMs = Math.max(0, dodge.leftMs - Math.min(tick, now - charging.at))
+        return { share: dodge.totalMs ? 1 - leftMs / dodge.totalMs : 1, leftMs }
+      }
+
+      // La ayuda para esquivar (solo la vista, no cambia reglas): mientras el heroe
+      // pisa una celda marcada, el borde de la pantalla se pone rojo, una flecha en
+      // el piso apunta a la celda libre mas cercana (que se marca en verde) y un
+      // anillo a sus pies se vacia hasta que cae el golpe. Igual en tactil y en PC.
+      const dodgeAid = { group: null, arrow: null, spot: null, ring: null, ringStep: -1 }
+      const vignette = document.getElementById('peligro')
+      const dodgeSafe = new THREE.Color(0x5dff8a)
+      const ringFull = new THREE.Color(0xffd23a)
+      const ringEmpty = new THREE.Color(0xff2a10)
+      function dodgeParts() {
+        if (dodgeAid.group) return dodgeAid
+        const flat = (geometry, color, opacity) => {
+          const mesh = new THREE.Mesh(
+            geometry,
+            new THREE.MeshBasicMaterial({
+              color,
+              transparent: true,
+              opacity,
+              depthTest: false,
+              depthWrite: false,
+              side: THREE.DoubleSide
+            })
+          )
+          mesh.renderOrder = 6
+          mesh.frustumCulled = false
+          return mesh
+        }
+        // La flecha mira a +z: cuerpo y punta, chata sobre el piso.
+        const shape = new THREE.Shape()
+        shape.moveTo(-0.16, 0)
+        shape.lineTo(0.16, 0)
+        shape.lineTo(0.16, 0.9)
+        shape.lineTo(0.42, 0.9)
+        shape.lineTo(0, 1.5)
+        shape.lineTo(-0.42, 0.9)
+        shape.lineTo(-0.16, 0.9)
+        shape.closePath()
+        const group = new THREE.Group()
+        dodgeAid.arrow = flat(new THREE.ShapeGeometry(shape).rotateX(Math.PI / 2), dodgeSafe, 0.9)
+        dodgeAid.spot = flat(
+          new THREE.PlaneGeometry(CX * 0.94, CZ * 0.94).rotateX(-Math.PI / 2),
+          dodgeSafe,
+          0.6
+        )
+        dodgeAid.spot.renderOrder = 7
+        // Una columna de luz sobre la celda libre: se ve aunque la tape la flecha.
+        const beam = flat(
+          new THREE.CylinderGeometry(0.22, 0.22, 1.6, 16, 1, true).translate(0, 0.8, 0),
+          dodgeSafe,
+          0.28
+        )
+        dodgeAid.spot.add(beam)
+        dodgeAid.ring = flat(new THREE.BufferGeometry(), ringFull, 0.95)
+        group.add(dodgeAid.arrow, dodgeAid.ring)
+        scene.add(group, dodgeAid.spot)
+        dodgeAid.group = group
+        return dodgeAid
+      }
+      function dodgeFrame(boss, time) {
+        const dodge = boss && world && world.map === 'boss' ? boss.dodge : null
+        const danger = !!(dodge && dodge.danger)
+        vignette.classList.toggle('on', danger)
+        if (!danger) {
+          vignette.style.opacity = '0'
+          if (dodgeAid.group) dodgeAid.group.visible = dodgeAid.spot.visible = false
+          window.runaDodge = null
+          return
+        }
+        const aid = dodgeParts()
+        const { share, leftMs } = bossCharge(dodge)
+        vignette.style.opacity = String(0.55 + 0.45 * share)
+        const at = hero.root.position
+        aid.group.visible = true
+        aid.group.position.set(at.x, heroGround + 0.09, at.z)
+        // El anillo se vacia: lleno al marcar, nada al caer. Se rearma en 48 pasos.
+        const step = Math.round((1 - share) * 48)
+        if (step !== aid.ringStep) {
+          aid.ringStep = step
+          aid.ring.geometry.dispose()
+          aid.ring.geometry = new THREE.RingGeometry(
+            0.82,
+            0.98,
+            48,
+            1,
+            Math.PI / 2,
+            (Math.max(step, 0.01) / 48) * Math.PI * 2
+          ).rotateX(-Math.PI / 2)
+        }
+        aid.ring.material.color.copy(ringFull).lerp(ringEmpty, share)
+        const safe = dodge.safe
+        aid.arrow.visible = aid.spot.visible = !!safe
+        if (safe) {
+          const p = world.built.toWorld(safe.x, safe.y)
+          aid.spot.position.set(p.x, 0.1, p.z)
+          aid.spot.material.opacity = 0.45 + Math.sin(time * 10) * 0.2
+          const dx = p.x - at.x
+          const dz = p.z - at.z
+          const far = Math.hypot(dx, dz)
+          const turn = Math.atan2(dx, dz)
+          aid.arrow.rotation.y = turn
+          // Sale de entre los pies y la punta pasa apenas la celda libre (las
+          // celdas miden medio metro por uno, asi que suele estar al lado); late
+          // un poco hacia la salida.
+          const start = 0.45 + 0.12 * (0.5 + 0.5 * Math.sin(time * 8))
+          const length = Math.max(0.8, far + 0.3 - start)
+          aid.arrow.scale.set(Math.min(1, 0.55 + length / 3), 1, length / 1.5)
+          aid.arrow.position.set(Math.sin(turn) * start, 0, Math.cos(turn) * start)
+        }
+        window.runaDodge = { safe, share, leftMs }
       }
 
       // Animacion
@@ -5308,6 +5497,7 @@
         }
         dressFrom(st)
         bossMarks(st.boss, time)
+        dodgeFrame(st.boss, time)
         fightFrame(dt, time, st)
         othersFrame(dt, st)
         sendPose(st)

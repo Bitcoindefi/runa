@@ -11,6 +11,7 @@ const { Field, BARBARIAN_SETTLEMENTS, vdist } = require('../lib/field.js')
 const { DUNGEON, floorRows } = require('../lib/dungeon.js')
 const { campRows } = require('../lib/barbarian-camp.js')
 const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
+const { FRAME_TICKS } = require('../lib/world-boss-event.js')
 const { DUEL_BODY_GAP } = require('../lib/duel.js')
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
@@ -197,6 +198,64 @@ function foesOf(field) {
 // prueba los compara; game.js no se carga aca porque el visor lee este archivo
 // en Node).
 const COMBAT_TURN = 6
+
+// Lo que dura un tick del juego en milisegundos: el TICK_MS de lib/game.js (una
+// prueba los compara, igual que COMBAT_TURN).
+const TICK = 1000 / 15
+
+// La ayuda para esquivar al Coloso, solo para la vista (no cambia reglas):
+// cuanto lleva cargado el golpe que marco (en ticks y en milisegundos) y, si el
+// heroe esta parado en una celda marcada, la celda libre mas cercana. Libre es
+// dentro del mapa, sin marca, sin fuego y fuera del cuerpo del Coloso; se camina
+// en ocho direcciones, asi que "cerca" son los pasos (y a igual pasos, la recta).
+function bossDodge(field) {
+  const boss = field && field.mode === 'boss' ? field.boss : null
+  const action = boss && boss.action
+  if (!action) return null
+  const total =
+    Math.max(1, ((action.attack && action.attack.frames) || ['idle']).length) * FRAME_TICKS
+  const done = Math.max(0, Math.min(total, field.time - action.startedAt))
+  const key = (x, y) => x + ',' + y
+  const marked = new Set(action.telegraphs.map((cell) => key(cell.x, cell.y)))
+  const burning = new Set(
+    (boss.hazards || []).map((cell) => key(Math.round(cell.x), Math.round(cell.y)))
+  )
+  const hx = field.player.x
+  const hy = field.player.y
+  const danger = marked.has(key(hx, hy))
+  let safe = null
+  if (danger) {
+    const free = (x, y) =>
+      x >= 0 &&
+      y >= 0 &&
+      x < field.width &&
+      y < field.height &&
+      !marked.has(key(x, y)) &&
+      !burning.has(key(x, y)) &&
+      !boss.occupies(x, y)
+    for (let r = 1; r <= 16 && !safe; r++) {
+      let best = Infinity
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const d = dx * dx + dy * dy
+          if (d < best && free(hx + dx, hy + dy)) {
+            best = d
+            safe = { x: hx + dx, y: hy + dy }
+          }
+        }
+      }
+    }
+  }
+  return {
+    done,
+    total,
+    leftMs: Math.round((total - done) * TICK),
+    totalMs: Math.round(total * TICK),
+    danger,
+    safe
+  }
+}
 
 // La pelea en curso, para animarla: contra quien, la vida de los dos, el arma en
 // la mano (la elige el guion entre golpe y golpe) y las ultimas lineas de la
@@ -511,7 +570,9 @@ function live(runa) {
           y: boss.y,
           // Donde va a pegar y lo que ya quema: la vista 3D lo marca en el piso.
           telegraphs: boss.telegraphs.map(({ x, y }) => ({ x, y })),
-          hazards: boss.hazards.map(({ x, y }) => ({ x, y }))
+          hazards: boss.hazards.map(({ x, y }) => ({ x, y })),
+          // La carga del golpe marcado y hacia donde salir (bossDodge).
+          dodge: bossDodge(field)
         }
       : null,
     equipped: wearing(sheet.equipped),
@@ -534,6 +595,7 @@ function live(runa) {
 
 module.exports = {
   COMBAT_TURN,
+  TICK,
   SLOTS,
   WORLD_MAPS,
   item,
@@ -548,6 +610,7 @@ module.exports = {
   inviteOf,
   foesOf,
   fightOf,
+  bossDodge,
   regionOf,
   regionOfMapId,
   gateGraph,
