@@ -66,6 +66,7 @@ require('./lugares.test.js')
 require('./movil.test.js')
 require('./combate.test.js')
 require('./atlas-estado.test.js')
+require('./nox-ciudad.test.js')
 require('./jugadores.test.js')
 require('./sonido.test.js')
 
