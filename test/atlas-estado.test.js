@@ -187,6 +187,7 @@ test('atlas: other players are counted per region', (t) => {
 
 test('dodge aid: the charge of the marked strike and the nearest free cell', (t) => {
   const { WorldBossEvent, FRAME_TICKS } = require('../lib/world-boss-event.js')
+  const { bossWindup } = require('../lib/combat-rules.js')
   const { TICK_MS } = require('../lib/game.js')
   t.is(estado.TICK, TICK_MS, 'the same tick as lib/game.js')
 
@@ -199,10 +200,11 @@ test('dodge aid: the charge of the marked strike and the nearest free cell', (t)
   boss.activate(0)
   boss.nextAttackAt = 0
   boss.tick(player, 1)
-  const total = boss.action.attack.frames.length * FRAME_TICKS
+  const total = bossWindup(boss.action.attack, FRAME_TICKS)
+  t.ok(total >= boss.action.attack.frames.length * FRAME_TICKS, 'never shorter than its frames')
   field.time = 2
   let aid = estado.bossDodge(field)
-  t.is(aid.total, total, 'the windup is the frames of the attack')
+  t.is(aid.total, total, 'the windup is the real one (L6: its telegraph)')
   t.is(aid.done, 1, 'one tick into the windup')
   t.is(aid.leftMs, Math.round((total - 1) * TICK_MS))
   t.is(aid.totalMs, Math.round(total * TICK_MS))

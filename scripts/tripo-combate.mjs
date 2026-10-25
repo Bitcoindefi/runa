@@ -2,13 +2,18 @@
 // que comparten la pradera, la cripta y los campamentos (pradera.js Effects).
 //
 //  - Ritmo: cada ataque (F, Espacio, Enter, el boton Atacar o el stick hacia el
-//    monstruo) pide un turno. Va uno por vez: el siguiente sale cuando termina
-//    la animacion del anterior, con un pedido guardado como mucho. Mantener
-//    apretado repite al mismo ritmo, nunca mas de unos tres por segundo.
-//  - Turno: lo que paso se cuenta por las vidas antes y despues (tripo-estado.js
+//    monstruo) pide un turno. Va uno por vez: el siguiente sale cuando cae el
+//    golpe del anterior, con un pedido guardado como mucho. Mantener apretado
+//    repite al mismo ritmo. Con el turno hasta el proximo golpe (L3) cada turno
+//    dura los ticks que resolvio el juego, a 30 por segundo (turnLead): la
+//    barra de carga se llena en ese tiempo y el golpe cae al final.
+//  - Acciones (L2, L4, L5): la pocion, la guardia y la retirada se piden con
+//    order() y salen en el proximo turno, antes que el ataque.
+//  - Turno: lo que paso se lee del registro con datos de la pelea (L1: type, by,
+//    amount); sin el, se cuenta por las vidas antes y despues (tripo-estado.js
 //    fightOf), no leyendo las lineas del registro en castellano.
-//  - Lectura: el boton dice Atacar, Esperar (n) o Recargando, y los aros de la
-//    pelea muestran la recarga de los dos.
+//  - Lectura: el boton dice Atacar, Esperar (n) o Recargando, y la barra de
+//    carga y los aros de la pelea muestran la recarga de los dos.
 //  - Golpe: una pausa corta (hit stop), el temblor de la camara y el tamano del
 //    numero crecen con la parte de la vida que se llevo el golpe.
 //
@@ -26,18 +31,25 @@ export const MIN_TURN = 0.34
 // Despues del contacto, el primer turno espera un poco: se ve el "!" y los aros.
 export const CONTACT_PAUSE = 0.45
 
+// Las acciones de un turno y la tecla del juego de cada una (lib/game.js
+// COMBAT_KEYS; una prueba los compara).
+export const ACTION_KEYS = { attack: 'f', potion: 'p', guard: 'g', retreat: 'b' }
+
 /**
  * El cursor del combate: guarda un pedido y avisa cuando mandarlo.
  * press() guarda un pedido (varios seguidos son uno solo); hold(true, from)
- * repite mientras siga apretado; ready(now, busyUntil) dice si toca mandar el
- * turno ahora (y lo consume). Cada fuente (tecla, boton, stick) se aprieta y
- * se suelta por su lado: soltar una no corta las otras. release() suelta todo
- * y olvida el pedido guardado (el menu de pausa, la ventana sin foco).
+ * repite mientras siga apretado; order(kind) guarda una pocion, una guardia o
+ * una retirada para el proximo turno (la ultima pedida gana); ready(now,
+ * busyUntil) dice que turno toca mandar ahora ('attack', la accion pedida o
+ * false) y lo consume. Cada fuente (tecla, boton, stick) se aprieta y se
+ * suelta por su lado: soltar una no corta las otras. release() suelta todo y
+ * olvida lo guardado (el menu de pausa, la ventana sin foco).
  */
 export class CombatPace {
   constructor({ minTurn = MIN_TURN } = {}) {
     this.minTurn = minTurn
     this.buffered = false
+    this.action = null
     this.held = false
     this.sources = new Set()
     this.last = -Infinity
@@ -46,6 +58,10 @@ export class CombatPace {
 
   press() {
     this.buffered = true
+  }
+
+  order(kind) {
+    if (kind && kind !== 'attack' && ACTION_KEYS[kind]) this.action = kind
   }
 
   hold(on, from = 'key') {
@@ -59,6 +75,7 @@ export class CombatPace {
     this.sources.clear()
     this.held = false
     this.buffered = false
+    this.action = null
   }
 
   // La pelea empieza: el primer turno espera la pausa del contacto.
@@ -69,19 +86,42 @@ export class CombatPace {
   // La pelea termina: se olvida el pedido guardado (no la tecla apretada).
   clear() {
     this.buffered = false
+    this.action = null
   }
 
   wants() {
-    return this.buffered || this.held
+    return this.buffered || this.held || !!this.action
   }
 
   ready(now, busyUntil = -Infinity) {
     if (!this.wants()) return false
     if (now < busyUntil || now < this.notBefore || now < this.last + this.minTurn) return false
     this.last = now
+    if (this.action) {
+      const kind = this.action
+      this.action = null
+      return kind
+    }
     this.buffered = false
-    return true
+    return 'attack'
   }
+}
+
+/**
+ * Cuanto dura en la pagina un turno que resolvio varios ticks de la pelea
+ * (L3): los mismos segundos que en el juego, a fight.tps por segundo, con un
+ * tope de tres segundos. Con el turno fijo de antes (sin untilBlow) no hay
+ * espera: la animacion manda.
+ * @param {object} before fightOf de antes
+ * @param {object} after fightOf de despues
+ * @returns {number} segundos
+ */
+export function turnLead(before, after) {
+  if (!before || !after || !before.untilBlow) return 0
+  const ticks = num(after.tick, NaN) - num(before.tick, NaN)
+  const tps = Math.max(1, num(before.tps, 30))
+  if (!(ticks > 0)) return 0
+  return Math.min(3, ticks / tps)
 }
 
 const num = (value, fallback = 0) => {
@@ -137,6 +177,8 @@ export function foeBlows(before, after) {
  * @returns {{ who: string, amount?: number, share?: number }[]}
  */
 export function turnEvents(before, after) {
+  const told = loggedEvents(before, after)
+  if (told) return told
   const events = []
   const dealt = Math.max(0, num(before.foeHp) - num(after.foeHp))
   const used = Math.max(0, num(before.potions) - num(after.potions))
@@ -166,6 +208,60 @@ export function turnEvents(before, after) {
 }
 
 /**
+ * Lo que paso entre dos lecturas, leido del registro con datos de la pelea (L1:
+ * cada linea con type, by y amount, lib/world.js event). Las lineas de un turno
+ * son las de numero (n) mayor que before.logged. null si no se puede leer asi
+ * (L1 apagado, una pelea vieja o lineas que ya no estan): entonces se cuenta
+ * por las vidas. El golpe que mata se cuenta hasta la vida que le quedaba.
+ * @param {object} before
+ * @param {object} after
+ * @returns {object[]|null}
+ */
+export function loggedEvents(before, after) {
+  if (!before || !after || !Array.isArray(after.log)) return null
+  const from = Number(before.logged)
+  const to = Number(after.logged)
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+  const fresh = after.log.filter((line) => line && num(line.n) > from)
+  // Si se cortaron lineas del medio, o ninguna trae datos, no se adivina.
+  if (fresh.length < to - from) return null
+  if (fresh.length && !fresh.some((line) => line.type)) return null
+  const events = []
+  let foeHp = num(before.foeHp)
+  let hp = num(before.hp)
+  for (const line of fresh) {
+    const amount = Math.max(0, num(line.amount))
+    if (line.type === 'hit' && line.by === 'hero') {
+      const dealt = Math.min(amount, Math.max(0, foeHp))
+      foeHp -= dealt
+      if (dealt > 0) {
+        const share = dealt / Math.max(1, num(before.foeMaxhp, 1))
+        events.push({ who: 'hero', amount: dealt, share })
+      }
+    } else if (line.type === 'hit' && line.by === 'foe') {
+      const taken = Math.min(amount, Math.max(0, hp))
+      hp -= taken
+      const event = { who: 'foe', amount: taken, share: taken / Math.max(1, num(before.maxhp, 1)) }
+      if (num(line.blocked) > 0) event.blocked = num(line.blocked)
+      if (line.parting) event.parting = true
+      if (taken > 0) events.push(event)
+    } else if (line.type === 'potion') {
+      hp += amount
+      events.push({ who: 'potion', amount })
+    } else if (line.type === 'guard') {
+      events.push({ who: 'guard' })
+    } else if (line.type === 'retreat') {
+      events.push({ who: 'retreat', clean: !!line.clean })
+    }
+  }
+  if (!events.some((event) => event.who !== 'guard')) {
+    const far = num(before.dist) > num(before.reach, 1)
+    events.push({ who: far ? 'advance' : 'recharge' })
+  }
+  return events
+}
+
+/**
  * Cuantos turnos faltan para que el heroe pegue y por que. state es 'attack'
  * (pega con el proximo turno), 'recharge' (el arma se recarga: n turnos) o
  * 'wait' (el monstruo esta fuera de alcance: n turnos, estimado por las
@@ -188,9 +284,45 @@ export function readout(fight) {
     closeTicks = closing > 0 ? Math.ceil(gap / closing) + 1 : Infinity
   }
   const ticks = Math.max(cd, closeTicks)
+  const state = closeTicks > cd ? 'wait' : 'recharge'
+  if (fight.untilBlow) return blowReadout(fight, ticks, turn, state)
   if (ticks <= turn) return { state: 'attack', n: 1 }
   const n = Number.isFinite(ticks) ? Math.ceil(ticks / turn) : 9
-  return { state: closeTicks > cd ? 'wait' : 'recharge', n: Math.min(9, n) }
+  return { state, n: Math.min(9, n) }
+}
+
+// L3: cada turno corre hasta el primer golpe (o el tope, turn). El heroe pega
+// en este turno si su golpe llega antes o junto con el del monstruo (en un tick
+// pega primero el heroe). Si no, cuenta los turnos que terminan en un golpe del
+// monstruo o en el tope antes del suyo.
+function blowReadout(fight, ticks, turn, state) {
+  const strike = Math.max(1, ticks)
+  if (!Number.isFinite(strike)) return { state, n: 9 }
+  const foeCdMax = Math.max(1, num(fight.foeCdMax, 1))
+  let foe = foeFirst(fight)
+  let start = 0
+  let n = 1
+  while (n < 9) {
+    if (strike <= start + turn && strike <= foe) break
+    if (foe <= start + turn && foe < strike) {
+      start = foe
+      foe += foeCdMax
+    } else start += turn
+    n++
+  }
+  return n === 1 ? { state: 'attack', n: 1 } : { state, n }
+}
+
+// El tick (desde ahora, 1 el proximo) en que pega el monstruo, estimado: con su
+// recarga si ya alcanza al heroe, o cuando llegue caminando.
+function foeFirst(fight) {
+  const cd = Math.max(1, num(fight.foeCd))
+  const gap = num(fight.dist) - num(fight.foeReach, 1)
+  if (gap <= 0) return cd
+  const near = num(fight.dist) > num(fight.reach, 1) ? num(fight.speed) : 0
+  const closing = num(fight.foeSpeed) + near
+  if (!(closing > 0)) return Infinity
+  return Math.max(cd, Math.ceil(gap / closing) + 1)
 }
 
 /** Lo cargado de una recarga, de 0 (recien pego) a 1 (lista). */

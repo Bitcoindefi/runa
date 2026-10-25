@@ -5,7 +5,6 @@ const os = require('bare-os')
 const path = require('bare-path')
 const {
   Runa,
-  COMBAT_TURN_TICKS,
   QUESTS,
   REALMS,
   normalizeRealm,
@@ -47,6 +46,7 @@ const { SaveStore } = require('../lib/saves.js')
 const { World } = require('../lib/world.js')
 const { WORLD_BOSS } = require('../lib/world-boss.js')
 const { WorldBossEvent } = require('../lib/world-boss-event.js')
+const { turnLimit } = require('../lib/combat-rules.js')
 const {
   BEGIN_SYNCHRONIZED_UPDATE,
   END_SYNCHRONIZED_UPDATE,
@@ -68,6 +68,8 @@ require('./combate.test.js')
 require('./atlas-estado.test.js')
 require('./jugadores.test.js')
 require('./sonido.test.js')
+require('./balance.test.js')
+require('./reglas.test.js')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
@@ -2021,8 +2023,12 @@ test('hitbox combat stays on the field and advances on attack input', (t) => {
   t.ok(!paused.includes('un encuentro'), 'there is no encounter card')
   t.ok(!paused.includes('combate por turnos'), 'there is no separate arena')
 
+  // L3 (docs/combate.md): one input runs to the next blow by either side.
+  const blows = world.blows
   press(game, 'space')
-  t.is(world.tick, before + COMBAT_TURN_TICKS, 'one input resolves one visible turn')
+  t.ok(world.tick > before, 'one input resolves one visible turn')
+  t.ok(world.tick - before <= turnLimit(), 'never longer than the turn cap')
+  t.ok(world.blows > blows || world.tick - before === turnLimit(), 'it ends on a blow')
   t.is(game.sheet().hp, Math.ceil(world.hero.hp), 'the side sheet follows direct combat damage')
   t.ok(
     game.log.some((line) => String(line).includes('pegas')),

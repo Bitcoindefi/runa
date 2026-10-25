@@ -4,15 +4,16 @@ const estado = require('../scripts/tripo-estado.js')
 const { World } = require('../lib/world.js')
 const { items } = require('../lib/content.js')
 const { COMBAT_TURN_TICKS } = require('../lib/game.js')
+const { playTurn, turnLimit } = require('../lib/combat-rules.js')
 
 // Una pelea de lib/world.js como la ve la pagina: un campo con su combate.
 function fieldWith(world) {
   return { combat: { foe: { id: 7, kind: world.foeDef.id }, world } }
 }
 
-// Un turno de la pagina (lib/game.js advanceCombat): varios ticks seguidos.
+// Un turno de la pagina (lib/game.js advanceCombat): hasta el proximo golpe (L3).
 function turnOf(world) {
-  for (let i = 0; i < COMBAT_TURN_TICKS && !world.over; i++) world.step()
+  playTurn(world)
 }
 
 // Lo que dicen las lineas nuevas del registro: lo que la pagina leia antes con
@@ -46,8 +47,17 @@ function fight({ foe, weapon }, each) {
   for (let turn = 0; turn < 80 && !world.over; turn++) {
     const before = estado.fightOf(fieldWith(world))
     turnOf(world)
+    // Al terminar la pagina ya no tiene la pelea: arma la ultima lectura con
+    // las vidas y el registro que dejo el campo (field.lastFight).
     const after = world.over
-      ? { ...before, foeHp: Math.max(0, Math.ceil(world.foe.hp)), hp: Math.ceil(world.hero.hp) }
+      ? {
+          ...before,
+          tick: world.tick,
+          foeHp: Math.max(0, Math.ceil(world.foe.hp)),
+          hp: Math.ceil(world.hero.hp),
+          log: world.log.slice(-8),
+          logged: world.logged
+        }
       : estado.fightOf(fieldWith(world))
     each(before, after, world)
   }
@@ -266,7 +276,10 @@ test('fightOf manda el turno del juego y la recarga de los dos', (t) => {
   const world = new World('golem')
   world.held.left = items.sword
   const fight = estado.fightOf(fieldWith(world))
-  t.is(fight.turn, COMBAT_TURN_TICKS)
+  t.is(fight.turn, turnLimit(), 'L3: el tope del turno hasta el golpe')
+  t.ok(fight.untilBlow)
+  t.is(fight.tps, 30, 'los ticks por segundo de lib/world.js')
+  t.alike(fight.actions, { potion: true, guard: true, retreat: true })
   t.is(fight.heroCdMax, items.sword.cooldown)
   t.is(fight.reach, items.sword.reach)
   t.is(fight.heroCd, 0)

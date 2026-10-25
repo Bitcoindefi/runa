@@ -12,6 +12,7 @@ const { DUNGEON, floorRows } = require('../lib/dungeon.js')
 const { campRows } = require('../lib/barbarian-camp.js')
 const { BOSS_ZONE, volcanicRows } = require('../lib/boss-zone.js')
 const { FRAME_TICKS } = require('../lib/world-boss-event.js')
+const { COMBAT_RULES, turnLimit } = require('../lib/combat-rules.js')
 const { DUEL_BODY_GAP } = require('../lib/duel.js')
 
 const SLOTS = ['left_hand', 'right_hand', 'chest', 'head', 'boots']
@@ -133,7 +134,9 @@ function arenaOf(runa) {
     reach: f.reach,
     cooldown: f.cooldown,
     cooldownLeft: f.cooldownLeft,
-    swinging: f.swinging
+    swinging: f.swinging,
+    // L7: los ticks que le faltan al golpe que esta preparando (0 si ninguno).
+    winding: f.winding || 0
   })
   const network = runa.duelNetwork
   return {
@@ -142,6 +145,8 @@ function arenaOf(runa) {
     // Las celdas entre los dos que no cuentan en la distancia (los cuerpos): la
     // pagina dibuja el alcance desde la celda del heroe.
     gap: DUEL_BODY_GAP,
+    // L7: los ticks de carga de cada golpe que acordaron los dos (0 = al toque).
+    windup: runa.duelCombat.windup || 0,
     self: fighter(snap.self),
     rival: fighter(snap.rival),
     online: !!network,
@@ -194,10 +199,15 @@ function foesOf(field) {
   return list
 }
 
-// Los ticks que resuelve cada ataque: el COMBAT_TURN_TICKS de lib/game.js (una
-// prueba los compara; game.js no se carga aca porque el visor lee este archivo
-// en Node).
+// Los ticks que resuelve cada ataque con el turno fijo: el COMBAT_TURN_TICKS de
+// lib/game.js (una prueba los compara; game.js no se carga aca porque el visor
+// lee este archivo en Node). Con el turno hasta el proximo golpe (L3,
+// COMBAT_RULES.turnUntilBlow) un ataque resuelve hasta turnLimit() ticks.
 const COMBAT_TURN = 6
+
+// Los ticks por segundo de la pelea del campo (lib/world.js TPS): la pagina
+// reproduce cada turno a este ritmo, con la barra de carga llenandose.
+const FIGHT_TPS = 30
 
 // Lo que dura un tick del juego en milisegundos: el TICK_MS de lib/game.js (una
 // prueba los compara, igual que COMBAT_TURN).
@@ -252,8 +262,11 @@ function bossDodge(field) {
   const boss = field && field.mode === 'boss' ? field.boss : null
   const action = boss && boss.action
   if (!action) return null
+  // La carga de verdad (L6): la del telegraph del ataque, no solo sus cuadros.
   const total =
-    Math.max(1, ((action.attack && action.attack.frames) || ['idle']).length) * FRAME_TICKS
+    typeof boss.windupOf === 'function'
+      ? boss.windupOf(action.attack)
+      : Math.max(1, ((action.attack && action.attack.frames) || ['idle']).length) * FRAME_TICKS
   const done = Math.max(0, Math.min(total, field.time - action.startedAt))
   const key = (x, y) => x + ',' + y
   const { path, burnt } = strikeZone(boss, action, field.time, total)
@@ -309,11 +322,14 @@ function bossDodge(field) {
 
 // La pelea en curso, para animarla: contra quien, la vida de los dos, el arma en
 // la mano (la elige el guion entre golpe y golpe) y las ultimas lineas de la
-// pelea con su tick. Cada ataque resuelve varios ticks de una vez. Para leer el
-// turno (tripo-combate.mjs readout): la recarga de los dos (ticks que faltan y
-// el total), la distancia, el alcance y la velocidad de cada uno, si el heroe
-// esta en pleno golpe, las pociones que le quedan y lo que pega el monstruo
-// (foeHit, para contar sus golpes cuando una pocion los tapa).
+// pelea con su tick y, con L1, con lo que paso como dato (type, by, amount).
+// Cada ataque resuelve varios ticks de una vez: hasta el proximo golpe si
+// untilBlow (L3), con turn como tope, o turn ticks fijos. Para leer el turno
+// (tripo-combate.mjs readout): la recarga de los dos (ticks que faltan y el
+// total), la distancia, el alcance y la velocidad de cada uno, si el heroe esta
+// en pleno golpe, las pociones que le quedan, lo que pega el monstruo (foeHit,
+// para contar sus golpes cuando una pocion los tapa) y las acciones que acepta
+// el juego (potion, guard, retreat).
 function fightOf(field) {
   const combat = field && field.combat
   const world = combat && combat.world
@@ -322,8 +338,16 @@ function fightOf(field) {
   const mine = world.hero.derive(Object.values(world.held))
   const theirs = world.foe.derive([])
   const count = (value) => Math.max(0, Math.floor(Number(value) || 0))
+  const rules = world.rules || COMBAT_RULES
   return {
-    turn: COMBAT_TURN,
+    turn: rules.turnUntilBlow ? turnLimit(rules) : COMBAT_TURN,
+    untilBlow: !!rules.turnUntilBlow,
+    tps: FIGHT_TPS,
+    actions: {
+      potion: !!rules.manualPotion,
+      guard: !!rules.guard,
+      retreat: !!rules.retreat
+    },
     heroCd: count(world.hero.cooldownLeft),
     heroCdMax: mine.cooldown,
     foeCd: count(world.foe.cooldownLeft),
@@ -339,13 +363,15 @@ function fightOf(field) {
     id: combat.foe.id,
     kind: combat.foe.kind,
     tick: world.tick,
+    // Las lineas del registro hasta ahora (L1): las de un turno son las de n mayor.
+    logged: world.logged || 0,
     over: world.over || null,
     hp: Math.max(0, Math.ceil(Number(world.hero.hp) || 0)),
     maxhp: world.hero.base.hp,
     foeHp: Math.max(0, Math.ceil(Number(world.foe.hp) || 0)),
     foeMaxhp: world.foe.base.hp,
     weapon: held && held.kind === 'weapon' ? held.id : null,
-    log: world.log.slice(-8).map(({ tick, text }) => ({ tick, text }))
+    log: world.log.slice(-8).map((entry) => ({ ...entry }))
   }
 }
 
@@ -622,7 +648,10 @@ function live(runa) {
           telegraphs: boss.telegraphs.map(({ x, y }) => ({ x, y })),
           hazards: boss.hazards.map(({ x, y }) => ({ x, y })),
           // La carga del golpe marcado y hacia donde salir (bossDodge).
-          dodge: bossDodge(field)
+          dodge: bossDodge(field),
+          // La recarga del arma del heroe contra el Coloso (L6), en ticks del
+          // reloj del juego.
+          strike: typeof field.strikeCharge === 'function' ? field.strikeCharge() : null
         }
       : null,
     equipped: wearing(sheet.equipped),
@@ -645,6 +674,7 @@ function live(runa) {
 
 module.exports = {
   COMBAT_TURN,
+  FIGHT_TPS,
   TICK,
   SLOTS,
   WORLD_MAPS,
