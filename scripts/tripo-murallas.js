@@ -3942,14 +3942,16 @@ function colorsFor(style, look) {
 // mira la camara (la pelea con el Coloso), asi el corte termina en el heroe y no
 // metros detras de el.
 export const seeView = { y: { value: 1 } }
+// En un modelo con esqueleto (el Coloso animado) el punto sale despues de los
+// huesos, asi el calado sigue la pose y no la de reposo.
 export function seeThrough(shader) {
   shader.uniforms.seeY = seeView.y
+  const posed = shader.vertexShader.includes('#include <skinning_vertex>')
+    ? '#include <skinning_vertex>'
+    : '#include <begin_vertex>'
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vCutAt;')
-    .replace(
-      '#include <begin_vertex>',
-      '#include <begin_vertex>\nvCutAt = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;'
-    )
+    .replace(posed, posed + '\nvCutAt = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;')
   shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',

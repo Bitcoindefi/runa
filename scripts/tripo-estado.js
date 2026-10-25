@@ -307,6 +307,8 @@ function bossDodge(field) {
     }
   }
   return {
+    // Que golpe es (lib/world-boss.js): la vista elige con eso la animacion.
+    attack: (action.attack && action.attack.id) || null,
     done,
     total,
     leftMs: Math.round((total - done) * TICK),

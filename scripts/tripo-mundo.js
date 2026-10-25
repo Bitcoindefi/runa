@@ -2904,15 +2904,17 @@ function blobTexture() {
 
 /**
  * Arma el mapa. `data` es /world/<id>.json. `extras` trae lo que vive en la
- * pagina: figure(color) para los NPC, glb(file) para los modelos de Tripo y
- * text(nombre) para los carteles en el idioma elegido. Si `data.signs` trae las
+ * pagina: figure(color) para los NPC, glb(file) para los modelos de Tripo,
+ * bossRig() para el Coloso con esqueleto (una promesa de { object, clips } o
+ * null) y text(nombre) para los carteles en el idioma elegido. Si `data.signs` trae las
  * filas con los letreros traducidos (mapLabels de lib/locale.js, que no cambia
  * su largo), las letras salen de ahi; que es cada celda sigue saliendo del mapa.
  *
  * Un lugar que se arma de otra manera (la cripta, bajo tierra: sin terreno, sin
  * murallas, sin la paleta de la ciudad) trae `data.build(data, extras)`, y eso
  * es lo que se devuelve: un objeto con la misma forma que el de abajo (group,
- * toWorld, blocks, terrainHeight, update, dispose, colossus, loading).
+ * toWorld, blocks, terrainHeight, update, dispose, colossus, colossusClips,
+ * loading).
  */
 export function buildWorld(data, extras = {}) {
   if (typeof data.build === 'function') return data.build(data, extras)
@@ -3368,14 +3370,19 @@ export function buildWorld(data, extras = {}) {
     })
   }
   // Tripo entrega los modelos mirando hacia +x: yaw los gira hacia donde tienen
-  // que mirar.
+  // que mirar. `file` es un GLB o una funcion que da la promesa de
+  // { object, clips } (el Coloso con esqueleto); done recibe los dos.
   const place = (file, center, size, yaw = 0, done = null) => {
     if (!extras.glb) return
+    const load =
+      typeof file === 'function'
+        ? file()
+        : extras.glb(file).then((object) => object && { object, clips: [] })
     loads.push(
-      extras
-        .glb(file)
-        .then((object) => {
-          if (!object) return
+      load
+        .then((found) => {
+          if (!found || !found.object) return
+          const { object, clips } = found
           object.rotation.y = yaw
           object.updateMatrixWorld(true)
           const box = new THREE.Box3().setFromObject(object)
@@ -3392,7 +3399,7 @@ export function buildWorld(data, extras = {}) {
           // Es una copia del GLB en cache: comparte geometria y materiales.
           object.userData.shared = true
           group.add(object)
-          if (done) done(object)
+          if (done) done(object, clips)
         })
         .catch(() => {})
     )
@@ -3452,11 +3459,27 @@ export function buildWorld(data, extras = {}) {
   for (const mark of monuments) monument(mark.bounds)
   // El Coloso mira al oeste, hacia el portal por donde llega el heroe. Queda a
   // mano para que la pagina lo anime en la pelea (respira, gira, golpea).
+  // Con esqueleto y clips (coloso-anim.glb) si la pagina lo da; si no esta o
+  // no carga, el Coloso quieto de siempre.
   let colossus = null
+  let colossusClips = []
   if (data.boss) {
-    place('coloso.glb', toWorld(data.boss.x, data.boss.y), 7, Math.PI, (object) => {
+    const body = () =>
+      (extras.bossRig ? extras.bossRig().catch(() => null) : Promise.resolve(null)).then(
+        (rigged) =>
+          rigged || extras.glb('coloso.glb').then((object) => object && { object, clips: [] })
+      )
+    place(body, toWorld(data.boss.x, data.boss.y), 7, Math.PI, (object, clips) => {
       seeThroughModel(object)
+      // Animado, su caja de reposo no cubre lo que hace (cae de frente al
+      // morir): no se descarta por estar fuera de cuadro.
+      if (clips.length) {
+        object.traverse((child) => {
+          if (child.isSkinnedMesh) child.frustumCulled = false
+        })
+      }
       colossus = object
+      colossusClips = clips
     })
     sponsors(toWorld(data.boss.x, data.boss.y))
   }
@@ -3554,6 +3577,7 @@ export function buildWorld(data, extras = {}) {
     group,
     toWorld,
     colossus: () => colossus,
+    colossusClips: () => colossusClips,
     buildings: buildings.length,
     blocks,
     terrainHeight: terrain && terrain.height,

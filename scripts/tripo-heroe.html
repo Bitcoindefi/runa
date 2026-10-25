@@ -2577,7 +2577,22 @@
       // vuelve a abrir mientras el fondo baja, solo queda el ultimo pedido.
       let sceneName = null
       let backdrop = null
+      // El Coloso con esqueleto de fondo (el titulo y las ruinas) respira con su
+      // clip Idle.
+      let backdropMixer = null
       let sceneTicket = 0
+      // El fondo y sus clips. El Coloso va con esqueleto (coloso-anim.glb) si
+      // esta; si no esta o no carga, el quieto.
+      async function backdropModel(file) {
+        if (file === 'coloso.glb' && models.has('coloso-anim.glb')) {
+          try {
+            return await loadRig('coloso-anim.glb')
+          } catch (error) {
+            console.warn('sin el Coloso animado, va el quieto', error)
+          }
+        }
+        return { object: await loadGlb(file), clips: [] }
+      }
       async function setScene(name) {
         if (name === sceneName) return
         sceneName = name
@@ -2588,10 +2603,11 @@
         ember.color.setHex(fiery ? 0xff6a20 : 0xe0c060)
         if (backdrop) scene.remove(backdrop)
         backdrop = null
+        backdropMixer = null
         const spec = SCENERY[name]
         if (!spec || !models.has(spec.file)) return
         try {
-          const object = await loadGlb(spec.file)
+          const { object, clips } = await backdropModel(spec.file)
           if (ticket !== sceneTicket || sceneName !== name || world) return
           if (backdrop) scene.remove(backdrop)
           object.updateMatrixWorld(true)
@@ -2612,6 +2628,9 @@
             if (child.isMesh) child.castShadow = true
           })
           backdrop = holder
+          const idle = THREE.AnimationClip.findByName(clips, 'Idle')
+          backdropMixer = idle ? new THREE.AnimationMixer(object) : null
+          if (idle) backdropMixer.clipAction(idle).play()
           scene.add(holder)
         } catch (error) {
           console.warn('sin fondo', name, error)
@@ -2794,6 +2813,8 @@
             figure,
             text: shown.text,
             glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null)),
+            // El Coloso con esqueleto y clips, si el sitio lo tiene.
+            bossRig: models.has('coloso-anim.glb') ? () => loadRig('coloso-anim.glb') : null,
             // Los NPC en 3D con el heroe de Tripo (gente.js), salvo en un equipo
             // flojo o con ?npc3d=0: ahi quedan los dibujos.
             ...(npc3d && models.has('heroe-anim.glb')
@@ -3561,6 +3582,166 @@
         if (holder.userData.base) holder.quaternion.copy(holder.userData.base)
       }
 
+      // El Coloso con esqueleto (coloso-anim.glb, armado en Blender): sus clips,
+      // con fundidos. Idle de base y Walk mientras gira hacia el heroe (el juego
+      // no lo traslada); el golpe marcado con Attack_Slam o Attack_Sweep, puesto
+      // para que el cuadro del impacto caiga cuando el juego suelta el golpe;
+      // Hit cuando lo golpean, Roar al cambiar de fase y Death al caer. Solo la
+      // vista: no cambia reglas. Sin clips (coloso.glb) queda el balanceo.
+      const BOSS_STRIKE = {
+        punio_izquierdo: 'Attack_Slam',
+        punio_derecho: 'Attack_Slam',
+        colapso: 'Attack_Slam',
+        onda: 'Attack_Sweep',
+        barrido: 'Attack_Sweep'
+      }
+      // El segundo del clip en que pega (tools/rig/rig_coloso.py): los punos
+      // llegan al piso a 0,85 s y el brazo cierra el barrido a 0,78 s.
+      const BOSS_IMPACT = { Attack_Slam: 0.85, Attack_Sweep: 0.78 }
+      const BOSS_ONCE = new Set(['Attack_Slam', 'Attack_Sweep', 'Roar', 'Hit', 'Death'])
+      // La carga del juego dura de 0,6 s a varios segundos: el clip se acelera
+      // hasta 2,5 veces o se frena hasta 0,6 para que el impacto caiga justo.
+      const BOSS_PACE = [0.6, 2.5]
+      const bossAnim = {}
+      function bossAnimReset() {
+        if (bossAnim.mixer) {
+          bossAnim.mixer.stopAllAction()
+          bossAnim.mixer.uncacheRoot(bossAnim.object)
+        }
+        Object.assign(bossAnim, {
+          object: null,
+          mixer: null,
+          actions: {},
+          current: null,
+          base: 'Idle',
+          turn: 0,
+          strike: null,
+          phase: null,
+          roar: false
+        })
+      }
+      bossAnimReset()
+
+      // El Coloso animado del mapa, o null si es el quieto (o no hay mapa).
+      function bossAnimOf() {
+        const built = world && world.map === 'boss' ? world.built : null
+        const object = built && built.colossus ? built.colossus() : null
+        if (object !== bossAnim.object) {
+          bossAnimReset()
+          bossAnim.object = object
+          const clips = object && built.colossusClips ? built.colossusClips() : []
+          if (clips.length) {
+            bossAnim.mixer = new THREE.AnimationMixer(object)
+            for (const clip of clips) {
+              const action = bossAnim.mixer.clipAction(clip)
+              if (BOSS_ONCE.has(clip.name)) {
+                action.setLoop(THREE.LoopOnce, 1)
+                action.clampWhenFinished = true
+              }
+              bossAnim.actions[clip.name] = action
+            }
+            bossPlay('Idle', 0)
+          }
+        }
+        return bossAnim.mixer ? bossAnim : null
+      }
+
+      // Pasa a un clip con un fundido: el anterior se apaga en el mismo tiempo.
+      // `again` lo vuelve a empezar si ya era ese.
+      function bossPlay(name, fade = 0.25, again = false) {
+        const next = bossAnim.actions[name]
+        if (!next) return null
+        const from = bossAnim.current
+        if (next === from) {
+          if (again) next.reset()
+          return next
+        }
+        next.reset()
+        next.setEffectiveTimeScale(1)
+        next.setEffectiveWeight(1)
+        next.play()
+        if (from && fade > 0) next.crossFadeFrom(from, fade, false)
+        else if (from) from.stop()
+        bossAnim.current = next
+        return next
+      }
+
+      const bossClip = () => (bossAnim.current ? bossAnim.current.getClip().name : null)
+
+      // Cada cuadro, en cualquier pantalla con el mapa del Coloso: un clip suelto
+      // que termina vuelve a la base (o al rugido que esperaba), y la base sigue
+      // a Idle o Walk.
+      function bossAnimFrame(dt) {
+        const anim = bossAnimOf()
+        if (!anim) return
+        const current = anim.current
+        const name = bossClip()
+        if (name !== 'Death' && !anim.strike) {
+          if (current && BOSS_ONCE.has(name)) {
+            if (current.time >= current.getClip().duration - 0.3) {
+              if (anim.roar) {
+                anim.roar = false
+                bossPlay('Roar', 0.3, true)
+              } else bossPlay(anim.base, 0.3)
+            }
+          } else if (name !== anim.base) bossPlay(anim.base, 0.4)
+        }
+        anim.mixer.update(dt)
+      }
+
+      // Lo que dice el juego, en clips. `struck`: el heroe le acaba de pegar.
+      function bossAnimDrive(anim, boss, struck) {
+        const first = anim.phase === null
+        if (boss.defeated) {
+          // Cae una vez y queda en el piso; si ya estaba caido al llegar, directo
+          // al ultimo cuadro.
+          if (bossClip() !== 'Death') {
+            const death = bossPlay('Death', first ? 0 : 0.3)
+            if (death && first) death.time = death.getClip().duration
+          }
+          anim.strike = null
+          anim.roar = false
+          anim.phase = boss.phase
+          return
+        }
+        // Volvio a pararse (otra pelea): a la base.
+        if (bossClip() === 'Death') bossPlay(anim.base, 0.5)
+        const dodge = boss.dodge
+        const name = dodge ? BOSS_STRIKE[dodge.attack] || 'Attack_Slam' : null
+        const action = name ? anim.actions[name] : null
+        if (action) {
+          // Un golpe nuevo (u otro despues del anterior) arranca el clip.
+          if (!anim.strike || anim.strike.action !== action || dodge.done < anim.strike.done) {
+            bossPlay(name, 0.2, true)
+            anim.strike = { action, done: dodge.done }
+          }
+          anim.strike.done = dodge.done
+          // El clip va atado a la carga: con lo que falta (el mismo reloj de la
+          // ayuda para esquivar) se elige el cuadro, asi el impacto cae cuando el
+          // juego suelta el golpe. Si la carga es larga, el comienzo espera en
+          // la pose de reposo.
+          const impact = BOSS_IMPACT[name]
+          const totalS = Math.max(0.05, dodge.totalMs / 1000)
+          const pace = Math.min(BOSS_PACE[1], Math.max(BOSS_PACE[0], impact / totalS))
+          const leftS = bossCharge(dodge).leftMs / 1000
+          action.setEffectiveTimeScale(0)
+          action.time = Math.max(0, impact - leftS * pace)
+        } else if (anim.strike) {
+          // El golpe cayo: desde el impacto sigue a su velocidad.
+          const done = anim.strike.action
+          const impact = BOSS_IMPACT[done.getClip().name] || 0
+          if (done.time < impact) done.time = impact
+          done.setEffectiveTimeScale(1)
+          anim.strike = null
+        }
+        // Rugido al cambiar de fase; si esta pegando, despues del golpe.
+        if (!first && boss.phase !== anim.phase) {
+          if (anim.strike) anim.roar = true
+          else bossPlay('Roar', 0.25, true)
+        } else if (struck && !anim.strike && bossClip() !== 'Roar') bossPlay('Hit', 0.1, true)
+        anim.phase = boss.phase
+      }
+
       // Un numero que sube y se apaga: el dano.
       function floater(text, color, at) {
         const canvas = document.createElement('canvas')
@@ -3736,7 +3917,10 @@
         const wantLift = bossAim !== null ? 2 + 0.8 * Math.min(1, Math.max(0, (12 - near) / 8)) : 0
         bossLift += (wantLift - bossLift) * Math.min(1, dt * 2)
         // Lo que paso desde el cuadro anterior, en los numeros del juego.
-        if (fight.bossHp !== null && boss.hp < fight.bossHp && chest) {
+        const struck = fight.bossHp !== null && boss.hp < fight.bossHp
+        const anim = bossAnimOf()
+        if (anim) bossAnimDrive(anim, boss, struck)
+        if (struck && chest) {
           cue(boss.hp <= 0 ? 'kill' : 'hit', (fight.bossHp - boss.hp) / (boss.maxhp || 1))
           fight.hit = 1
           fight.shake = Math.max(fight.shake, 0.35)
@@ -3793,16 +3977,29 @@
         // Gira hacia el heroe, despacio. Mira hacia -x en su pivote.
         const dx = hero.root.position.x - rig.turn.position.x
         const dz = hero.root.position.z - rig.turn.position.z
-        if (dx * dx + dz * dz > 0.01) {
+        let turned = 0
+        if (dx * dx + dz * dz > 0.01 && !(anim && boss.defeated)) {
           const want = Math.atan2(dz, -dx)
-          rig.turn.rotation.y += wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 1.2)
+          turned = wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 1.2)
+          rig.turn.rotation.y += turned
         }
-        // Se inclina: atras al cargar, adelante al caer, un poco atras al recibir.
-        // Inclinarse hacia su frente (-x) es girar positivo sobre z.
-        const breathe = Math.sin(time * 1.3)
-        const fall = fight.slam > 0 ? Math.sin(fight.slam * Math.PI) : 0
-        rig.lean.rotation.z = breathe * 0.015 - fight.windup * 0.2 + fall * 0.32 - fight.hit * 0.08
-        rig.lean.position.y = breathe * 0.06 + fight.windup * 0.3 - fall * 0.35
+        if (anim) {
+          // Animado: camina en el lugar mientras gira rapido (con margen, para
+          // que no titile entre Idle y Walk). Los clips hacen el balanceo.
+          const rate = dt > 0 ? Math.abs(turned) / dt : 0
+          anim.turn += (rate - anim.turn) * Math.min(1, dt * 6)
+          anim.base = anim.turn > (anim.base === 'Walk' ? 0.12 : 0.3) ? 'Walk' : 'Idle'
+          rig.lean.rotation.z = 0
+          rig.lean.position.y = 0
+        } else {
+          // Se inclina: atras al cargar, adelante al caer, un poco atras al
+          // recibir. Inclinarse hacia su frente (-x) es girar positivo sobre z.
+          const breathe = Math.sin(time * 1.3)
+          const fall = fight.slam > 0 ? Math.sin(fight.slam * Math.PI) : 0
+          rig.lean.rotation.z =
+            breathe * 0.015 - fight.windup * 0.2 + fall * 0.32 - fight.hit * 0.08
+          rig.lean.position.y = breathe * 0.06 + fight.windup * 0.3 - fall * 0.35
+        }
         // Destello: claro al recibir, naranja al cargar el golpe.
         const glow = Math.max(fight.hit, fight.windup * 0.6)
         const tone = fight.hit >= fight.windup * 0.6 ? flashColor : chargeColor
@@ -4648,6 +4845,10 @@
           )
           mixer.update(dt * slow)
         }
+        // El Coloso animado: el del mapa (fightFrame elige sus clips) y el del
+        // fondo.
+        bossAnimFrame(dt)
+        if (backdropMixer && backdrop && backdrop.visible) backdropMixer.update(dt)
         // El mundo puede tener movimiento propio: viento, agua, NPC.
         if (world && world.built.update) world.built.update(t, { hero: hero.root.position })
         if (title && screen === 'menu') title.update(t, dt)
@@ -8247,6 +8448,15 @@
         // Que juego de GLB pide este equipo y de donde salio cada uno.
         modelSet: MODEL_SET,
         modelsFrom: Object.fromEntries(loadedFrom),
+        // El Coloso: el clip del mapa (null si es el quieto), su cuadro, si
+        // espera el impacto y si el del fondo esta animado.
+        colossus: {
+          clip: bossClip(),
+          time: bossAnim.current ? Number(bossAnim.current.time.toFixed(3)) : null,
+          strike: !!bossAnim.strike,
+          base: bossAnim.base,
+          backdrop: !!backdropMixer
+        },
         // El sonido, la pantalla completa y lo que se siente en el duelo.
         sound: sound.state(),
         fullscreen: !!fullscreenOf(document),

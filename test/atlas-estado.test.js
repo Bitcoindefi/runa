@@ -208,6 +208,7 @@ test('dodge aid: the charge of the marked strike and the nearest free cell', (t)
   t.is(aid.done, 1, 'one tick into the windup')
   t.is(aid.leftMs, Math.round((total - 1) * TICK_MS))
   t.is(aid.totalMs, Math.round(total * TICK_MS))
+  t.is(aid.attack, boss.action.attack.id, 'which strike, for the animation of the Colossus')
 
   const marked = new Set(boss.action.telegraphs.map((cell) => cell.x + ',' + cell.y))
   const off = { x: 0, y: 0 }

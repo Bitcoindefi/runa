@@ -106,13 +106,17 @@
         'heroe-anim': "Runa's hero in A-pose: Tripo H3.1, rigged and animated by Higgsfield",
         yelmo: 'Iron rune helmet',
         coloso: 'Runic Colossus, the world boss',
+        'coloso-anim': 'Runic Colossus, rigged and animated in Blender',
         paisaje: 'Kingdom diorama'
       }
+      // El clip que muestra cada GLB animado; sin esto model-viewer pone el
+      // primero, y en el Coloso es un ataque.
+      const CLIP = { 'coloso-anim': 'Idle' }
       const INTRO =
         "Runa's 3D models, generated with Tripo. Drag to turn them; the animated hero walks."
       if (DEMO) document.getElementById('back').hidden = false
       // En el sitio cada GLB trae copias livianas (scripts/glb-ligero.js). En un
-      // telefono la galeria muestra la de 512 px: los doce originales a la vez,
+      // telefono la galeria muestra la de 512 px: los trece originales a la vez,
       // con texturas de 2048, no le entran. La computadora sigue con los
       // originales. Si la copia no carga, vuelve al original.
       const PHONE =
@@ -140,6 +144,7 @@
           viewer.setAttribute('shadow-intensity', '1')
           const caption = document.createElement('figcaption')
           const id = model.name.replace(/\.glb$/, '')
+          if (CLIP[id]) viewer.setAttribute('animation-name', CLIP[id])
           const label = DEMO ? NAMES[id] || id : id
           caption.textContent = label
           // Sin esto, un GLB que no decodifica deja la caja gris y nada mas.
