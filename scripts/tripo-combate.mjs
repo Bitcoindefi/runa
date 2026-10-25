@@ -332,6 +332,79 @@ export function charge(left, max) {
   return Math.max(0, Math.min(1, 1 - num(left) / total))
 }
 
+// Lo minimo entre dos golpes que la pagina muestra, en segundos: dos golpes del
+// mismo tick (el heroe y el monstruo) se ven uno detras del otro.
+export const IMPACT_GAP = 0.22
+
+/**
+ * La barra de carga durante un turno (L3): de `from` a `to` entre `start` y
+ * `end` (segundos de la pelea). Si el dueno pego al final del turno, la barra
+ * llega llena y cae a `after` (lo que quedo despues del golpe).
+ * @param {number} from
+ * @param {number} to
+ * @param {number} start
+ * @param {number} end
+ * @param {number|null} [after]
+ * @returns {{ from: number, to: number, start: number, end: number, after: number|null }}
+ */
+export function chargeLine(from, to, start, end, after = null) {
+  return { from: num(from), to: num(to), start: num(start), end: num(end), after }
+}
+
+/** Lo cargado de una chargeLine en un momento. */
+export function chargeAt(line, time) {
+  if (!line) return 1
+  if (time >= line.end) return line.after === null ? line.to : line.after
+  const span = Math.max(1e-3, line.end - line.start)
+  const k = Math.max(0, Math.min(1, (time - line.start) / span))
+  return line.from + (line.to - line.from) * k
+}
+
+/**
+ * Las dos barras de un turno: la del heroe y la del monstruo, de lo que habia
+ * antes (fightOf) a lo que quedo, llenandose de `start` a `end`. La que pego
+ * en el turno llega llena al golpe y cae a lo que quedo.
+ * @param {object} before fightOf de antes
+ * @param {object} after fightOf de despues
+ * @param {object[]} events turnEvents
+ * @param {number} start
+ * @param {number} end
+ * @returns {{ hero: object, foe: object }}
+ */
+export function turnCharges(before, after, events, start, end) {
+  const line = (cd, max, cdAfter, maxAfter, struck) => {
+    const from = charge(cd, max)
+    const left = charge(cdAfter, maxAfter)
+    return struck ? chargeLine(from, 1, start, end, left) : chargeLine(from, left, start, end)
+  }
+  const hero = events.some((event) => event.who === 'hero')
+  const foe = events.some((event) => event.who === 'foe')
+  return {
+    hero: line(before.heroCd, before.heroCdMax, after.heroCd, after.heroCdMax, hero),
+    foe: line(before.foeCd, before.foeCdMax, after.foeCd, after.foeCdMax, foe)
+  }
+}
+
+/**
+ * Como se arma una barra de carga con dos sprites de three.js (el marco y el
+ * relleno), en metros: el ancho y el alto de cada uno y su `center` (el punto
+ * del sprite que cae en su posicion). El sprite se corre en pantalla, asi que
+ * con el mismo punto de apoyo el relleno arranca en el borde izquierdo del
+ * marco y crece hacia la derecha, y `drop` baja la barra (1 = justo debajo).
+ * @param {number} k lo cargado, de 0 a 1
+ * @param {{ width?: number, height?: number, pad?: number, drop?: number }} [size]
+ */
+export function barLayout(k, { width = 1.1, height = 0.11, pad = 0.035, drop = 1.4 } = {}) {
+  const frame = { w: width + pad * 2, h: height + pad * 2, cx: 0.5, cy: drop }
+  const fill = Math.max(0.001, Math.min(1, num(k)))
+  // El medio del marco queda (0.5 - drop) * alto del marco sobre el punto.
+  const middle = (0.5 - frame.cy) * frame.h
+  return {
+    frame,
+    fill: { w: width * fill, h: height, cx: 0.5 / fill, cy: 0.5 - middle / height }
+  }
+}
+
 // La pausa del golpe en milisegundos: 60 un rasguno, 90 un golpe, 140 uno
 // grande (la parte de la vida del que lo recibe).
 export function hitStopMs(share) {
