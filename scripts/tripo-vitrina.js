@@ -102,8 +102,17 @@ const PIECES = [
     ]
   },
   {
+    // El mismo Coloso con esqueleto que el titulo y el jefe (un solo GLB en la
+    // GPU del telefono); sin el, el quieto.
     key: 'colossus',
-    file: 'coloso.glb',
+    file: 'coloso-anim.glb',
+    fallback: 'coloso.glb',
+    rig: true,
+    clips: [
+      ['Idle', 6],
+      ['Roar', 2],
+      ['Attack_Slam', 1.5]
+    ],
     size: 3.9,
     yaw: -Math.PI / 2,
     stand: 'low',
@@ -777,9 +786,15 @@ export function createShowcase(ctx) {
   // probador al final.
   function pieces() {
     const have = (ctx.models && ctx.models()) || new Map()
-    const known = PIECES.filter((piece) => have.has(piece.file))
+    // Sin el GLB con esqueleto va el quieto, sin clips.
+    const known = PIECES.map((piece) =>
+      !have.has(piece.file) && piece.fallback && have.has(piece.fallback)
+        ? { ...piece, file: piece.fallback, rig: false }
+        : piece
+    ).filter((piece) => have.has(piece.file))
+    const listed = new Set(PIECES.flatMap((piece) => [piece.file, piece.fallback]))
     const extra = [...have.keys()]
-      .filter((file) => /\.glb$/i.test(file) && !PIECES.some((piece) => piece.file === file))
+      .filter((file) => /\.glb$/i.test(file) && !listed.has(file))
       .sort()
       .map((file) => ({
         key: file.replace(/\.glb$/i, ''),
@@ -1295,7 +1310,7 @@ export function createShowcase(ctx) {
   function animate(ex, object, clips) {
     const mixer = new THREE.AnimationMixer(object)
     const cycle = []
-    for (const [name, seconds] of CLIPS) {
+    for (const [name, seconds] of ex.spec.clips || CLIPS) {
       const clip = THREE.AnimationClip.findByName(clips, name)
       if (clip) cycle.push({ name, seconds, action: mixer.clipAction(clip) })
     }
@@ -1759,7 +1774,13 @@ export function createShowcase(ctx) {
   }
 
   function clipName(clip) {
-    const doing = { Idle: 'quieto', Walk: 'camina', Run: 'corre' }[clip]
+    const doing = {
+      Idle: 'quieto',
+      Walk: 'camina',
+      Run: 'corre',
+      Roar: 'ruge',
+      Attack_Slam: 'golpea'
+    }[clip]
     return L(clip, doing ? `${doing} (${clip})` : clip)
   }
 

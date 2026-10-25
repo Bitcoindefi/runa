@@ -2350,6 +2350,15 @@
           clips: gltf.animations
         }))
       }
+      // Cada copia de loadRig trae esqueletos propios, con su textura de huesos
+      // en la GPU: al soltar la copia se liberan (la geometria y los materiales
+      // son los del GLB en cache y quedan).
+      function dropRig(object) {
+        if (!object) return
+        object.traverse((child) => {
+          if (child.isSkinnedMesh && child.skeleton) child.skeleton.dispose()
+        })
+      }
 
       // Lleva un GLB al tamano pedido, centrado. Las armas van con fitWeapon.
       function fit(object, size, slot, spec = {}) {
@@ -2593,6 +2602,13 @@
         }
         return { object: await loadGlb(file), clips: [] }
       }
+      function dropBackdrop() {
+        if (backdrop) {
+          scene.remove(backdrop)
+          dropRig(backdrop)
+        }
+        backdrop = null
+      }
       async function setScene(name) {
         if (name === sceneName) return
         sceneName = name
@@ -2601,15 +2617,17 @@
         const fiery = name === 'ruinas' || name === 'titulo'
         ash.visible = fiery
         ember.color.setHex(fiery ? 0xff6a20 : 0xe0c060)
-        if (backdrop) scene.remove(backdrop)
-        backdrop = null
+        dropBackdrop()
         backdropMixer = null
         const spec = SCENERY[name]
         if (!spec || !models.has(spec.file)) return
         try {
           const { object, clips } = await backdropModel(spec.file)
-          if (ticket !== sceneTicket || sceneName !== name || world) return
-          if (backdrop) scene.remove(backdrop)
+          if (ticket !== sceneTicket || sceneName !== name || world) {
+            dropRig(object)
+            return
+          }
+          dropBackdrop()
           object.updateMatrixWorld(true)
           const box = new THREE.Box3().setFromObject(object)
           const dims = box.getSize(new THREE.Vector3())
@@ -3518,7 +3536,7 @@
         bits: []
       }
       const sparkGeo = new THREE.OctahedronGeometry(0.08)
-      const flashColor = new THREE.Color(0xfff0c8)
+      const flashColor = new THREE.Color(0xffc890)
       const chargeColor = new THREE.Color(0xff5a10)
       // El tajo barre de costado: gira el soporte de la mano sobre su +y, que con
       // el brazo caido apunta arriba.
@@ -3588,17 +3606,36 @@
       // para que el cuadro del impacto caiga cuando el juego suelta el golpe;
       // Hit cuando lo golpean, Roar al cambiar de fase y Death al caer. Solo la
       // vista: no cambia reglas. Sin clips (coloso.glb) queda el balanceo.
+      // El Punio de piedra baja los dos punos; el Reves de piedra, uno solo.
       const BOSS_STRIKE = {
         punio_izquierdo: 'Attack_Slam',
-        punio_derecho: 'Attack_Slam',
+        punio_derecho: 'Attack_Backhand',
         colapso: 'Attack_Slam',
         onda: 'Attack_Sweep',
         barrido: 'Attack_Sweep'
       }
       // El segundo del clip en que pega (tools/rig/rig_coloso.py): los punos
-      // llegan al piso a 0,85 s y el brazo cierra el barrido a 0,78 s.
-      const BOSS_IMPACT = { Attack_Slam: 0.85, Attack_Sweep: 0.78 }
-      const BOSS_ONCE = new Set(['Attack_Slam', 'Attack_Sweep', 'Roar', 'Hit', 'Death'])
+      // llegan al piso a 0,9 s, el reves a 0,8 s y el brazo cierra el barrido
+      // a 0,78 s.
+      const BOSS_IMPACT = { Attack_Slam: 0.9, Attack_Backhand: 0.8, Attack_Sweep: 0.78 }
+      // Donde pega el puno en el cuadro del impacto, medido con tools/rig/medir.py
+      // desde el centro de la caja de reposo y en altos del Coloso: adelante y a
+      // su izquierda (negativo es su derecha). Los dos punos del Slam caen juntos
+      // al frente; el reves, con el derecho, adelante a la derecha.
+      const BOSS_FIST = { Attack_Slam: [0.66, 0], Attack_Backhand: [0.4, -0.2] }
+      // Los golpes de puno del juego salen del borde de su cuerpo hacia la fila
+      // del heroe: para que el puno caiga en esa celda se gira hacia ella y, si
+      // no llega, se estira hasta 4,5 m (un paso largo de un cuerpo de 7 m).
+      const BOSS_PUNCH = new Set(['punio_izquierdo', 'punio_derecho'])
+      const BOSS_LUNGE = 4.5
+      const BOSS_ONCE = new Set([
+        'Attack_Slam',
+        'Attack_Backhand',
+        'Attack_Sweep',
+        'Roar',
+        'Hit',
+        'Death'
+      ])
       // La carga del juego dura de 0,6 s a varios segundos: el clip se acelera
       // hasta 2,5 veces o se frena hasta 0,6 para que el impacto caiga justo.
       const BOSS_PACE = [0.6, 2.5]
@@ -3617,7 +3654,8 @@
           turn: 0,
           strike: null,
           phase: null,
-          roar: false
+          roar: false,
+          aim: null
         })
       }
       bossAnimReset()
@@ -3714,6 +3752,7 @@
           if (!anim.strike || anim.strike.action !== action || dodge.done < anim.strike.done) {
             bossPlay(name, 0.2, true)
             anim.strike = { action, done: dodge.done }
+            anim.aim = BOSS_PUNCH.has(dodge.attack) ? punchAim(boss, name) : null
           }
           anim.strike.done = dodge.done
           // El clip va atado a la carga: con lo que falta (el mismo reloj de la
@@ -3727,19 +3766,81 @@
           action.setEffectiveTimeScale(0)
           action.time = Math.max(0, impact - leftS * pace)
         } else if (anim.strike) {
-          // El golpe cayo: desde el impacto sigue a su velocidad.
+          // El golpe cayo (aparecio lo que quema, o el clip ya estaba en el
+          // impacto): desde ahi sigue a su velocidad. Si la carga se corto antes
+          // (otra pelea, el heroe se fue), vuelve a la base con un fundido en vez
+          // de saltar a la pose del impacto.
           const done = anim.strike.action
           const impact = BOSS_IMPACT[done.getClip().name] || 0
-          if (done.time < impact) done.time = impact
-          done.setEffectiveTimeScale(1)
+          const landed = (boss.hazards || []).length > fight.burning || done.time >= impact - 0.15
+          if (landed) {
+            if (done.time < impact) done.time = impact
+            done.setEffectiveTimeScale(1)
+          } else {
+            bossPlay(anim.base, 0.35)
+            anim.aim = null
+          }
           anim.strike = null
         }
-        // Rugido al cambiar de fase; si esta pegando, despues del golpe.
+        // Rugido al cambiar de fase; si esta pegando, despues del golpe. Hit no
+        // se corta a si mismo: un golpe tras otro deja ver el retroceso entero.
         if (!first && boss.phase !== anim.phase) {
           if (anim.strike) anim.roar = true
           else bossPlay('Roar', 0.25, true)
-        } else if (struck && !anim.strike && bossClip() !== 'Roar') bossPlay('Hit', 0.1, true)
+        } else if (struck && !anim.strike && bossClip() !== 'Roar') {
+          const hit = bossClip() === 'Hit' ? bossAnim.current : null
+          if (!hit || hit.time > 0.55) bossPlay('Hit', 0.1, true)
+        }
         anim.phase = boss.phase
+      }
+
+      // A donde apunta un golpe de puno: la celda marcada mas cercana a su
+      // centro (de ahi sale lo que quema), en el mundo. Con la direccion y el
+      // largo del estiron que la alcanza desde el pivote.
+      function punchAim(boss, clip) {
+        const rig = fight.rig
+        const fist = BOSS_FIST[clip]
+        if (!rig || !fist || !world || !world.built.toWorld) return null
+        const pivot = rig.turn.position
+        let best = null
+        let near = Infinity
+        for (const cell of boss.telegraphs || []) {
+          const at = world.built.toWorld(cell.x, cell.y)
+          const d = Math.hypot(at.x - pivot.x, at.z - pivot.z)
+          if (d < near) {
+            near = d
+            best = at
+          }
+        }
+        if (!best) return null
+        const reach = Math.hypot(fist[0], fist[1]) * rig.height
+        return {
+          at: best.clone(),
+          // El angulo del puno respecto del frente (el pivote mira hacia -x).
+          offset: Math.atan2(fist[1], fist[0]),
+          lunge: Math.min(BOSS_LUNGE, Math.max(0, near - reach)),
+          dir: new THREE.Vector3(-fist[0], 0, fist[1]).normalize()
+        }
+      }
+
+      // Cuanto del estiron va puesto: crece con la carga, se sostiene en el
+      // impacto y vuelve antes de que el clip termine.
+      function lungeOf(anim) {
+        const action = anim.current
+        if (!anim.aim || !action) return 0
+        const clip = action.getClip()
+        const impact = BOSS_IMPACT[clip.name]
+        if (!impact || action.getEffectiveWeight() <= 0) return 0
+        const t = action.time
+        const hold = impact + 0.25
+        const back = Math.max(0.1, clip.duration - 0.3 - hold)
+        if (t < impact) return smooth(t / impact)
+        if (t < hold) return 1
+        return 1 - smooth(Math.min(1, (t - hold) / back))
+      }
+      const smooth = (u) => {
+        const k = Math.min(1, Math.max(0, u))
+        return k * k * (3 - 2 * k)
       }
 
       // Un numero que sube y se apaga: el dano.
@@ -3914,8 +4015,12 @@
         const near = chest
           ? Math.hypot(chest.x - hero.root.position.x, chest.z - hero.root.position.z)
           : 99
-        const wantLift = bossAim !== null ? 2 + 0.8 * Math.min(1, Math.max(0, (12 - near) / 8)) : 0
-        bossLift += (wantLift - bossLift) * Math.min(1, dt * 2)
+        // Al rugir levanta la cabeza y los brazos: la camara sube un poco mas
+        // para que entre entero.
+        const roaring = bossClip() === 'Roar' ? 2.8 : 0
+        const wantLift =
+          bossAim !== null ? 2 + 0.8 * Math.min(1, Math.max(0, (12 - near) / 8)) + roaring : 0
+        bossLift += (wantLift - bossLift) * Math.min(1, dt * (roaring ? 4 : 2))
         // Lo que paso desde el cuadro anterior, en los numeros del juego.
         const struck = fight.bossHp !== null && boss.hp < fight.bossHp
         const anim = bossAnimOf()
@@ -3959,7 +4064,9 @@
           ? Math.min(1, fight.windup + dt * 1.6)
           : Math.max(0, fight.windup - dt * 3)
         fight.slam = Math.max(0, fight.slam - dt * 2.2)
-        fight.hit = Math.max(0, fight.hit - dt * 3.5)
+        // El destello del golpe dura poco (un sexto de segundo) para que se vea
+        // el retroceso de Hit.
+        fight.hit = Math.max(0, fight.hit - dt * 6)
         fight.hurt = Math.max(0, fight.hurt - dt * 2.5)
         fight.swing = Math.max(0, fight.swing - dt / 0.3)
 
@@ -3978,7 +4085,16 @@
         const dx = hero.root.position.x - rig.turn.position.x
         const dz = hero.root.position.z - rig.turn.position.z
         let turned = 0
-        if (dx * dx + dz * dz > 0.01 && !(anim && boss.defeated)) {
+        // Un golpe de puno gira rapido hacia su celda, con el puno (no el pecho)
+        // apuntando ahi; si no, despacio hacia el heroe.
+        const aim = anim && anim.aim && (anim.strike || lungeOf(anim) > 0) ? anim.aim : null
+        if (aim) {
+          const want =
+            Math.atan2(aim.at.z - rig.turn.position.z, -(aim.at.x - rig.turn.position.x)) -
+            aim.offset
+          turned = wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 5)
+          rig.turn.rotation.y += turned
+        } else if (dx * dx + dz * dz > 0.01 && !(anim && boss.defeated)) {
           const want = Math.atan2(dz, -dx)
           turned = wrap(want - rig.turn.rotation.y) * Math.min(1, dt * 1.2)
           rig.turn.rotation.y += turned
@@ -3986,11 +4102,19 @@
         if (anim) {
           // Animado: camina en el lugar mientras gira rapido (con margen, para
           // que no titile entre Idle y Walk). Los clips hacen el balanceo.
-          const rate = dt > 0 ? Math.abs(turned) / dt : 0
+          const rate = dt > 0 && !aim ? Math.abs(turned) / dt : 0
           anim.turn += (rate - anim.turn) * Math.min(1, dt * 6)
           anim.base = anim.turn > (anim.base === 'Walk' ? 0.12 : 0.3) ? 'Walk' : 'Idle'
           rig.lean.rotation.z = 0
           rig.lean.position.y = 0
+          // El estiron hacia la celda del golpe, en el marco del pivote.
+          const lunge = aim ? aim.lunge * lungeOf(anim) : 0
+          if (aim) rig.lean.position.set(aim.dir.x * lunge, 0, aim.dir.z * lunge)
+          else {
+            rig.lean.position.x *= Math.max(0, 1 - dt * 4)
+            rig.lean.position.z *= Math.max(0, 1 - dt * 4)
+            if (anim.aim && !anim.strike && !BOSS_IMPACT[bossClip()]) anim.aim = null
+          }
         } else {
           // Se inclina: atras al cargar, adelante al caer, un poco atras al
           // recibir. Inclinarse hacia su frente (-x) es girar positivo sobre z.
@@ -4000,13 +4124,20 @@
             breathe * 0.015 - fight.windup * 0.2 + fall * 0.32 - fight.hit * 0.08
           rig.lean.position.y = breathe * 0.06 + fight.windup * 0.3 - fall * 0.35
         }
-        // Destello: claro al recibir, naranja al cargar el golpe.
-        const glow = Math.max(fight.hit, fight.windup * 0.6)
-        const tone = fight.hit >= fight.windup * 0.6 ? flashColor : chargeColor
+        // Destello: claro al recibir, naranja al cargar el golpe. Animado va
+        // tenue (un pulso naranja que avisa sin tapar la carga, y un destello
+        // calido y corto al recibir), asi se leen los clips; quieto es lo unico
+        // que se mueve y va fuerte.
+        const hitGlow = fight.hit * (anim ? 0.3 : 1)
+        // La piedra es muy oscura: con 0,08 de naranja ya se ve rosada entera.
+        const windGlow = fight.windup * (anim ? 0.022 + 0.014 * Math.sin(time * 10) : 0.6)
+        const glow = Math.max(hitGlow, windGlow)
+        const tone = hitGlow >= windGlow ? flashColor : chargeColor
+        const boost = anim ? 0.5 : 1.6
         for (const material of rig.materials) {
           if (!material.emissive || !material.userData.emissive) continue
           material.emissive.copy(material.userData.emissive).lerp(tone, glow)
-          material.emissiveIntensity = material.userData.intensity + glow * 1.6
+          material.emissiveIntensity = material.userData.intensity + glow * boost
         }
       }
 
@@ -8455,6 +8586,22 @@
           time: bossAnim.current ? Number(bossAnim.current.time.toFixed(3)) : null,
           strike: !!bossAnim.strike,
           base: bossAnim.base,
+          // El golpe de puno: la celda a la que apunta, el estiron y donde
+          // estan las munecas (x, z en el mundo).
+          aim: bossAnim.aim
+            ? {
+                at: [bossAnim.aim.at.x, bossAnim.aim.at.z].map((v) => Number(v.toFixed(2))),
+                lunge: Number(bossAnim.aim.lunge.toFixed(2))
+              }
+            : null,
+          wrists: bossAnim.object
+            ? ['LeftHand', 'RightHand'].map((name) => {
+                const bone = bossAnim.object.getObjectByName(name)
+                if (!bone) return null
+                const at = bone.getWorldPosition(new THREE.Vector3())
+                return [at.x, at.y, at.z].map((v) => Number(v.toFixed(2)))
+              })
+            : null,
           backdrop: !!backdropMixer
         },
         // El sonido, la pantalla completa y lo que se siente en el duelo.

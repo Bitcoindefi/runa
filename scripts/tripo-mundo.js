@@ -3463,6 +3463,13 @@ export function buildWorld(data, extras = {}) {
   // no carga, el Coloso quieto de siempre.
   let colossus = null
   let colossusClips = []
+  // El Coloso con esqueleto es una copia con huesos propios: su textura de
+  // huesos se libera con el mapa (la geometria es la del GLB en cache).
+  let gone = false
+  const freeBones = (object) =>
+    object.traverse((child) => {
+      if (child.isSkinnedMesh && child.skeleton) child.skeleton.dispose()
+    })
   if (data.boss) {
     const body = () =>
       (extras.bossRig ? extras.bossRig().catch(() => null) : Promise.resolve(null)).then(
@@ -3480,6 +3487,8 @@ export function buildWorld(data, extras = {}) {
       }
       colossus = object
       colossusClips = clips
+      // Llego despues de dejar el mapa: sus huesos se liberan ya.
+      if (gone) freeBones(object)
     })
     sponsors(toWorld(data.boss.x, data.boss.y))
   }
@@ -3628,6 +3637,8 @@ export function buildWorld(data, extras = {}) {
       if (ramparts && ramparts.dispose) ramparts.dispose()
       if (terrain && terrain.dispose) terrain.dispose()
       for (const mat of seeMaterials) mat.dispose()
+      gone = true
+      if (colossus) freeBones(colossus)
       const free = (node) => {
         if (node.userData.shared) return
         // Las instancias tienen sus propios buffers de posiciones y colores.
