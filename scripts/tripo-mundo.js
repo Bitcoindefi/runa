@@ -2981,7 +2981,10 @@ export function buildWorld(data, extras = {}) {
   const monuments = (data.landmarks || []).filter(
     (mark) => mark.id === 'hero-statue' && mark.bounds
   )
-  for (const { bounds } of monuments) {
+  // El obelisco del eclipse (el ranking de NOX) tampoco es un edificio ni un
+  // cerco: lo dibuja obelisk() de mas abajo, sobre las mismas celdas.
+  const obelisks = (data.landmarks || []).filter((mark) => mark.id === 'nox-obelisk' && mark.bounds)
+  for (const { bounds } of [...monuments, ...obelisks]) {
     for (let y = bounds.y1; y <= bounds.y2; y++) {
       for (let x = bounds.x1; x <= bounds.x2; x++) {
         inBuilding[y * width + x] = 1
@@ -3458,6 +3461,173 @@ export function buildWorld(data, extras = {}) {
     group.add(tag)
   }
   for (const mark of monuments) monument(mark.bounds)
+
+  // El obelisco del eclipse, en la plaza de NOX, donde se consulta el ranking:
+  // una aguja de obsidiana que se afina hacia arriba, con runas que brillan en
+  // sus cuatro caras, un eclipse en la cara sur y la punta encendida, sobre un
+  // zocalo de dos gradas. El dibujo ASCII no cambia: la aguja cubre el nucleo
+  // solido del dibujo y el resto (la base, los postes, el altar del frente)
+  // solo levanta las celdas que el juego no deja pisar.
+  function obelisk({ x1, y1, x2, y2 }, name) {
+    const solid = (x, y) => kinds[y * width + x] !== null
+    // El nucleo: lo solido de las filas de arriba, sin las columnas del borde
+    // (ahi van los postes).
+    const core = { x0: x2, x1: x1, y0: y2, y1: y1 }
+    for (let y = y1; y <= y2 - 2; y++) {
+      for (let x = x1 + 2; x <= x2 - 2; x++) {
+        if (!solid(x, y)) continue
+        core.x0 = Math.min(core.x0, x)
+        core.x1 = Math.max(core.x1, x)
+        core.y0 = Math.min(core.y0, y)
+        core.y1 = Math.max(core.y1, y)
+      }
+    }
+    if (core.x0 > core.x1) return
+    const west = core.x0 * CX
+    const east = (core.x1 + 1) * CX
+    const north = core.y0 * CZ
+    const south = (core.y1 + 1) * CZ
+    const cx = (west + east) / 2
+    const cz = (north + south) / 2
+    const stone = new THREE.MeshStandardMaterial({
+      color: 0x2a2436,
+      roughness: 0.85,
+      flatShading: true
+    })
+    const obsidian = seeThroughMaterial(
+      new THREE.MeshStandardMaterial({
+        color: 0x161220,
+        roughness: 0.32,
+        metalness: 0.35,
+        flatShading: true
+      })
+    )
+    const runeGlow = new THREE.MeshStandardMaterial({
+      color: palette.vein || palette.glow,
+      emissive: palette.vein || palette.glow,
+      emissiveIntensity: 1.7,
+      roughness: 0.4
+    })
+    const moonGlow = new THREE.MeshStandardMaterial({
+      color: palette.glow,
+      emissive: palette.glow,
+      emissiveIntensity: 1.5,
+      roughness: 0.4
+    })
+    const add = (geometry, material, x, y, z) => {
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.position.set(x, y, z)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      group.add(mesh)
+      return mesh
+    }
+    // El zocalo: dos gradas bajo la aguja, con un filete de runa en la de arriba.
+    const w = east - west
+    const d = south - north
+    add(new THREE.BoxGeometry(w, 0.7, d), stone, cx, 0.35, cz)
+    add(new THREE.BoxGeometry(w - 0.7, 0.55, d - 0.7), stone, cx, 0.975, cz)
+    add(new THREE.BoxGeometry(w - 0.5, 0.06, d - 0.5), runeGlow, cx, 0.72, cz)
+    // La aguja: cuatro caras que se afinan de 3 m a 1 m en 11 m de alto.
+    const base = 1.25
+    const tall = Math.min(11, Math.max(6, d * 2.2))
+    const bottom = Math.min(3, Math.min(w, d) - 1.2)
+    const top = bottom * 0.36
+    const needle = add(
+      new THREE.CylinderGeometry(top * Math.SQRT1_2, bottom * Math.SQRT1_2, tall, 4, 1),
+      obsidian,
+      cx,
+      base + tall / 2,
+      cz
+    )
+    needle.rotation.y = Math.PI / 4
+    // La punta encendida y su piramide.
+    const cap = add(
+      new THREE.ConeGeometry(top * Math.SQRT1_2, 1.5, 4),
+      moonGlow,
+      cx,
+      base + tall + 0.75,
+      cz
+    )
+    cap.rotation.y = Math.PI / 4
+    // Las runas: trazos finos sobre cada cara, inclinados con ella.
+    const lean = Math.atan2((bottom - top) / 2, tall)
+    const sideAt = (h) => bottom + ((top - bottom) * h) / tall
+    const GLYPHS = [
+      [
+        [0, 0, 0.7, 0],
+        [0.13, 0.14, 0.32, 0.7]
+      ],
+      [
+        [0, 0, 0.7, 0],
+        [-0.13, 0.14, 0.32, -0.7],
+        [0.13, -0.14, 0.32, 0.7]
+      ],
+      [
+        [-0.1, 0, 0.7, 0],
+        [0.1, 0, 0.7, 0],
+        [0, 0.05, 0.3, 1.57]
+      ],
+      [
+        [0, 0, 0.7, 0],
+        [-0.12, 0.2, 0.3, 0.7],
+        [0.12, 0.2, 0.3, -0.7]
+      ]
+    ]
+    const strokes = []
+    const piece = new THREE.Object3D()
+    for (let face = 0; face < 4; face++) {
+      const yaw = (face * Math.PI) / 2
+      for (let k = 0; k < 5; k++) {
+        const h = 1.4 + k * ((tall - 3.4) / 4)
+        const out = sideAt(h) / 2 + 0.02
+        for (const [ox, oy, len, roll] of GLYPHS[(face + k) % GLYPHS.length]) {
+          piece.position.set(cx + Math.sin(yaw) * out, base + h, cz + Math.cos(yaw) * out)
+          piece.rotation.set(-lean, yaw, 0, 'YXZ')
+          piece.updateMatrix()
+          const bar = new THREE.BoxGeometry(0.07, len, 0.04)
+          bar.applyMatrix4(
+            new THREE.Matrix4().makeRotationZ(roll).setPosition(ox, oy, 0).premultiply(piece.matrix)
+          )
+          strokes.push(bar)
+        }
+      }
+    }
+    const runes = new THREE.Mesh(mergeGeometries(strokes), runeGlow)
+    for (const bar of strokes) bar.dispose()
+    group.add(runes)
+    // El eclipse en la cara sur, cerca de la punta: un disco negro con su halo.
+    const ring = base + tall - 1.4
+    const reach = sideAt(tall - 1.4) / 2 + 0.05
+    const halo = add(new THREE.TorusGeometry(0.34, 0.06, 6, 20), moonGlow, cx, ring, cz + reach)
+    halo.rotation.x = -lean
+    const moon = add(new THREE.CircleGeometry(0.3, 20), obsidian, cx, ring, cz + reach + 0.01)
+    moon.rotation.x = -lean
+    // Lo demas del dibujo que no se pisa: la base del frente es una grada baja y
+    // cada poste suelto un pilar con un cristal encendido.
+    const kerb = new THREE.BoxGeometry(CX, 0.6, CZ)
+    const post = new THREE.BoxGeometry(CX * 0.8, 1.7, CZ * 0.6)
+    const crystal = new THREE.OctahedronGeometry(0.2)
+    for (let y = y1; y <= y2; y++) {
+      for (let x = x1; x <= x2; x++) {
+        if (!solid(x, y)) continue
+        if (x >= core.x0 && x <= core.x1 && y >= core.y0 && y <= core.y1) continue
+        const px = (x + 0.5) * CX
+        const pz = (y + 0.5) * CZ
+        if (y === y2) add(kerb, stone, px, 0.3, pz)
+        else {
+          add(post, stone, px, 0.85, pz)
+          add(crystal, runeGlow, px, 1.95, pz)
+        }
+      }
+    }
+    if (name) {
+      const tag = label(text(name))
+      tag.position.set(cx, 2.6, (y2 + 1) * CZ + 0.6)
+      group.add(tag)
+    }
+  }
+  for (const mark of obelisks) obelisk(mark.bounds, mark.name)
   // El Coloso mira al oeste, hacia el portal por donde llega el heroe. Queda a
   // mano para que la pagina lo anime en la pelea (respira, gira, golpea).
   // Con esqueleto y clips (coloso-anim.glb) si la pagina lo da; si no esta o

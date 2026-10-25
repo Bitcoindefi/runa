@@ -6045,6 +6045,10 @@
           mover.held.clear()
           mover.fingers.clear()
         }
+        // Con el cofre del hogar, el inventario o una tienda abiertos nadie
+        // camina: las flechas sostenidas se sueltan, como al abrir la pausa. El
+        // pulgar en la cruceta ya pasa a mover el cursor solo (stickSet).
+        if (!exploring(st)) mover.held.clear()
         refreshPlayHud()
         syncActions(st)
         chargeButton(st)
@@ -6624,6 +6628,11 @@
           shiftHeld = down
           return
         }
+        // Soltar una flecha siempre cuenta, aunque se suelte con el cofre, una
+        // tienda o la pausa abiertos: si no, al cerrar el heroe sigue caminando.
+        const released =
+          !down && MOVES[event.key.length === 1 ? event.key.toLowerCase() : event.key]
+        if (released) mover.held.delete(released)
         if (paused) {
           if (down && event.key === 'Escape') closePause()
           return

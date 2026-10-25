@@ -4,6 +4,7 @@ const { MAPS, TILES } = require('../lib/map.js')
 const { Field } = require('../lib/field.js')
 const { NOX_BUILDINGS } = require('../lib/nox.js')
 const { withLanguage, mapLabels, t: tr } = require('../lib/locale.js')
+const { style } = require('bare-tui')
 
 function press(game, name) {
   return game.onKey({ type: 'key', is: (...keys) => keys.includes(name) })
@@ -61,6 +62,14 @@ test('NOX: la tecla t devuelve a cada heroe a su propia capital', (t) => {
   t.is(nox.walker.x, MAPS.nox.arrivals.meadow.x)
   t.is(nox.walker.y, MAPS.nox.arrivals.meadow.y)
   t.is(nox.field, null)
+  t.is(last(nox), 'volves a NOX por su puerta sur', 'con t no se cruza el porton oriental')
+  withLanguage('en', () => t.is(tr(last(nox)), 'you return to NOX by its south gate'))
+
+  // Caminando por el porton N de la pradera si se cruza el porton oriental.
+  nox.field = new Field({ player: nox.player })
+  nox.drain([{ type: 'nox' }])
+  t.is(nox.walker.mapId, 'nox')
+  t.is(last(nox), 'atravesas el porton oriental y entras al reino oscuro de NOX')
 
   const runa = newHero('runa')
   runa.field = new Field({ player: runa.player })
@@ -74,7 +83,13 @@ test('NOX: la llegada desde la pradera y el nacimiento quedan en la avenida abie
   t.ok(meadow.y < 184, 'se aparece al norte de la caseta de la puerta sur')
   t.absent(solid(MAPS.nox, meadow.x, meadow.y))
   t.absent(solid(MAPS.nox, MAPS.nox.spawn.x, MAPS.nox.spawn.y))
-  t.ok(MAPS.nox.spawn.y < 128, 'se nace al norte del cartel del mercado')
+  const sign = MAPS.nox.rows.findIndex((row) => row.includes('mercado nocturno'))
+  t.ok(sign > 0, 'el cartel del mercado sigue en el mapa')
+  t.ok(
+    sign - MAPS.nox.spawn.y >= 6,
+    'se nace lejos del cartel del mercado: la camara no queda detras de sus letras'
+  )
+  t.ok(MAPS.nox.rows[MAPS.nox.spawn.y][MAPS.nox.spawn.x] === '.', 'se nace sobre la avenida')
   const open = reachable()
   t.ok(open.has(meadow.y * MAPS.nox.width + meadow.x), 'la llegada se une con el nacimiento')
 })
@@ -149,6 +164,37 @@ test('NOX: el obelisco del eclipse abre el ranking como la estatua de RUNA', (t)
   const game = newHero('nox')
   game.walker.placeAt('nox', near.x, near.y)
   t.is(game.nearbyLandmark(2), landmark)
+})
+
+test('NOX: la pantalla del ranking nombra el obelisco y traduce el origen', (t) => {
+  const landmark = MAPS.nox.landmarks.find((l) => l.id === 'nox-obelisk')
+  const game = newHero('nox')
+  // Justo al sur del hueco de la base, a una casilla del dibujo.
+  game.walker.placeAt('nox', 160, landmark.bounds.y2 + 1)
+  game.enter()
+  t.ok(game.rankingOpen, 'E junto al obelisco abre el ranking')
+  t.is(game.rankingPlace, 'obelisco del eclipse')
+  // La vista usa el idioma de la partida (game.language).
+  game.language = 'en'
+  const english = style.stripAnsi(game.view())
+  t.ok(english.includes('eclipse obelisk'), 'el titulo es el obelisco')
+  t.absent(english.includes("heroes' statue"), 'NOX no habla de la estatua de RUNA')
+  t.ok(/lv 1\s+you\b/.test(english), 'el origen del heroe propio es you')
+  t.absent(/\bvos\b/.test(english))
+  game.language = 'es'
+  const spanish = style.stripAnsi(game.view())
+  t.ok(spanish.includes('obelisco del eclipse'))
+  t.ok(/nv 1\s+vos\b/.test(spanish))
+  press(game, 'escape')
+  t.absent(game.rankingOpen)
+
+  const runa = newHero('runa')
+  const statue = MAPS.city.landmarks.find((l) => l.id === 'hero-statue')
+  runa.walker.placeAt('city', 160, statue.bounds.y2 + 1)
+  runa.enter()
+  t.ok(runa.rankingOpen)
+  runa.language = 'en'
+  t.ok(style.stripAnsi(runa.view()).includes("heroes' statue"), 'RUNA conserva su estatua')
 })
 
 test('NOX: los arboles son arboles y no pisan los caminos', (t) => {
