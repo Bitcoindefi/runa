@@ -2212,6 +2212,27 @@
       const loader = new GLTFLoader()
       const loaded = new Map()
       let models = new Map()
+      // Las copias livianas del sitio (scripts/glb-ligero.js; las publica
+      // build-web.js): nombre -> { 1024: version, 512: version }. El visor local
+      // no las tiene y sirve los originales.
+      let lightModels = new Map()
+      // De donde salio cada GLB que cargo: '1024', '512' u 'original'.
+      const loadedFrom = new Map()
+      // El juego que pide este equipo: texturas de 512 px en un telefono (tactil
+      // con pantalla chica, o tactil con 4 GB o menos) y en cualquier equipo con
+      // 2 GB o menos; 1024 en el resto. Las de 2048 (los originales) ocupan unos
+      // 67 MB de GPU por modelo, las de 1024 unos 17 y las de 512 unos 4.
+      // ?modelos=512, 1024 u original lo fija, para comparar.
+      const MODEL_SET = (() => {
+        const asked = new URLSearchParams(location.search).get('modelos')
+        if (['512', '1024', 'original'].includes(asked)) return asked
+        const memory = navigator.deviceMemory || 0
+        // window.screen: `screen` en esta pagina es la pantalla del juego.
+        const side = Math.min(window.screen.width, window.screen.height)
+        const low = memory > 0 && memory <= 2
+        const phone = touchPad && (side <= 900 || (memory > 0 && memory <= 4))
+        return phone || low ? '512' : '1024'
+      })()
 
       // Medido en Chrome recien abierto: el primer pedido puede fallar con "Failed
       // to fetch". Cada pedido se reintenta dos veces antes de rendirse; una
@@ -2236,13 +2257,37 @@
         return error
       }
 
+      // La copia liviana si el sitio la tiene; si no carga, el original.
       function loadGltf(file) {
-        const key = file + ':' + models.get(file)
+        const sets = lightModels.get(file)
+        const light = MODEL_SET !== 'original' && sets && sets[MODEL_SET]
+        const key = file + ':' + models.get(file) + ':' + (light || '')
         if (!loaded.has(key)) {
-          const url = 'assets/tripo/' + encodeURIComponent(file) + '?v=' + models.get(file)
+          const name = encodeURIComponent(file)
+          const original = () =>
+            retry(() => loader.loadAsync('assets/tripo/' + name + '?v=' + models.get(file))).then(
+              (gltf) => {
+                loadedFrom.set(file, 'original')
+                return gltf
+              }
+            )
+          const task = light
+            ? retry(() =>
+                loader.loadAsync('assets/tripo/' + MODEL_SET + '/' + name + '?v=' + light)
+              ).then(
+                (gltf) => {
+                  loadedFrom.set(file, MODEL_SET)
+                  return gltf
+                },
+                (error) => {
+                  console.warn('la copia liviana no cargo, va el original', file, error)
+                  return original()
+                }
+              )
+            : original()
           loaded.set(
             key,
-            retry(() => loader.loadAsync(url)).catch((error) => {
+            task.catch((error) => {
               loaded.delete(key)
               throw error
             })
@@ -2812,6 +2857,9 @@
           if (!response.ok) throw httpError('models.json', response)
           const list = await response.json()
           models = new Map(list.map((model) => [model.name, model.mtime]))
+          lightModels = new Map(
+            list.filter((model) => model.light).map((model) => [model.name, model.light])
+          )
           // Si la lista llego tarde, el heroe de Tripo se carga ahora y no al
           // cambiar de mapa.
           if (!avatarBody) {
@@ -8001,6 +8049,9 @@
         speed: pace().speed,
         map: world ? world.map : null,
         atlas: atlas.debug(),
+        // Que juego de GLB pide este equipo y de donde salio cada uno.
+        modelSet: MODEL_SET,
+        modelsFrom: Object.fromEntries(loadedFrom),
         // El sonido, la pantalla completa y lo que se siente en el duelo.
         sound: sound.state(),
         fullscreen: !!fullscreenOf(document),

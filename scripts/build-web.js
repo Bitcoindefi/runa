@@ -7,6 +7,13 @@
 // de las mismas piezas que sirve el visor, asi el sitio no se separa de lo que
 // se prueba local.
 //
+// Cada GLB de Tripo va tres veces: el original y las copias livianas de
+// scripts/glb-ligero.js, con texturas de 1024 px (computadoras) y de 512 px
+// (telefonos), en assets/tripo/1024/ y assets/tripo/512/. models.json dice la
+// version de cada copia; la pagina elige segun el equipo y, si una copia no
+// carga, vuelve al original. Hace falta gltf-transform en ../tools/gltf (ver
+// glb-ligero.js).
+//
 //   node scripts/tripo-viewer.js --fetch-lib   una vez, con wifi
 //   node scripts/build-web.js [carpeta]        por defecto out/web
 
@@ -14,6 +21,7 @@ const fs = require('fs')
 const path = require('path')
 const viewer = require('./tripo-viewer.js')
 const { buildGame } = require('./build-juego.js')
+const { lighten } = require('./glb-ligero.js')
 
 const out = path.resolve(process.argv[2] || path.join(__dirname, '..', 'out', 'web'))
 
@@ -77,7 +85,17 @@ async function main() {
   for (const [name, file] of Object.entries(viewer.MODULES)) write(name, fs.readFileSync(file))
   // El juego: lib/ empaquetado para el navegador, igual que lo sirve el visor.
   const game = await buildGame(path.join(out, 'juego.js'))
-  write('models.json', JSON.stringify(models))
+  // Las copias livianas se hacen (o se toman de out/tripo-ligero si ya estan)
+  // antes de la lista, que lleva la version de cada una.
+  const light = await lighten()
+  const listed = models.map((model) => {
+    const made = light.models[model.name]
+    if (!made) return model
+    const sets = {}
+    for (const size of light.sets) sets[size] = made.sets[size].hash
+    return { ...model, light: sets }
+  })
+  write('models.json', JSON.stringify(listed))
   const ids = [...viewer.WORLD_MAPS, 'boss']
   for (const id of ids) {
     const data = viewer.worldMap(id)
@@ -89,8 +107,15 @@ async function main() {
     const dest = name === 'model-viewer.min.js' ? name : `vendor/${name}`
     write(dest, fs.readFileSync(path.join(viewer.VENDOR, name)))
   }
+  let lightBytes = 0
   for (const model of models) {
     write(`assets/tripo/${model.name}`, fs.readFileSync(path.join(viewer.MODELS, model.name)))
+    if (!light.models[model.name]) continue
+    for (const size of light.sets) {
+      const bytes = fs.readFileSync(path.join(light.out, String(size), model.name))
+      write(`assets/tripo/${size}/${model.name}`, bytes)
+      lightBytes += bytes.length
+    }
   }
   // Los NPC pintados de la vista 2.5D, un PNG por tipo.
   const npcArt = path.join(__dirname, '..', 'assets', 'npcs')
@@ -129,7 +154,7 @@ async function main() {
   write('.nojekyll', '')
   const kb = Math.round(game.bytes / 1024)
   console.log(
-    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo, ${freeCount} libres (CC0) y ${ids.length} mapas`
+    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo (mas ${Math.round(lightBytes / 1024)} KB de copias livianas), ${freeCount} libres (CC0) y ${ids.length} mapas`
   )
 }
 
