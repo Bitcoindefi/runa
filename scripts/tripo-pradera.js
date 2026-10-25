@@ -25,8 +25,14 @@
 //                     siga), false suelta, 'tap' un turno solo, 'cancel' suelta
 //                     todo y olvida lo guardado (pausa). from es la fuente
 //                     ('key', 'button' o 'stick'): soltar una no corta las
-//                     otras. Sale una tecla F por turno, al terminar la
-//                     animacion del anterior (tripo-combate.mjs CombatPace)
+//                     otras. Sale una tecla F por turno, cuando cae el golpe
+//                     del anterior (tripo-combate.mjs CombatPace)
+//   order(kind)       la pagina pide 'potion', 'guard' o 'retreat' (L2, L4,
+//                     L5): sale en el proximo turno, antes que el ataque
+//   charge()          lo cargado de las dos barras de la pelea en 3D, de 0 a 1
+//                     ({ hero, foe }), o null sin pelea: para el boton Atacar
+//   heroHp()          la vida del heroe que muestra la pelea en 3D (baja cuando
+//                     se ve el golpe, no cuando el juego lo resolvio), o null
 //   timeScale()       1, o casi 0 durante la pausa de un golpe (hit stop): la
 //                     pagina la aplica a las animaciones del heroe
 //   update(time, dt, st, world)  cada cuadro mientras se ve un mapa suyo:
@@ -77,7 +83,14 @@ import {
   numberScale,
   nearFoes,
   CombatPace,
-  HitStop
+  HitStop,
+  ACTION_KEYS,
+  IMPACT_GAP,
+  turnLead,
+  turnCharges,
+  chargeLine,
+  chargeAt,
+  barLayout
 } from './combate.js'
 
 // Este modulo corre en el navegador; el lint del repo lo revisa como codigo de Node.
@@ -1952,6 +1965,12 @@ const CSS = `
   body:has(#foebar:not([hidden])) #stats {
     top: calc(var(--sat) + var(--gut) + 44px);
   }
+  /* En la pelea la ayuda sube, debajo de la ficha: abajo tapaba los pies del
+     heroe y su barra de carga. */
+  #meadow-hint.fight {
+    top: calc(var(--sat) + var(--gut) + 96px);
+    bottom: auto;
+  }
 }
 /* Celular acostado: la barra a la derecha de la ficha y la ayuda sobre los
    botones, como la de la pagina. */
@@ -2494,13 +2513,20 @@ class Effects {
     this.L = L
     this.hint = hint
     this.feel = feel
-    // Hasta cuando dura la animacion del ultimo turno (el ritmo espera).
+    // Hasta cuando dura el ultimo turno: cuando cae su golpe (el ritmo espera).
     this.busyUntil = -10
+    // Cuando cayo el ultimo golpe que se mostro: el siguiente, IMPACT_GAP despues.
+    this.lastImpact = -10
     this.heroBrace = -10
     this.heroStep = -10
-    // La recarga que muestran los aros: lo cargado ahora y hacia donde va.
-    this.heroCharge = { k: 1, want: 1 }
-    this.foeCharge = { k: 1, want: 1 }
+    // Cubierto (L4): el aro del heroe va celeste hasta el golpe que para.
+    this.guarding = false
+    // La recarga de los dos durante el turno (tripo-combate.mjs chargeLine): la
+    // muestran las barras de carga y los arcos de los aros.
+    this.heroCharge = chargeLine(1, 1, 0, 0)
+    this.foeCharge = chargeLine(1, 1, 0, 0)
+    // La vida del heroe que se ve: baja con el golpe que se muestra (heroHp).
+    this.shownHp = null
     this.pies = new Map()
     this.group = new THREE.Group()
     ctx.scene.add(this.group)
@@ -2579,6 +2605,9 @@ class Effects {
       })
     this.heroPie = new THREE.Mesh(this.pie(0.69, 0.8, 1), pieMaterial(0xffe9a0))
     this.foePie = new THREE.Mesh(this.pie(0.89, 1.0, 1), pieMaterial(0xff8a70))
+    // Las barras de carga debajo de los dos (ChargeBar).
+    this.heroBar = new ChargeBar(this.group, { color: 0xe8b84a, ready: 0xfff2b0 })
+    this.foeBar = new ChargeBar(this.group, { color: 0xe0503c, ready: 0xff9a80, width: 0.075 })
     // El aviso antes del contacto: un aro rojo tenue bajo los que estan cerca.
     this.aggro = []
     for (let i = 0; i < 3; i++) {
@@ -2645,12 +2674,26 @@ class Effects {
     return time < this.busyUntil
   }
 
+  // Lo cargado de las dos barras ahora (para el boton Atacar), o null.
+  charge(time) {
+    if (this.engaged === null) return null
+    return { hero: chargeAt(this.heroCharge, time), foe: chargeAt(this.foeCharge, time) }
+  }
+
+  // La vida del heroe que muestra la pelea, o null si no hay pelea en pantalla.
+  heroHp() {
+    return this.engaged !== null || this.queue.length ? this.shownHp : null
+  }
+
   debug() {
     return {
       engaged: this.engaged,
       queue: this.queue.length,
       numbers: this.numbers.length,
       bar: this.barHp,
+      busyUntil: this.busyUntil,
+      lastImpact: this.lastImpact,
+      shownHp: this.shownHp,
       last: this.last ? { hp: this.last.hp, foeHp: this.last.foeHp, tick: this.last.tick } : null
     }
   }
@@ -2700,22 +2743,36 @@ class Effects {
       crowd.engaged = fight.id
       crowd.fallAt = 0
       this.barHp = fight.foeHp
+      this.shownHp = fight.hp
       const spot = crowd.spot(fight.id)
       if (spot) this.number('!', '#ffd040', spot.x, spot.top + 0.9, spot.z, time)
-      this.charges(fight, true)
+      const now = (cd, max) => charge(cd, max)
+      const hero = now(fight.heroCd, fight.heroCdMax)
+      const foe = now(fight.foeCd, fight.foeCdMax)
+      this.heroCharge = chargeLine(hero, hero, time, time)
+      this.foeCharge = chargeLine(foe, foe, time, time)
       if (this.feel) this.feel.contact()
-    } else if (fight && fight.tick !== this.last.tick) {
+    } else if (fight && (fight.tick !== this.last.tick || fight.logged !== this.last.logged)) {
       this.turn(this.last, fight, time)
-      this.charges(fight, false)
     } else if (!fight && this.last) {
-      // Termino. Si gano el heroe, el juego ya anoto la pelea entera en
-      // lastFight: se cuenta el ultimo turno y el monstruo cae despues del golpe.
+      // Termino. El juego ya anoto la pelea entera en lastFight: se cuenta el
+      // ultimo turno con su registro y, si gano el heroe, el monstruo cae
+      // despues del golpe.
       const ended = field && field.lastFight ? field.lastFight : null
       const won = !!ended && ended.over === 'ganaste'
       if (ended) {
         // Si cayo el heroe, la ficha ya lo curo en la iglesia: su vida es 0.
         const hp = ended.over === 'moriste' ? 0 : st.hp
-        const after = { ...this.last, tick: Infinity, foeHp: won ? 0 : this.last.foeHp, hp }
+        const log = Array.isArray(ended.log) ? ended.log : []
+        const tail = log[log.length - 1]
+        const after = {
+          ...this.last,
+          tick: tail && tail.tick > this.last.tick ? tail.tick : this.last.tick,
+          foeHp: won ? 0 : this.last.foeHp,
+          hp,
+          log: log.slice(-8),
+          logged: tail && Number.isFinite(Number(tail.n)) ? tail.n : this.last.logged
+        }
         const blow = this.turn(this.last, after, time)
         if (won) {
           crowd.fallAt = time + blow + 0.08
@@ -2731,19 +2788,6 @@ class Effects {
     // Fuera de la pelea, los que estan por tocar al heroe (aro rojo tenue).
     this.near = fight ? [] : nearFoes(st.foes, st.location, 3)
     this.hud(st, fight, touch)
-  }
-
-  // Lo cargado de las dos recargas: al empezar se ve como esta; despues de un
-  // turno el arco va hacia el valor nuevo (y vacio de golpe si recien pego).
-  charges(fight, snap) {
-    const pairs = [
-      [this.heroCharge, charge(fight.heroCd, fight.heroCdMax)],
-      [this.foeCharge, charge(fight.foeCd, fight.foeCdMax)]
-    ]
-    for (const [entry, want] of pairs) {
-      if (snap || want < entry.want) entry.k = want
-      entry.want = want
-    }
   }
 
   // Despues de crowd.sync: el que cayo ya quedo marcado.
@@ -2783,18 +2827,26 @@ class Effects {
 
   // La ayuda durante la pelea: que hace el proximo ataque (tripo-combate.mjs
   // readout). Atacar pasa el turno aunque el arma se este recargando.
+  // Con L3 cada ataque corre hasta el proximo golpe: "pega en n turnos" cuenta
+  // los golpes del monstruo que llegan antes. En la compu nombra las teclas de
+  // la guardia, la pocion y la retirada; en el celular estan los botones.
   fightHint(fight, touch) {
     const L = this.L
     const next = readout(fight) || { state: 'attack', n: 1 }
+    const keys = touch
+      ? ''
+      : L(' · G guard · P potion · B back off', ' · G guardia · P pocion · B retirarse')
     if (next.state === 'recharge') {
-      return L(`Recharging · hits in ${next.n} turns`, `Recargando · pega en ${next.n} turnos`)
+      return (
+        L(`Reloading · hits in ${next.n} turns`, `Recargando · pega en ${next.n} turnos`) + keys
+      )
     }
     if (next.state === 'wait') {
-      return L(`Out of reach · ${next.n} turns`, `Fuera de alcance · ${next.n} turnos`)
+      return L(`Out of reach · ${next.n} turns`, `Fuera de alcance · ${next.n} turnos`) + keys
     }
     return touch
       ? L('Attack or the stick toward it', 'Atacar o el stick hacia el')
-      : L('F, Space or a step toward it: attack', 'F, Espacio o un paso hacia el: atacar')
+      : L('F or Space: attack', 'F o Espacio: atacar') + keys
   }
 
   // La ayuda fuera de la pelea: hablar con la guardabosques, entrar a la cripta
@@ -2831,30 +2883,38 @@ class Effects {
     return ''
   }
 
-  // Un turno: lo que paso entre dos lecturas de la pelea, contado por las vidas
-  // (tripo-combate.mjs turnEvents), en el orden del juego. Devuelve cuando cae
-  // el ultimo golpe del heroe, en segundos desde ahora, y deja en busyUntil
-  // cuando termina la animacion (el ritmo del combate espera hasta ahi).
+  // Un turno: lo que paso entre dos lecturas de la pelea (tripo-combate.mjs
+  // turnEvents: del registro con datos, L1, o por las vidas), en el orden del
+  // juego. Con el turno hasta el proximo golpe (L3) el turno dura en la pagina
+  // los segundos que duro en el juego (turnLead): las barras de carga se llenan
+  // en ese tiempo y el golpe cae al final, nunca a menos de IMPACT_GAP del
+  // anterior. Lo que paso antes del golpe (la pocion, la guardia) se ve al
+  // empezar. Devuelve cuando cae el ultimo golpe del heroe, en segundos desde
+  // ahora, y deja en busyUntil cuando cae el golpe del turno (el ritmo del
+  // combate espera hasta ahi).
   turn(before, after, time) {
-    let delay = 0
+    const events = turnEvents(before, after)
+    // La guardia dura un turno: la de este, si la hay, la prende su evento.
+    this.guarding = false
+    const lead = turnLead(before, after)
+    const blows = events.some((event) => event.who === 'hero' || event.who === 'foe')
+    const land = blows ? Math.max(time + lead, this.lastImpact + IMPACT_GAP) : time + lead
+    const lines = turnCharges(before, after, events, time, land)
+    this.heroCharge = lines.hero
+    this.foeCharge = lines.foe
+    let at = land
+    let early = time
+    let landed = false
     let blow = 0
     let foeHp = before.foeHp
-    for (const event of turnEvents(before, after)) {
-      const at = time + delay
-      if (event.who === 'advance') {
-        // Fuera de alcance: un paso corto hacia el monstruo.
-        this.queue.push({ at, kind: 'advance' })
-        delay += 0.24
-      } else if (event.who === 'recharge') {
-        // El arma se recarga: el heroe se planta y el aro dorado se llena.
-        this.queue.push({ at, kind: 'recharge' })
-        delay += 0.26
-      } else if (event.who === 'hero') {
+    let hp = before.hp
+    for (const event of events) {
+      if (event.who === 'hero') {
         foeHp = Math.max(0, foeHp - event.amount)
         this.queue.push(
-          { at, kind: 'swing', weapon: after.weapon, id: before.id },
+          { at: Math.max(time, at - 0.12), kind: 'swing', weapon: after.weapon, id: before.id },
           {
-            at: at + 0.12,
+            at,
             kind: 'foe-hit',
             id: before.id,
             amount: event.amount,
@@ -2862,23 +2922,35 @@ class Effects {
             hp: foeHp
           }
         )
-        blow = delay + 0.12
-        delay += 0.28
+        blow = at - time
+        this.lastImpact = at
+        landed = true
+        at += 0.28
       } else if (event.who === 'foe') {
-        this.queue.push({ at, kind: 'foe-swing', id: before.id })
+        hp = Math.max(0, hp - event.amount)
+        this.queue.push({ at: Math.max(time, at - 0.16), kind: 'foe-swing', id: before.id })
         this.queue.push({
-          at: at + 0.16,
+          at,
           kind: 'hero-hit',
           amount: event.amount,
-          share: event.share
+          share: event.share,
+          blocked: event.blocked || 0,
+          hp
         })
-        delay += 0.32
+        this.lastImpact = at
+        landed = true
+        at += 0.32
       } else {
-        this.queue.push({ at, kind: 'potion' })
-        delay += 0.2
+        // Lo que no es un golpe va al empezar el turno (o despues del golpe, si
+        // vino despues): un paso, plantarse, la guardia, la pocion, la retirada.
+        const when = landed ? at : early
+        if (event.who === 'potion') hp = Math.min(Number(before.maxhp) || hp, hp + event.amount)
+        this.queue.push({ at: when, kind: event.who, hp, clean: event.clean })
+        if (landed) at += 0.2
+        else early += 0.08
       }
     }
-    this.busyUntil = Math.max(this.busyUntil, time + delay)
+    this.busyUntil = Math.max(this.busyUntil, landed ? this.lastImpact : time + lead)
     return blow
   }
 
@@ -2991,10 +3063,13 @@ class Effects {
       this.foeRing.position.set(this.spot.x, 0.035, this.spot.z)
       this.foeRing.scale.setScalar(pulse * (this.spot.style === 'stomp' ? 1.35 : 1))
       this.heroRing.position.set(hero.position.x, 0.035, hero.position.z)
+      this.heroRing.material.color.setHex(this.guarding ? 0x9fd4ff : 0xe0c060)
       this.chargeRings(time, dt, hero.position)
     } else {
       this.heroPie.visible = false
       this.foePie.visible = false
+      this.heroBar.hide()
+      this.foeBar.hide()
     }
     this.aggroRings(time)
     for (const entry of [...this.numbers]) {
@@ -3012,23 +3087,22 @@ class Effects {
     }
   }
 
-  // La recarga de los dos sobre sus aros: el arco se llena durante el turno y,
-  // lleno, el aro del heroe late (el proximo ataque pega).
+  // La recarga de los dos (L3: se llena durante el turno, en los segundos del
+  // juego): en la barra de carga debajo de cada uno y en el arco sobre su aro.
+  // Llena, la del heroe late (el proximo ataque pega).
   chargeRings(time, dt, hero) {
-    const ease = Math.min(1, dt * 5)
-    for (const entry of [this.heroCharge, this.foeCharge]) {
-      entry.k += (entry.want - entry.k) * ease
-    }
-    const heroK = this.heroCharge.k
+    const heroK = chargeAt(this.heroCharge, time)
+    const foeK = chargeAt(this.foeCharge, time)
     this.heroPie.geometry = this.pie(0.69, 0.8, heroK)
     this.heroPie.position.set(hero.x, 0.04, hero.z)
-    const ready = this.heroCharge.want >= 1
-    this.heroPie.material.opacity = ready ? 0.75 + Math.sin(time * 9) * 0.2 : 0.95
+    this.heroPie.material.opacity = heroK >= 0.999 ? 0.75 + Math.sin(time * 9) * 0.2 : 0.95
     this.heroPie.visible = true
-    this.foePie.geometry = this.pie(0.89, 1.0, this.foeCharge.k)
+    this.foePie.geometry = this.pie(0.89, 1.0, foeK)
     this.foePie.position.set(this.spot.x, 0.04, this.spot.z)
     this.foePie.scale.copy(this.foeRing.scale)
     this.foePie.visible = true
+    this.heroBar.show(hero.x, 0.02, hero.z, heroK, time)
+    this.foeBar.show(this.spot.x, 0.02, this.spot.z, foeK, time)
   }
 
   // El aviso antes del contacto: un aro rojo tenue bajo los monstruos a 3
@@ -3113,6 +3187,9 @@ class Effects {
         this.bolt.material.color.setHex(shot)
       }
     } else if (item.kind === 'hero-hit') {
+      this.shownHp = item.hp
+      // Lo que paro la guardia (L4) se ve en el color del numero, celeste.
+      this.guarding = false
       this.heroRecoil = time
       this.burstAt = time
       this.burst.position.set(hero.x, 1.0, hero.z)
@@ -3120,7 +3197,7 @@ class Effects {
       this.sparkle(hero.x, 1.3, hero.z, 0xff7050, time)
       this.number(
         `-${item.amount}`,
-        '#ff6a50',
+        item.blocked > 0 ? '#9fd4ff' : '#ff6a50',
         hero.x,
         2.25,
         hero.z,
@@ -3135,7 +3212,15 @@ class Effects {
       flash.classList.add('on')
       globalThis.requestAnimationFrame(() => flash.classList.remove('on'))
     } else if (item.kind === 'potion') {
+      if (Number.isFinite(item.hp)) this.shownHp = item.hp
       this.number(this.L('+potion', '+pocion'), '#7fe08a', hero.x, 2.6, hero.z, time)
+    } else if (item.kind === 'guard') {
+      // Se cubre (L4): se planta y su aro se pone celeste hasta el golpe.
+      this.heroBrace = time
+      this.guarding = true
+    } else if (item.kind === 'retreat') {
+      // Se retira (L5): un respingo hacia atras; el registro dice como salio.
+      this.heroRecoil = time
     }
   }
 
@@ -3166,6 +3251,8 @@ class Effects {
     }
     this.heroPie.material.dispose()
     this.foePie.material.dispose()
+    this.heroBar.dispose()
+    this.foeBar.dispose()
     for (const geometry of this.pies.values()) geometry.dispose()
     this.pies.clear()
     this.spark.material.map.dispose()
@@ -3177,6 +3264,72 @@ class Effects {
     this.bits.foebar.hidden = true
     this.bits.hint.hidden = true
     this.bits.hint.textContent = ''
+  }
+}
+
+// ---------------------------------------------------------------------------
+// La barra de carga (docs/combate.md): un marco oscuro y un relleno que crece de
+// izquierda a derecha, siempre de frente a la camara y encima de todo, debajo de
+// los pies de un luchador. Llena, brilla: el proximo golpe sale. La usan la
+// pelea del campo (Effects), el duelo y el Coloso (la pagina). Las medidas y el
+// punto de apoyo salen de tripo-combate.mjs barLayout.
+
+// Las medidas van en pantalla, no en metros (sizeAttenuation apagado): la barra
+// se lee igual cerca o lejos de la camara. Con la camara de la pagina (38
+// grados), 0,09 es un octavo del alto de la pantalla.
+export class ChargeBar {
+  constructor(parent, { color = 0xf0c860, ready = 0xfff4c0, width = 0.09, height = 0.011 } = {}) {
+    this.parent = parent
+    this.size = { width, height, pad: height * 0.34, drop: 1.6 }
+    this.color = new THREE.Color(color)
+    this.ready = new THREE.Color(ready)
+    const material = (hex, opacity) =>
+      new THREE.SpriteMaterial({
+        color: hex,
+        transparent: true,
+        opacity,
+        depthTest: false,
+        depthWrite: false,
+        sizeAttenuation: false
+      })
+    this.frame = new THREE.Sprite(material(0x120c04, 0.8))
+    this.fill = new THREE.Sprite(material(color, 1))
+    this.frame.renderOrder = 14
+    this.fill.renderOrder = 15
+    for (const sprite of [this.frame, this.fill]) {
+      sprite.visible = false
+      parent.add(sprite)
+    }
+  }
+
+  // La barra en (x, y, z), cargada k (0 a 1). time hace latir la llena; tint,
+  // si viene, es el color del relleno (el blanco de la carga de un golpe, L7).
+  show(x, y, z, k, time = 0, tint = null) {
+    const layout = barLayout(k, this.size)
+    for (const [sprite, part] of [
+      [this.frame, layout.frame],
+      [this.fill, layout.fill]
+    ]) {
+      sprite.position.set(x, y, z)
+      sprite.scale.set(part.w, part.h, 1)
+      sprite.center.set(part.cx, part.cy)
+      sprite.visible = true
+    }
+    const full = k >= 0.999
+    if (tint !== null) this.fill.material.color.setHex(tint)
+    else this.fill.material.color.copy(full ? this.ready : this.color)
+    this.fill.material.opacity = full ? 0.8 + Math.sin(time * 9) * 0.2 : 1
+  }
+
+  hide() {
+    this.frame.visible = false
+    this.fill.visible = false
+  }
+
+  dispose() {
+    this.parent.remove(this.frame, this.fill)
+    this.frame.material.dispose()
+    this.fill.material.dispose()
   }
 }
 
@@ -3543,6 +3696,21 @@ export function createMeadow(ctx) {
     else pace.hold(!!mode, from)
   }
 
+  // La pocion, la guardia o la retirada (L2, L4, L5): en el proximo turno.
+  function order(kind) {
+    pace.order(kind)
+  }
+
+  // Lo cargado de las dos barras de la pelea en 3D, o null.
+  function chargeNow() {
+    return fx ? fx.charge(fightTime) : null
+  }
+
+  // La vida del heroe que muestra la pelea en 3D, o null.
+  function heroHp() {
+    return fx ? fx.heroHp() : null
+  }
+
   function timeScale() {
     return stop.scale(realTime)
   }
@@ -3610,10 +3778,12 @@ export function createMeadow(ctx) {
       crowd.sync(st.foes || [], fightTime)
       fx.settle()
       if (!st.fight) pace.clear()
-      // Un turno por vez: la tecla sale cuando termino la animacion del anterior.
-      // Con una pantalla encima (menu, mochila) no sale ninguno.
-      else if (handlesCombat(st) && !st.overlay && game && pace.ready(fightTime, fx.busyUntil)) {
-        game.press('f')
+      // Un turno por vez: la tecla sale cuando cayo el golpe del anterior (la
+      // de la accion pedida, o F). Con una pantalla encima (menu, mochila) no
+      // sale ninguno.
+      else if (handlesCombat(st) && !st.overlay && game) {
+        const kind = pace.ready(fightTime, fx.busyUntil)
+        if (kind) game.press(ACTION_KEYS[kind] || 'f')
       }
     } else if (!shownPlace) {
       const meadow = kit()
@@ -3659,5 +3829,16 @@ export function createMeadow(ctx) {
     return true
   }
 
-  return { provide, worldAt, handlesCombat, attack, timeScale, update, leave }
+  return {
+    provide,
+    worldAt,
+    handlesCombat,
+    attack,
+    order,
+    charge: chargeNow,
+    heroHp,
+    timeScale,
+    update,
+    leave
+  }
 }

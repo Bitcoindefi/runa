@@ -92,6 +92,12 @@ function slayRaider(game) {
   return raider.dead
 }
 
+// L6: el arma se recarga antes del proximo golpe al Coloso. El tiempo pasa en
+// el reloj del campo sin que el Coloso actue, asi no cambia nada mas.
+function reload(game) {
+  game.field.time += game.field.strikeCharge().left
+}
+
 // Out through the U gate, which writes the camp back into the frontier.
 function leaveCamp(game) {
   const exit = game.field.layout.exit
@@ -312,9 +318,14 @@ test('the Colossus chapter counts real hits in the volcanic ruins', (t) => {
   t.is(game.quests.colossus_awakening.progress, 1, 'f lands a hit and the king counts it')
   t.ok(game.log.includes('mision el despertar del Coloso: 1/3'))
   press(game, 'f')
+  t.is(game.quests.colossus_awakening.progress, 1, 'a press while reloading does not strike')
+  reload(game)
+  press(game, 'f')
+  reload(game)
   press(game, 'f')
   t.is(game.quests.colossus_awakening.progress, 3)
   t.ok(game.log.includes('mision lista: vuelve con el rey Aldren (3/3)'))
+  reload(game)
   press(game, 'f')
   t.is(game.quests.colossus_awakening.progress, 3, 'progress stops at the goal')
 
@@ -344,6 +355,7 @@ test('a fallen Colossus completes its chapter instead of blocking it', (t) => {
   short.field.player.y = short.field.boss.y
   press(short, 'f')
   short.field.boss.hp = 1
+  reload(short)
   press(short, 'f')
   t.ok(short.field.boss.defeated, 'the second hit fells it')
   t.is(short.quests.colossus_awakening.progress, 3, 'no hits are left, so the goal is met')

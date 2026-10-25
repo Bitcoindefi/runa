@@ -34,7 +34,7 @@ El sprite tiene seis cuadros sobre el mismo lienzo de 43 × 13: reposo, puño iz
 
 ## Poderes sobre el campo
 
-La pelea no bloquea el desplazamiento del jugador. Mientras el Coloso prepara un ataque, se puede seguir usando WASD para salir de su trayectoria y `F` para golpear cuando el arma tenga alcance.
+La pelea no bloquea el desplazamiento del jugador. Mientras el Coloso prepara un ataque, se puede seguir usando WASD para salir de su trayectoria y `F` para golpear cuando el arma tenga alcance y este cargada.
 
 - La cara, los ojos y la runa del pecho laten entre dos cuadros de reposo.
 - `Onda rúnica` crea ocho ondas `~` que viajan en todas las direcciones y quitan 6 de vida al tocar al héroe.
@@ -53,6 +53,8 @@ Si el jugador se aleja del altar, el Coloso deja de lanzar ataques y limpia los 
 - `Piedra dormida` enseña tres ataques: ambos puños cercanos y una onda lenta de largo alcance.
 - `Runa fracturada`, desde 66 % de vida, abre grietas visibles en cara, coraza, cintura y piernas; conserva los ataques aprendidos y agrega un barrido de alcance medio.
 - `Núcleo expuesto`, desde 30 %, sustituye la runa del pecho por un núcleo `***`, pega más fuerte y agrega un colapso muy visible de tres turnos.
+- Cada ataque se carga según su `telegraph`: 10 ticks del juego por punto (`COMBAT_RULES.bossTelegraphTicks`, regla L6 de `docs/combate.md`), nunca menos que sus cuadros. Los puños se cargan 10 ticks, la onda y el barrido 20 y el colapso 30 (2 s). Los cuadros de la pose se estiran a esa carga y la pausa hasta el próximo ataque se acorta lo mismo que creció la carga (nunca menos de `bossMinGap`, 12), así el ritmo del jefe no cambia. La ayuda para esquivar de la página lee esta misma carga.
+- El golpe del héroe respeta la recarga de su arma, pasada al reloj del juego (la daga, 12 ticks: 0,8 s) y pega `(1 + atk del arma) × 2` menos la defensa del Coloso. Apretar `F` mientras recarga no hace nada ni deja línea en el registro. La recarga es de cada jugador (`Field.strikeReadyAt`), no del evento: no viaja en el estado compartido.
 - Cada ataque fija la posición objetivo cuando empieza su animación. Los signos `!` y líneas `=` del suelo son advertencias sin daño: si el héroe sale de ahí antes del lanzamiento, el poder no vuelve a apuntarle mágicamente.
 - Al cruzar un umbral se anuncia la nueva fase y el cuerpo cambia inmediatamente, sin alterar el lienzo estable de 43 × 13.
 - Los ataques avanzan con turnos de entrada, no con redibujados temporizados. Esto conserva la solución usada para evitar que el movimiento rompa las líneas de la consola.
@@ -60,7 +62,7 @@ Si el jugador se aleja del altar, el Coloso deja de lanzar ataques y limpia los 
 
 ## Contrato multijugador
 
-La vida del jefe debe tener una sola autoridad por evento y replicarse como `{spawnId, hp, phase, revision}`. Cada daño aceptado incrementa `revision`; los pares descartan estados anteriores para no curar accidentalmente al jefe por mensajes fuera de orden.
+La vida del jefe debe tener una sola autoridad por evento y replicarse como `{spawnId, hp, phase, revision}`. La regla L6 no cambia este contrato: la carga de cada ataque sale de su `telegraph`, que todos los pares conocen, y la recarga del golpe es de cada jugador. Cada daño aceptado incrementa `revision`; los pares descartan estados anteriores para no curar accidentalmente al jefe por mensajes fuera de orden.
 
 La contribución se registra por jugador, pero el oro y la experiencia se entregan una sola vez por `spawnId`. En el guardado personal sólo queda el identificador de la recompensa reclamada. La vida global del jefe no pertenece a una ranura de partida.
 

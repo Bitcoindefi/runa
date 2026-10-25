@@ -83,12 +83,21 @@ const KIND_ICONS = {
 }
 
 // Los numeros de un objeto (lib/content.js) y hacia donde es mejor cada uno:
-// menos recarga es mejor, el resto suma.
+// menos recarga es mejor, el resto suma. La recarga se muestra en segundos: esta
+// en ticks de la pelea, 30 por segundo (lib/world.js TPS).
 const STATS = [
   { id: 'atk', name: ['Attack', 'Ataque'], icon: 'sword', sign: true, better: 1 },
   { id: 'defense', name: ['Defense', 'Defensa'], icon: 'shield', sign: true, better: 1 },
   { id: 'reach', name: ['Reach', 'Alcance'], icon: 'target', better: 1 },
-  { id: 'cooldown', name: ['Cooldown', 'Recarga'], icon: 'hourglass', better: -1 },
+  {
+    id: 'cooldown',
+    name: ['Cooldown', 'Recarga'],
+    icon: 'hourglass',
+    better: -1,
+    scale: 1 / 30,
+    decimals: 1,
+    unit: ' s'
+  },
   { id: 'speed', name: ['Speed', 'Velocidad'], icon: 'wind', sign: true, better: 1, decimals: 2 }
 ]
 
@@ -1139,8 +1148,8 @@ const esc = (text) =>
 const title = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : '')
 
 function number(value, stat) {
-  const n = Number(value) || 0
-  const text = stat.decimals ? n.toFixed(stat.decimals) : String(n)
+  const n = (Number(value) || 0) * (stat.scale || 1)
+  const text = (stat.decimals ? n.toFixed(stat.decimals) : String(n)) + (stat.unit || '')
   return stat.sign && n > 0 ? '+' + text : text
 }
 
@@ -1246,7 +1255,7 @@ function choiceNow(runa) {
 
 // La diferencia con lo que ya tiene puesto en esa ranura: verde si mejora.
 function change(stat, mine, theirs) {
-  const diff = mine - theirs
+  const diff = (mine - theirs) * (stat.scale || 1)
   if (Math.abs(diff) < 1e-9) return ''
   const good = diff * stat.better > 0
   const size = stat.decimals ? Math.abs(diff).toFixed(stat.decimals) : String(Math.abs(diff))

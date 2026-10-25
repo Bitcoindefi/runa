@@ -305,7 +305,7 @@ El combate empieza cuando la hitbox del jugador toca la de un monstruo. Los dos 
 
 ![Combate dentro de la pradera](docs/screens/combate.png)
 
-Cada pulsación de `F`, `Espacio` o una dirección contra el enemigo resuelve un intercambio. El arma elegida en `I INVENTARIO` permanece en la mano durante el combate: lanza, arco, ballesta, daga y martillo conservan su daño, alcance, velocidad y dibujo propios al golpear. La tecla solamente hace avanzar el turno visible.
+Cada pulsación de `F`, `Espacio` o una dirección contra el enemigo resuelve el turno hasta el próximo golpe de cualquiera de los dos. `P` toma una poción (usa el turno), `G` se cubre (el próximo golpe entra a la mitad, ese turno no ataca) y `B` se retira. El arma elegida en `I INVENTARIO` permanece en la mano durante el combate: cada arma pega según su tamaño, la daga poco y seguido, el martillo mucho y lento. Una barra de carga muestra cuándo sale el próximo golpe. Las reglas y sus números están en [docs/combate.md](docs/combate.md).
 
 El archivo `script.txt` se vuelve a leer durante el combate:
 
@@ -369,7 +369,8 @@ o `Enter` la cierran y devuelven a la pantalla anterior.
 | Pradera          | `T`                           | Volver a la ciudad fuera de combate  |
 | Bordes pradera   | caminar sobre `<` / `N`       | Entrar a RUNA o al reino de NOX      |
 | Asentamientos    | caminar sobre `J` / `U`       | Entrar o salir del campamento        |
-| Combate          | `F` / `Espacio` / `Enter`     | Resolver un intercambio              |
+| Combate          | `F` / `Espacio` / `Enter`     | Atacar: el turno hasta el golpe      |
+| Combate          | `P` / `G` / `B`               | Poción, guardia o retirada           |
 | Tienda           | flechas, `Enter`, `X`, `Esc`  | Elegir, equipar, quitar o salir      |
 | Inventario       | `I`, flechas, `Enter`, `X`    | Abrir, elegir, equipar o quitar      |
 | Hogar `C`        | `E`, ←/→, `Enter`, `X`, `Esc` | Depositar, retirar o equipar         |

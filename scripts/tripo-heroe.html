@@ -853,6 +853,42 @@
         opacity: 0.45;
         filter: saturate(0.3);
       }
+      /* La barra de carga en el boton Atacar (docs/combate.md): el oro sube desde
+         abajo mientras el arma se recarga y un aro se cierra alrededor; lleno, el
+         golpe sale. --charge va de 0 a 1 y lo pone la pagina en cada cuadro. */
+      #actions button[data-act='f'] {
+        position: relative;
+      }
+      #actions button.primary.charging {
+        background:
+          linear-gradient(
+            to top,
+            transparent calc(var(--charge, 1) * 100%),
+            rgba(16, 11, 3, 0.4) calc(var(--charge, 1) * 100%)
+          ),
+          radial-gradient(circle at 35% 28%, var(--ui-gold-hi), var(--ui-gold-lo) 75%);
+      }
+      #actions button[data-act='f']::after {
+        content: '';
+        position: absolute;
+        inset: -6px;
+        border-radius: 50%;
+        pointer-events: none;
+        background: conic-gradient(
+          #fff0bf calc(var(--charge, 1) * 1turn),
+          rgba(16, 11, 3, 0.6) calc(var(--charge, 1) * 1turn)
+        );
+        -webkit-mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 4px),
+          #000 calc(100% - 3px)
+        );
+        mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+        opacity: 0;
+      }
+      #actions button[data-act='f'].charging::after {
+        opacity: 1;
+      }
       #actions button[data-tone='go'] {
         border-color: #7fd08a;
         color: #c8f2cc;
@@ -1395,7 +1431,7 @@
       import { hangHands } from './gente.js'
       import { buildTitle } from './titulo.js'
       import { createEffects } from './efectos.js'
-      import { createMeadow } from './pradera.js'
+      import { createMeadow, ChargeBar } from './pradera.js'
       import { createInventory } from './inventario.js'
       import { createShowcase } from './vitrina.js'
       import {
@@ -1410,7 +1446,15 @@
         leaveFullscreen,
         createInstall
       } from './movil.js'
-      import { readout, towardFoe, hitStopMs, HitStop, reachBox } from './combate.js'
+      import {
+        readout,
+        towardFoe,
+        hitStopMs,
+        HitStop,
+        reachBox,
+        charge,
+        ACTION_KEYS
+      } from './combate.js'
       import { createSound } from './sonido.js'
       import { createAtlas } from './atlas.js'
       import { createTrack, placeOf as peerPlace, nearest, RIGS, CLIPS } from './jugadores.js'
@@ -3664,9 +3708,16 @@
           if (fight.built) {
             fightReset()
             fight.built = null
+            hideFightBars('self')
           }
           return
         }
+        // La recarga del golpe contra el Coloso (L6), debajo del heroe.
+        if (boss.strike && !boss.defeated) {
+          const at = hero.root.position
+          const k = charge(boss.strike.left, boss.strike.max)
+          fightBar('self').show(at.x, 0.02, at.z, k, time)
+        } else hideFightBars('self')
         const rig = fightRig()
         const chest = rig
           ? new THREE.Vector3().setFromMatrixPosition(rig.turn.matrixWorld).setY(rig.height * 0.62)
@@ -3825,6 +3876,29 @@
       const duelView = new THREE.Vector3()
       const duelWant = new THREE.Vector3()
       const duelToward = new THREE.Vector3()
+      // Las barras de carga del duelo y del Coloso (pradera.js ChargeBar): debajo
+      // del heroe y del rival. En el duelo, mientras un golpe se prepara (L7) la
+      // barra se llena en blanco con la carga del golpe; despues, la recarga.
+      const fightBars = { self: null, rival: null }
+      function fightBar(which) {
+        if (!fightBars[which]) {
+          fightBars[which] =
+            which === 'self'
+              ? new ChargeBar(scene, { color: 0xe8b84a, ready: 0xfff2b0 })
+              : new ChargeBar(scene, { color: 0xe0503c, ready: 0xff9a80, width: 0.075 })
+        }
+        return fightBars[which]
+      }
+      function hideFightBars(which = null) {
+        for (const name of which ? [which] : ['self', 'rival']) {
+          if (fightBars[name]) fightBars[name].hide()
+        }
+      }
+      // La carga de un luchador del duelo: la del golpe que prepara o la recarga.
+      function duelCharge(f, windup) {
+        if (f.winding > 0 && windup > 0) return { k: 1 - f.winding / windup, winding: true }
+        return { k: charge(f.cooldownLeft, f.cooldown), winding: false }
+      }
       // Lo ultimo que se vio del heroe en el duelo, para notar golpes y tajos.
       // predicted: cuando el invitado mostro su tajo al apretar, antes de que el
       // host lo ordene (solo se ve; el dano lo decide el host).
@@ -4292,9 +4366,27 @@
           duelSelf.hp = null
           duelSelf.swinging = 0
           duelSelf.predicted = -Infinity
+          duelSelf.rivalWinding = 0
           reachFrame(null)
+          if (!(world && world.map === 'boss')) hideFightBars()
           return
         }
+        // Las barras de carga de los dos, y el aviso del golpe que prepara el
+        // rival (L7): un "!" arriba, para salirse de su alcance a tiempo.
+        const time = performance.now() / 1000
+        const mine = duelCharge(arena.self, arena.windup)
+        const theirs = duelCharge(arena.rival, arena.windup)
+        // La del heroe a sus pies; la del rival, debajo de su vida (arriba de su
+        // cabeza: a sus pies lo tapa el heroe, que lo mira de frente).
+        const me = hero.root.position
+        const white = (charging) => (charging.winding ? 0xffffff : null)
+        fightBar('self').show(me.x, 0.02, me.z, mine.k, time, white(mine))
+        const there = rival.root.position
+        fightBar('rival').show(there.x, there.y + 2.5, there.z, theirs.k, time, white(theirs))
+        if (arena.rival.winding > 0 && !duelSelf.rivalWinding) {
+          floater('!', '#ffd040', there.clone().setY(3.2))
+        }
+        duelSelf.rivalWinding = arena.rival.winding
         reachFrame(reachBox(arena, CX, CZ), world.built.toWorld(arena.self.x, arena.self.y))
         // En 2.5D la camara mira entre los dos; en tercera persona va detras del
         // heroe, sobre la linea hacia el rival, asi el rival queda adelante.
@@ -5363,7 +5455,28 @@
               'en linea: sala, jugadores, invitar a un amigo'
             )
           ],
-          ['F', L('attack the Colossus or your rival', 'atacar al Coloso o a tu rival')],
+          [
+            'F',
+            L(
+              'attack: a monster, the Colossus or your rival',
+              'atacar: a un monstruo, al Coloso o a tu rival'
+            )
+          ],
+          [
+            'P',
+            L(
+              'drink a potion in a fight (uses your turn)',
+              'tomar una pocion en una pelea (usa tu turno)'
+            )
+          ],
+          [
+            'G',
+            L(
+              'guard: the next blow lands at half, no attack that turn',
+              'guardia: el proximo golpe entra a la mitad, ese turno no atacas'
+            )
+          ],
+          ['B', L('back off from a fight', 'retirarse de una pelea')],
           ['T', L('back to town', 'volver a la ciudad')],
           ['V', juego && juego.wallet === false ? 'PvP' : L('wallet and PvP', 'wallet y PvP')],
           [
@@ -5602,6 +5715,7 @@
         }
         refreshPlayHud()
         syncActions(st)
+        chargeButton(st)
         // Un menu que se abre o se cierra bajo el pulgar cambia el modo del stick ya.
         if (stickId !== null) stickSet(stickDir)
         showCell(st)
@@ -5674,7 +5788,10 @@
       // La ficha se rearma solo si cambio algo de lo que muestra.
       function refreshPlayHud(force = false) {
         if (screen !== 'play' || !live) return
-        const st = live
+        // En una pelea en 3D la vida baja cuando se ve el golpe (pradera.js
+        // heroHp), no cuando el juego resolvio el turno.
+        const shown = meadow ? meadow.heroHp() : null
+        const st = shown === null ? live : { ...live, hp: shown }
         const room = roomOf()
         // Una sala llena no queda en la direccion: al recargar se volveria a ella.
         if (room && room.full && new URL(location.href).searchParams.get('room') === room.code)
@@ -6142,8 +6259,10 @@
 
       // El tajo del heroe contra el Coloso: el mismo con F, espacio o el boton.
       function strikeFx(st) {
-        if (world && world.map === 'boss' && st && st.boss) swingSword()
-        else predictSwing(st)
+        if (world && world.map === 'boss' && st && st.boss) {
+          // L6: con el arma recargando el golpe no sale, y el tajo tampoco.
+          if (!st.boss.strike || st.boss.strike.left <= 0) swingSword()
+        } else predictSwing(st)
       }
 
       // El invitado de un duelo en linea ve su tajo al apretar, sin esperar al
@@ -6161,6 +6280,12 @@
       }
 
       const STRIKE_KEYS = new Set(['f', ' ', 'Enter'])
+      // Las teclas de la pocion, la guardia y la retirada (combate.js ACTION_KEYS).
+      const FIGHT_ORDERS = Object.fromEntries(
+        Object.entries(ACTION_KEYS)
+          .filter(([kind]) => kind !== 'attack')
+          .map(([kind, key]) => [key, kind])
+      )
       function playKey(event, down) {
         if (!session) return
         if (event.key === 'Shift') {
@@ -6177,6 +6302,14 @@
         const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
         const dir = MOVES[key]
         const roaming = exploring(st)
+        // P, G o B en una pelea en 3D: la pocion, la guardia o la retirada salen
+        // en el proximo turno (L2, L4, L5). En la pantalla de texto van al juego.
+        const order = FIGHT_ORDERS[key]
+        if (order && down && roaming && fightIn3d(st)) {
+          event.preventDefault()
+          if (!event.repeat) meadow.order(order)
+          return
+        }
         // F, Espacio o Enter en una pelea en 3D: apretar pide turnos, soltar
         // los corta. La repeticion del teclado no cuenta: el ritmo es del juego.
         if (STRIKE_KEYS.has(key)) {
@@ -6234,7 +6367,9 @@
           return
         }
         if (event.key.length === 1) {
-          if (event.repeat && !st.naming && !st.overlay) return
+          // Contra el Coloso, mantener F repite: la recarga del arma pone el ritmo.
+          const holdF = key === 'f' && st.field === 'boss'
+          if (event.repeat && !st.naming && !st.overlay && !holdF) return
           event.preventDefault()
           session.press(event.key)
         }
@@ -6834,8 +6969,14 @@
         text: 'M4 17l6-6-6-6M12 19h8',
         menu: 'M4 6h16M4 12h16M4 18h16',
         walk: 'm9 18 6-6-6-6',
-        run: 'm5 18 6-6-6-6M13 18l6-6-6-6'
+        run: 'm5 18 6-6-6-6M13 18l6-6-6-6',
+        flask: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M7.5 15h9',
+        shield: 'M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z',
+        retreat: 'M10 6 4 12l6 6M4 12h11a5 5 0 0 1 5 5v1'
       }
+      // La pocion, la guardia y la retirada en una pelea (L2, L4, L5): ocupan los
+      // lugares de Usar, Mochila y Esc, que en la pelea no estan.
+      const FIGHT_ACTS = { guard: 'e', potion: 'i', retreat: 'escape' }
       function iconNode(name) {
         const svg = document.createElementNS(SVG_NS, 'svg')
         svg.setAttribute('viewBox', '0 0 24 24')
@@ -6861,8 +7002,9 @@
       let actionsReady = false
       let actionsKey = ''
       const ACT = {}
-      // Atacar y usar salen al apoyar el dedo; el resto, con el click.
-      const STRIKE_ACTS = new Set(['f', 'e'])
+      // Atacar, usar y las acciones de la pelea salen al apoyar el dedo; el
+      // resto, con el click.
+      const STRIKE_ACTS = new Set(['f', 'e', 'guard', 'potion', 'retreat'])
       let strikeRepeat = 0
       function stopStrike() {
         clearInterval(strikeRepeat)
@@ -6894,6 +7036,11 @@
           if (exploring(st)) return openPause()
           return session.press('escape')
         }
+        if (FIGHT_ACTS[act]) {
+          // En 3D sale en el proximo turno; en la pantalla de texto, ya.
+          if (fightIn3d(st)) return meadow.order(act)
+          return session.press(ACTION_KEYS[act])
+        }
         if (act === 'f') strikeFx(st)
         // En una pelea en 3D el ataque va por el ritmo de los turnos.
         if (act === 'f' && fightIn3d(st)) return meadow.attack('tap')
@@ -6903,11 +7050,12 @@
       function setupActions() {
         if (actionsReady) return
         actionsReady = true
-        for (const act of ['peek', 't', 'menu', 'escape', 'i', 'e', 'enter', 'gait', 'f']) {
+        const acts = ['peek', 't', 'menu', 'escape', 'i', 'e', 'enter', 'gait', 'f']
+        for (const act of [...acts, ...Object.keys(FIGHT_ACTS)]) {
           const b = document.createElement('button')
           b.type = 'button'
           b.dataset.act = act
-          b.style.gridArea = act
+          b.style.gridArea = FIGHT_ACTS[act] || act
           const icon = document.createElement('span')
           icon.className = 'ico'
           const small = document.createElement('small')
@@ -6970,7 +7118,7 @@
         a.b.classList.toggle('primary', show && !!o.primary)
         a.b.classList.toggle('dim', show && !!o.dim)
         a.b.classList.toggle('hot', show && !!o.hot)
-        a.b.style.gridArea = o.area || act
+        a.b.style.gridArea = o.area || FIGHT_ACTS[act] || act
         a.b.dataset.tone = o.tone || ''
         a.b.tabIndex = show ? 0 : -1
         a.b.setAttribute('aria-hidden', String(!show))
@@ -6986,6 +7134,24 @@
         }
         if (o.pressed === undefined) a.b.removeAttribute('aria-pressed')
         else a.b.setAttribute('aria-pressed', String(o.pressed))
+      }
+
+      // La carga del arma en el boton Atacar (--charge, de 0 a 1): en la pelea
+      // del campo la de las barras de pradera.js, en el duelo la recarga del
+      // duelo y contra el Coloso la del golpe (L6). Fuera de eso, sin carga.
+      function chargeButton(st) {
+        const a = ACT.f
+        if (!a) return
+        let k = null
+        if (st.arena) k = charge(st.arena.self.cooldownLeft, st.arena.self.cooldown)
+        else if (st.combat && meadow && meadow.handlesCombat(st)) {
+          const now = meadow.charge()
+          k = now ? now.hero : null
+        } else if (st.field === 'boss' && st.boss && st.boss.strike && !st.boss.defeated) {
+          k = charge(st.boss.strike.left, st.boss.strike.max)
+        }
+        a.b.classList.toggle('charging', k !== null)
+        if (k !== null) a.b.style.setProperty('--charge', k.toFixed(3))
       }
 
       // Los botones muestran solo lo que el juego acepta ahora. Se ocultan con
@@ -7004,8 +7170,12 @@
         // En la pelea del campo: Atacar, Espera n o Recarga (como en el duelo:
         // entra en el boton redondo del telefono).
         const next = st.combat ? readout(st.fight) : null
+        const fightActs = (st.combat && st.fight && st.fight.actions) || {}
+        const potions = st.combat && st.fight ? st.fight.potions : st.potions
         const key = [
           next ? next.state + next.n : '',
+          Object.keys(fightActs).filter((act) => fightActs[act]),
+          potions,
           paused,
           peek,
           screenUp && (st.overlay || 'title'),
@@ -7025,6 +7195,31 @@
         if (key === actionsKey) return
         actionsKey = key
         const roam = !screenUp && !inviteIn
+        // Las acciones de la pelea solo en una pelea del campo (la cripta y los
+        // campamentos tambien), ni en el duelo ni contra el Coloso.
+        const fighting = roam && !arena && !!st.combat
+        setAct(
+          'guard',
+          fighting && fightActs.guard && { icon: 'shield', label: L('Guard', 'Guardia') }
+        )
+        setAct(
+          'potion',
+          fighting &&
+            fightActs.potion && {
+              icon: 'flask',
+              label: L(`Potion ${potions}`, `Pocion ${potions}`),
+              dim: !potions
+            }
+        )
+        setAct(
+          'retreat',
+          fighting &&
+            fightActs.retreat && {
+              icon: 'retreat',
+              label: L('Back off', 'Retirada'),
+              tone: 'stop'
+            }
+        )
         setAct('menu', { icon: 'menu', label: L('Menu', 'Menu') })
         setAct(
           'gait',

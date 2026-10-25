@@ -4,15 +4,16 @@ const estado = require('../scripts/tripo-estado.js')
 const { World } = require('../lib/world.js')
 const { items } = require('../lib/content.js')
 const { COMBAT_TURN_TICKS } = require('../lib/game.js')
+const { playTurn, turnLimit } = require('../lib/combat-rules.js')
 
 // Una pelea de lib/world.js como la ve la pagina: un campo con su combate.
 function fieldWith(world) {
   return { combat: { foe: { id: 7, kind: world.foeDef.id }, world } }
 }
 
-// Un turno de la pagina (lib/game.js advanceCombat): varios ticks seguidos.
+// Un turno de la pagina (lib/game.js advanceCombat): hasta el proximo golpe (L3).
 function turnOf(world) {
-  for (let i = 0; i < COMBAT_TURN_TICKS && !world.over; i++) world.step()
+  playTurn(world)
 }
 
 // Lo que dicen las lineas nuevas del registro: lo que la pagina leia antes con
@@ -46,8 +47,17 @@ function fight({ foe, weapon }, each) {
   for (let turn = 0; turn < 80 && !world.over; turn++) {
     const before = estado.fightOf(fieldWith(world))
     turnOf(world)
+    // Al terminar la pagina ya no tiene la pelea: arma la ultima lectura con
+    // las vidas y el registro que dejo el campo (field.lastFight).
     const after = world.over
-      ? { ...before, foeHp: Math.max(0, Math.ceil(world.foe.hp)), hp: Math.ceil(world.hero.hp) }
+      ? {
+          ...before,
+          tick: world.tick,
+          foeHp: Math.max(0, Math.ceil(world.foe.hp)),
+          hp: Math.ceil(world.hero.hp),
+          log: world.log.slice(-8),
+          logged: world.logged
+        }
       : estado.fightOf(fieldWith(world))
     each(before, after, world)
   }
@@ -266,7 +276,10 @@ test('fightOf manda el turno del juego y la recarga de los dos', (t) => {
   const world = new World('golem')
   world.held.left = items.sword
   const fight = estado.fightOf(fieldWith(world))
-  t.is(fight.turn, COMBAT_TURN_TICKS)
+  t.is(fight.turn, turnLimit(), 'L3: el tope del turno hasta el golpe')
+  t.ok(fight.untilBlow)
+  t.is(fight.tps, 30, 'los ticks por segundo de lib/world.js')
+  t.alike(fight.actions, { potion: true, guard: true, retreat: true })
   t.is(fight.heroCdMax, items.sword.cooldown)
   t.is(fight.reach, items.sword.reach)
   t.is(fight.heroCd, 0)
@@ -286,4 +299,69 @@ test('combate: the duel reach box covers reach plus the bodies', (t) => {
   t.absent(box.inside, 'two cells away with reach 1: out')
   t.ok(combate.reachBox({ ...arena, distance: 1 }, 0.5, 1).inside, 'at reach: in')
   t.is(combate.reachBox(null, 0.5, 1), null, 'no duel, no box')
+})
+
+test('combate: las acciones van en el proximo turno, antes que el ataque', (t) => {
+  const pace = new combate.CombatPace()
+  pace.hold(true, 'key')
+  pace.order('guard')
+  t.is(pace.ready(1), 'guard', 'la guardia pedida sale primero')
+  t.is(pace.ready(2), 'attack', 'y despues sigue el ataque apretado')
+  pace.order('potion')
+  pace.order('retreat')
+  t.is(pace.ready(3), 'retreat', 'la ultima pedida gana')
+  pace.order('volar')
+  pace.hold(false, 'key')
+  t.absent(pace.ready(4), 'una accion que no existe no se guarda')
+  pace.order('potion')
+  pace.release()
+  t.absent(pace.ready(5), 'la pausa la olvida')
+  t.alike(combate.ACTION_KEYS, { attack: 'f', potion: 'p', guard: 'g', retreat: 'b' })
+})
+
+test('combate: el turno dura en la pagina lo que duro en el juego', (t) => {
+  const before = { tick: 10, untilBlow: true, tps: 30 }
+  t.is(combate.turnLead(before, { tick: 34 }), 0.8, '24 ticks a 30 por segundo')
+  t.is(combate.turnLead(before, { tick: 400 }), 3, 'con tope')
+  t.is(combate.turnLead({ ...before, untilBlow: false }, { tick: 34 }), 0, 'turno fijo: sin espera')
+  t.is(combate.turnLead(before, { tick: 10 }), 0)
+})
+
+test('combate: las barras se llenan durante el turno y caen con el golpe', (t) => {
+  const before = { heroCd: 24, heroCdMax: 24, foeCd: 20, foeCdMax: 39 }
+  const after = { heroCd: 24, heroCdMax: 24, foeCd: 0, foeCdMax: 39 }
+  const lines = combate.turnCharges(before, after, [{ who: 'hero' }], 5, 5.8)
+  t.is(combate.chargeAt(lines.hero, 5), 0, 'al empezar, vacia')
+  t.ok(Math.abs(combate.chargeAt(lines.hero, 5.4) - 0.5) < 1e-9, 'a la mitad del turno, a la mitad')
+  t.is(combate.chargeAt(lines.hero, 5.8), 0, 'pego: llega llena y cae a lo que quedo')
+  t.ok(combate.chargeAt(lines.hero, 5.79) > 0.95)
+  const foe = combate.chargeAt(lines.foe, 5.8)
+  t.is(foe, 1, 'el monstruo no pego: queda donde termino')
+  t.is(combate.chargeAt(null, 1), 1)
+
+  const bar = combate.barLayout(0.25, { width: 1, height: 0.1, pad: 0.02, drop: 1.5 })
+  t.is(bar.frame.w, 1.04)
+  t.is(bar.fill.w, 0.25)
+  t.is(bar.fill.cx * bar.fill.w, 0.5, 'el relleno arranca en el borde izquierdo del marco')
+  const middle = (0.5 - bar.frame.cy) * bar.frame.h
+  t.ok(Math.abs((0.5 - bar.fill.cy) * bar.fill.h - middle) < 1e-9, 'y a la misma altura')
+})
+
+test('combate: la guardia, la pocion y la retirada se leen del registro', (t) => {
+  const before = { logged: 4, hp: 20, maxhp: 20, foeHp: 9, foeMaxhp: 9, dist: 1, reach: 1 }
+  const after = {
+    logged: 7,
+    log: [
+      { n: 5, type: 'guard', by: 'hero', text: 'te cubris' },
+      { n: 6, type: 'hit', by: 'foe', amount: 2, blocked: 2, text: 'x' },
+      { n: 7, type: 'retreat', by: 'hero', clean: false, text: 'y' }
+    ]
+  }
+  t.alike(combate.loggedEvents(before, after), [
+    { who: 'guard' },
+    { who: 'foe', amount: 2, share: 0.1, blocked: 2 },
+    { who: 'retreat', clean: false }
+  ])
+  const cut = { ...after, logged: 20 }
+  t.is(combate.loggedEvents(before, cut), null, 'si faltan lineas no adivina')
 })

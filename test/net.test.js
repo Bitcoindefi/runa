@@ -135,6 +135,67 @@ test('dos partidas negocian, sincronizan y cierran el mismo duelo', (t) => {
   t.alike(beto.player.snapshot().pvp, anaWon ? { wins: 0, losses: 1 } : { wins: 1, losses: 0 })
 })
 
+test('L7: el host y el invitado resuelven el mismo golpe preparado en el mismo tick', (t) => {
+  const { COMBAT_RULES } = require('../lib/combat-rules.js')
+  const ana = new Runa({ presence: false, name: 'Ana' })
+  const beto = new Runa({ presence: false, name: 'Beto' })
+  ana.title = false
+  beto.title = false
+  const pa = new Presence({ name: 'Ana', offline: true })
+  const pb = new Presence({ name: 'Beto', offline: true })
+  ana.attachPresence(pa)
+  beto.attachPresence(pb)
+  ana.presenceStarted = true
+  beto.presenceStarted = true
+  pa.update('city', ana.walker.x, ana.walker.y)
+  pb.update('city', beto.walker.x + 1, beto.walker.y)
+  connect(pa, pb)
+  ana.challengePlayer(ana.others('city').find((candidate) => candidate.id === pb.id))
+  beto.onTick()
+  beto.answerDuel(true)
+  ana.onTick()
+  const host = pa.id < pb.id ? ana : beto
+  const guest = host === ana ? beto : ana
+  const windup = COMBAT_RULES.duelWindup
+  t.is(host.duelCombat.windup, windup, 'el host acordo la carga')
+  t.is(guest.duelCombat.windup, windup, 'y el invitado la misma')
+
+  const both = () => {
+    host.onTick()
+    guest.onTick()
+  }
+  for (let i = 0; i < 200 && host.duelCombat.distance(host.duel.self) > 1; i++) {
+    const self = host.duelCombat.fighter(host.duel.self)
+    const rival = host.duelCombat.opponent(host.duel.self)
+    host.sendDuelInput({ dx: Math.sign(rival.x - self.x), dy: Math.sign(rival.y - self.y) })
+    both()
+  }
+  t.ok(host.duelCombat.distance(host.duel.self) <= 1, 'el host llega al alcance')
+  for (let i = 0; i < 40; i++) both()
+
+  const target = guest.duel.self
+  const hp = host.duelCombat.fighter(target).hp
+  host.sendDuelInput({ attack: true })
+  guest.onTick()
+  t.is(host.duelCombat.fighter(target).hp, hp, 'apretar solo empieza la carga')
+  t.ok(host.duelCombat.fighter(host.duel.self).winding > 0)
+  const seen = []
+  for (let i = 0; i < windup + 1; i++) {
+    both()
+    seen.push([host.duelCombat.fighter(target).hp, guest.duelCombat.fighter(target).hp])
+  }
+  t.ok(
+    seen.some(([a]) => a < hp),
+    'el golpe cae despues de la carga'
+  )
+  t.alike(
+    seen.map(([a]) => a),
+    seen.map(([, b]) => b),
+    'tick por tick, los dos ven la misma vida'
+  )
+  t.is(host.duelCombat.tickCount, guest.duelCombat.tickCount, 'en el mismo tick del duelo')
+})
+
 /** Two linked games and a pending challenge; the challenger hosts unless asked otherwise. */
 function pair({ challengerHosts = true } = {}) {
   const ana = new Runa({ presence: false, name: 'Ana' })
