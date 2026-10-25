@@ -59,14 +59,28 @@ const COLORS = {
   'stairs.down': '#e8d080'
 }
 
+// El suelo de NOX en los tonos nocturnos de tripo-terreno.js; caminos,
+// muros y puertas quedan como en RUNA para que se lean igual.
+const NOX_GROUND = {
+  grass: '#1f2c2a',
+  'tall-grass': '#293838',
+  'quiet-ground': '#2a3a3a',
+  flower: '#33434a'
+}
+
 /**
  * El color de una celda: por el id de su tile, las puertas y portones en oro,
  * y un respaldo para lo que no tiene tile (el espacio es piso).
  * @param {{id?: string, solid?: boolean}|undefined} tile
  * @param {string} ch
  * @param {string} [kind] el tipo del mapa ('boss' pinta la lava)
+ * @param {string} [mapId] el id del mapa ('nox' pinta el suelo de noche)
  */
-export function tileColor(tile, ch, kind) {
+export function tileColor(tile, ch, kind, mapId) {
+  if (mapId === 'nox') {
+    if (tile && Object.hasOwn(NOX_GROUND, tile.id)) return NOX_GROUND[tile.id]
+    if (!tile && (ch === ' ' || ch === undefined) && kind === 'map') return NOX_GROUND.grass
+  }
   if (tile && tile.id) {
     if (kind === 'boss' && tile.id === 'water') return '#c8501e'
     if (Object.hasOwn(COLORS, tile.id)) return COLORS[tile.id]
@@ -418,7 +432,7 @@ export function createAtlas(ctx) {
       const row = d.rows[y] || ''
       for (let x = 0; x < d.width; x++) {
         const ch = row[x]
-        const [r, gg, b] = rgb(tileColor(d.tiles[ch], ch, d.kind))
+        const [r, gg, b] = rgb(tileColor(d.tiles[ch], ch, d.kind, d.id))
         const i = (y * d.width + x) * 4
         img.data[i] = r
         img.data[i + 1] = gg

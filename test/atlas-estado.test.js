@@ -89,6 +89,8 @@ test('atlas: each chapter has a target', (t) => {
   t.alike(raid, { kind: 'camp', region: 'field', id: 'colmillo-rojo', x: 104, y: 18 })
   const east = estado.storyTarget(story('barbarian_raid'), 'field', camps, { x: 210, y: 55 })
   t.is(east.id, 'cuervos-ceniza', 'the nearest camp to the hero in the meadow')
+  const fromNox = estado.storyTarget(story('barbarian_raid'), 'nox', camps)
+  t.is(fromNox.id, 'cuervos-ceniza', 'from NOX the camp is measured from the NOX gate')
   const inside = estado.storyTarget(story('barbarian_raid'), 'camp:hachas-negras', camps)
   t.alike(inside, {
     kind: 'camp',

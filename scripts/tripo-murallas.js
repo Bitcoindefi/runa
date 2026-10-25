@@ -2634,6 +2634,10 @@ function findStalls(world, s) {
     if (cells.length >= 120 || st.roof.length < 2 || st.wares.length < 2 || !st.counter.length) {
       continue
     }
+    // Un puesto lleva el toldo arriba, en una sola fila. Una escultura con
+    // / y \ repartidos en varias filas (el paseo de la luna) no es un puesto.
+    const top = Math.min(...cells.map((i) => Math.floor(i / W)))
+    if (st.roof.some((i) => Math.floor(i / W) !== top)) continue
     for (const i of cells) low[i] = 0
     stalls.push(st)
   }
