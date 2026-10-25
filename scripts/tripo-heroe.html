@@ -1392,6 +1392,7 @@
       import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
       import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
       import { buildWorld, label, labels, seeView, CX, CZ } from './mundo.js'
+      import { hangHands } from './gente.js'
       import { buildTitle } from './titulo.js'
       import { createEffects } from './efectos.js'
       import { createMeadow } from './pradera.js'
@@ -1541,6 +1542,12 @@
         document.documentElement.dataset.demo === '1' ||
         new URLSearchParams(location.search).has('demo')
       const touchPad = matchMedia('(pointer: coarse)').matches
+      // Los NPC en 3D cuestan un esqueleto cada uno: en un equipo con poca
+      // memoria o pocos nucleos (o con ?npc3d=0) quedan los dibujos.
+      const npc3d =
+        new URLSearchParams(location.search).get('npc3d') !== '0' &&
+        !(navigator.deviceMemory && navigator.deviceMemory < 3) &&
+        !(navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4)
 
       // Escena. Sin WebGL no hay nada que dibujar: se avisa en vez de quedar mudo.
       let renderer
@@ -1594,6 +1601,8 @@
       window.runaView = {
         camera,
         controls,
+        // Para las pruebas: los NPC en 3D son scene.getObjectByName('npc:<id>').
+        scene,
         // Ajuste en vivo de la pieza de cabeza del heroe, para calibrar `fits`.
         tune(id, values) {
           AVATAR.fits[id] = { ...HERO_FIT, ...AVATAR.fits[id], ...values }
@@ -2047,33 +2056,7 @@
               // animacion. El arma va en la palma, pasando la muneca hacia los
               // dedos (`reach` del antebrazo desde el codo); el escudo, en el medio
               // del antebrazo.
-              avatar.updateMatrixWorld(true)
-              const spot = (name) => {
-                const bone = object.getObjectByName(name)
-                return bone && avatar.worldToLocal(bone.getWorldPosition(new THREE.Vector3()))
-              }
-              for (const [slot, elbow, wrist, bone, reach] of [
-                ['left_hand', 'LeftForeArm', 'LeftHand', 'LeftHand', 1.3],
-                ['right_hand', 'RightForeArm', 'RightHand', 'RightForeArm', 0.55]
-              ]) {
-                const from = spot(elbow)
-                const to = spot(wrist)
-                const holder = avatarHands[slot]
-                const host = object.getObjectByName(bone)
-                if (!from || !to || !host) continue
-                const up = from.clone().sub(to).normalize()
-                const front = new THREE.Vector3(0, 0, 1)
-                front.addScaledVector(up, -front.dot(up)).normalize()
-                const side = new THREE.Vector3().crossVectors(up, front)
-                holder.position.copy(from).lerp(to, reach)
-                holder.quaternion.setFromRotationMatrix(
-                  new THREE.Matrix4().makeBasis(side, up, front)
-                )
-                holder.updateMatrixWorld(true)
-                host.attach(holder)
-                // El giro de reposo, para sumarle el tajo en la pelea.
-                holder.userData.base = holder.quaternion.clone()
-              }
+              hangHands(object, avatar, avatarHands)
               mixer = new THREE.AnimationMixer(object)
               for (const name of ['Idle', 'Walk', 'Run']) {
                 const clip = THREE.AnimationClip.findByName(clips, name)
@@ -2454,6 +2437,8 @@
         if (!object) object = await piece(id, slot)
         const grip = new THREE.Group()
         grip.add(object)
+        // Los NPC reconocen la pieza ya agarrada (gente.js).
+        grip.userData.grip = true
         const hold = (SKINS[id] && SKINS[id].hold) || ''
         if (slot === 'right_hand') {
           grip.rotation.y = -0.85
@@ -2719,7 +2704,19 @@
           built = buildWorld(shown.data, {
             figure,
             text: shown.text,
-            glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null))
+            glb: (file) => (models.has(file) ? loadGlb(file) : Promise.resolve(null)),
+            // Los NPC en 3D con el heroe de Tripo (gente.js), salvo en un equipo
+            // flojo o con ?npc3d=0: ahi quedan los dibujos.
+            ...(npc3d && models.has('heroe-anim.glb')
+              ? {
+                  rig: loadRig,
+                  prop: (id, slot) =>
+                    models.has((SKINS[id] && SKINS[id].file) || id + '.glb')
+                      ? handPiece(id, slot)
+                      : Promise.resolve(null),
+                  budget: touchPad ? 'phone' : 'desktop'
+                }
+              : {})
           })
         } catch (error) {
           mode.textContent = L('could not build the map ', 'no pude armar el mapa ') + at.map
@@ -4512,7 +4509,7 @@
           mixer.update(dt * slow)
         }
         // El mundo puede tener movimiento propio: viento, agua, NPC.
-        if (world && world.built.update) world.built.update(t)
+        if (world && world.built.update) world.built.update(t, { hero: hero.root.position })
         if (title && screen === 'menu') title.update(t, dt)
         // La inercia del giro no depende de los fps (0,05 a 60 cuadros).
         controls.dampingFactor = 1 - Math.exp(-3.1 * dt)
@@ -5443,6 +5440,14 @@
           }
         })
         window.runaGame = session
+        // Al hablarle a un NPC (E, Enter o espacio a su lado), el NPC en 3D vuelve
+        // a su celda, mira al heroe y asiente. Se mira antes de la tecla, con lo
+        // mismo que decide el juego (Runa.enter y Field.interact).
+        const pressKey = session.press.bind(session)
+        session.press = (name) => {
+          if (['e', 'E', 'enter', 'space'].includes(name)) greetNear()
+          return pressKey(name)
+        }
         if (how.load && !session.load(how.load)) {
           const message = session.runa.menuMessage
           stopPlay()
@@ -7403,6 +7408,25 @@
           (npc ? L(' · E: talk to ', ' · E: hablar con ') + tr(npc.name) : '')
       }
 
+      // El NPC al que le habla la partida, si la tecla va a hablarle.
+      function greetNear() {
+        const runa = session && session.runa
+        if (!runa || !world || !world.built.greet || !exploring(live || session.state())) return
+        let id = null
+        if (runa.field) {
+          const field = runa.field
+          if (field.mode !== 'field' || !field.guideAt) return
+          const guide = field.guideAt(field.player.x, field.player.y, 2)
+          id = guide && guide.id
+        } else if (!runa.title && !(runa.duel && runa.duel.active) && !runa.walker.action()) {
+          const npc = runa.nearbyNpc()
+          id = npc && npc.id
+        }
+        if (id) world.built.greet(id)
+      }
+      // Para las pruebas: los NPC del mapa en pantalla.
+      window.runaNpcs = () => (world && world.built.npcs ? world.built.npcs() : null)
+
       let talkTimer = 0
       function talk() {
         const npc = nearbyNpc()
@@ -7410,6 +7434,7 @@
           say(L('Nobody close enough to talk to.', 'No hay nadie cerca para hablar.'))
           return
         }
+        if (world && world.built.greet) world.built.greet(npc.id)
         const speaker = document.createElement('strong')
         speaker.textContent = tr(npc.name) + (npc.role ? ', ' + tr(npc.role) : '')
         const words = document.createElement('p')

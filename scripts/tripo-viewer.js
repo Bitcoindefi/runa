@@ -60,6 +60,10 @@ const MODULES = {
   // Los sonidos sintetizados y la vibracion: .mjs para que las pruebas lo
   // carguen en Bare.
   'sonido.js': path.join(__dirname, 'tripo-sonido.mjs'),
+  // Los NPC en 3D: como se ve cada uno y por donde pasea (.mjs para que las
+  // pruebas lo carguen en Bare), y los modelos animados en la escena.
+  'vecinos.js': path.join(__dirname, 'tripo-vecinos.mjs'),
+  'gente.js': path.join(__dirname, 'tripo-gente.js'),
   'vitrina.js': path.join(__dirname, 'tripo-vitrina.js')
 }
 // Cada archivo de terceros con su origen y su sha256: si el CDN devuelve otra

@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { buildRamparts, seeThrough } from './murallas.js'
 import { buildTerrain } from './terreno.js'
+import { townsfolk } from './gente.js'
 
 // La pagina mueve la altura del calado (ver seeThrough en murallas.js).
 export { seeView } from './murallas.js'
@@ -3257,16 +3258,19 @@ export function buildWorld(data, extras = {}) {
   }
 
   // NPC: el dibujo de su tipo, parado en su celda y mirando a la camara, con una
-  // sombra al pie y el nombre arriba. Sin dibujo, la figura de la pagina.
+  // sombra al pie y el nombre arriba. Sin dibujo, la figura de la pagina. Con
+  // extras.rig (la pagina presta el heroe de Tripo con esqueleto) gente.js los
+  // cambia por modelos 3D que respiran, pasean y miran al heroe.
   const npcs = data.npcs || []
   const idlers = []
+  let blobs = null
+  const spot = new THREE.Matrix4()
   if (npcs.length) {
-    const blobs = new THREE.InstancedMesh(
+    blobs = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 0.6).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false }),
       npcs.length
     )
-    const spot = new THREE.Matrix4()
     npcs.forEach((npc, i) => {
       const p = toWorld(npc.x, npc.y)
       blobs.setMatrixAt(i, spot.makeTranslation(p.x, 0.02, p.z))
@@ -3278,24 +3282,31 @@ export function buildWorld(data, extras = {}) {
   // 0,6 es lo que se ve de una altura con la camara 2.5D: asi el nombre queda
   // justo sobre la cabeza de un cartel de alto h.
   const over = (h) => (h + 0.4) / 0.6
+  const folks = []
   for (const npc of npcs) {
     const p = toWorld(npc.x, npc.y)
     const tag = label(text(npc.name), '#d8d8d0')
     tag.position.set(p.x, over(NPC_PX * 256), p.z)
     group.add(tag)
+    const entry = { npc, home: p, tag, sprite: null, body: null, rig: null, talk: 0 }
+    folks.push(entry)
     const figure = () => {
+      if (entry.rig) return
       if (!extras.figure) return group.remove(tag)
       tag.position.y = 2.6
       const body = extras.figure(npc.color)
       body.position.copy(p)
       body.rotation.y = hash(npc.x, npc.y) * Math.PI * 2
       group.add(body)
+      entry.body = body
     }
     if (!NPC_ART.has(npc.kind)) {
       figure()
       continue
     }
     npcLook(npc.kind).then((material) => {
+      // El modelo 3D pudo llegar antes que el dibujo.
+      if (entry.rig) return
       if (!material) return figure()
       // Dos NPC del mismo tipo no miden exactamente lo mismo.
       const size = NPC_PX * (0.96 + hash(npc.y, npc.x) * 0.08)
@@ -3306,10 +3317,37 @@ export function buildWorld(data, extras = {}) {
       // Comparte textura y material con los demas NPC de su tipo.
       sprite.userData.shared = true
       group.add(sprite)
+      entry.sprite = sprite
       tag.position.y = over(sprite.scale.y)
-      idlers.push({ sprite, w: sprite.scale.x, h: sprite.scale.y, phase: hash(npc.x, npc.y) * 7 })
+      idlers.push({
+        sprite,
+        entry,
+        w: sprite.scale.x,
+        h: sprite.scale.y,
+        phase: hash(npc.x, npc.y) * 7
+      })
     })
   }
+  // El ultimo cuadro de update, para medir el saltito del dibujo en segundos.
+  let lastUpdate = null
+  const folk =
+    npcs.length && extras.rig
+      ? townsfolk({
+          mapId: data.id,
+          entries: folks,
+          group,
+          cx: CX,
+          cz: CZ,
+          // Se pasea por el suelo libre: ni paredes, ni arboles, ni puertas.
+          walkable: (x, y) =>
+            x >= 0 && y >= 0 && x < width && y < height && kinds[y * width + x] === null,
+          extras,
+          moveBlob(i, x, z) {
+            blobs.setMatrixAt(i, spot.makeTranslation(x, 0.02, z))
+            blobs.instanceMatrix.needsUpdate = true
+          }
+        })
+      : null
 
   // Modelos de Tripo como hitos: la estatua de los heroes es el heroe de Tripo,
   // y el Coloso vive en su arena.
@@ -3520,17 +3558,49 @@ export function buildWorld(data, extras = {}) {
     blocks,
     terrainHeight: terrain && terrain.height,
     loading: Promise.all(loads),
-    // Los NPC respiran: se estiran apenas desde los pies, cada uno a su ritmo.
-    // Las murallas y el terreno pueden moverse solos (antorchas, viento, agua).
-    update(time) {
+    // Los NPC respiran: los dibujos se estiran apenas desde los pies, cada uno a
+    // su ritmo (y dan un saltito al hablarles); los modelos 3D pasean y miran al
+    // heroe (`view.hero`, su posicion). Las murallas y el terreno pueden moverse
+    // solos (antorchas, viento, agua).
+    update(time, view = {}) {
+      const dt = lastUpdate === null ? 0 : Math.min(0.1, Math.max(0, time - lastUpdate))
+      lastUpdate = time
       for (const n of idlers) {
+        if (n.entry.rig) continue
         const k = Math.sin(time * 2.2 + n.phase)
-        n.sprite.scale.set(n.w * (1 - k * 0.012), n.h * (1 + k * 0.025), 1)
+        const hop = n.entry.talk > 0 ? Math.sin((0.5 - n.entry.talk) * Math.PI * 4) : 0
+        if (n.entry.talk > 0) n.entry.talk -= dt
+        n.sprite.scale.set(n.w * (1 - k * 0.012), n.h * (1 + k * 0.025 + Math.abs(hop) * 0.06), 1)
       }
+      if (folk) folk.update(time, view.hero || null)
       if (ramparts && ramparts.update) ramparts.update(time)
       if (terrain && terrain.update) terrain.update(time)
     },
+    // Al hablarle a un NPC (su id): vuelve a su celda y asiente.
+    greet(id) {
+      if (folk) return folk.greet(id)
+      const entry = folks.find((one) => one.npc.id === id)
+      if (entry) entry.talk = 0.5
+      return !!entry
+    },
+    // Para las pruebas: como se ve y donde anda cada NPC.
+    npcs: () =>
+      folk
+        ? folk.info()
+        : {
+            loading: 0,
+            failed: 0,
+            rigs: 0,
+            animated: 0,
+            list: folks.map((one) => ({
+              id: one.npc.id,
+              look: one.sprite ? 'sprite' : one.body ? 'figure' : 'none',
+              home: 0,
+              at: one.home.toArray()
+            }))
+          },
     dispose() {
+      if (folk) folk.dispose()
       if (ramparts && ramparts.dispose) ramparts.dispose()
       if (terrain && terrain.dispose) terrain.dispose()
       for (const mat of seeMaterials) mat.dispose()
