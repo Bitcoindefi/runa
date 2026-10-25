@@ -68,7 +68,8 @@ test('atlas: the route from the castle goes through B and the south gate', (t) =
   )
   // NOX tiene dos portones a RUNA: el primero es el mas cercano al heroe.
   t.is(estado.routeTo('nox', 'city', { x: 3, y: 120 })[0].x, 1)
-  t.is(estado.routeTo('nox', 'city', { x: 34, y: 158 })[0].x, 34)
+  // La forja ya no esconde un porton a la ciudad: de NOX a RUNA solo por la R.
+  t.is(estado.routeTo('nox', 'city', { x: 34, y: 158 })[0].x, 1)
 })
 
 test('atlas: each chapter has a target', (t) => {

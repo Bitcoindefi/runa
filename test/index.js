@@ -3020,3 +3020,32 @@ test('un guardado viejo sin armas recibe la daga una sola vez', (t) => {
   const sold = Player.fromJSON({ ...player.toJSON(), items: [] })
   t.absent(sold.owns('dagger'), 'un guardado version 5 que vendio la daga no la recupera')
 })
+
+test('NOX tiene salida real a la pradera y la pradera devuelve a su puerta sur', (t) => {
+  const { Field } = require('../lib/field.js')
+  const gates = []
+  MAPS.nox.rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const tile = TILES[row[x]]
+      if (tile && tile.enter && tile.enter.kind === 'travel') {
+        gates.push(`${row[x]}${x},${y}:${tile.enter.to}`)
+      }
+    }
+  })
+  t.ok(gates.includes('>160,194:field'), 'la puerta sur sale a la pradera')
+  t.absent(
+    gates.some((g) => g.startsWith('<')),
+    'el cartel de la forja ya no esconde un porton a la ciudad'
+  )
+  for (let y = 179; y < 194; y++) {
+    t.absent(TILES[MAPS.nox.rows[y][160]].solid, `el camino al porton se pisa (y ${y})`)
+  }
+  const field = new Field({ arrival: 'nox' })
+  t.is(field.player.x, field.noxGate.x - 1, 'desde NOX se llega junto al porton oriental')
+  t.is(field.player.y, field.noxGate.y)
+  const arrival = MAPS.nox.arrivals.meadow
+  t.absent(
+    TILES[MAPS.nox.rows[arrival.y][arrival.x]].solid,
+    'la llegada desde la pradera es una celda libre'
+  )
+})
