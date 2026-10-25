@@ -2023,7 +2023,7 @@ test('hitbox combat stays on the field and advances on attack input', (t) => {
   t.ok(!paused.includes('un encuentro'), 'there is no encounter card')
   t.ok(!paused.includes('combate por turnos'), 'there is no separate arena')
 
-  // L3 (docs/combate.md): one input runs to the next blow by either side.
+  // L3 (docs/combate.md): una tecla corre hasta el proximo golpe de cualquiera.
   const blows = world.blows
   press(game, 'space')
   t.ok(world.tick > before, 'one input resolves one visible turn')

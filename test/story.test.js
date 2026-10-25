@@ -92,8 +92,8 @@ function slayRaider(game) {
   return raider.dead
 }
 
-// L6: the weapon reloads before the next strike at the Colossus. Time passes
-// on the field clock without the Colossus acting, so nothing else changes.
+// L6: el arma se recarga antes del proximo golpe al Coloso. El tiempo pasa en
+// el reloj del campo sin que el Coloso actue, asi no cambia nada mas.
 function reload(game) {
   game.field.time += game.field.strikeCharge().left
 }
