@@ -72,7 +72,8 @@ const PALETTES = {
     stone: 0x26222d,
     trim: 0x8a80a6,
     frame: 0x16121e,
-    door: 0x2a1f38,
+    // Las hojas de la puerta mas claras que el muro: de noche se leen.
+    door: 0x4a3566,
     vein: 0x5fe8c8,
     arch: ['pointed'],
     pitch: 1.15,

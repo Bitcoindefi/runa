@@ -68,7 +68,8 @@ test('atlas: the route from the castle goes through B and the south gate', (t) =
   )
   // NOX tiene dos portones a RUNA: el primero es el mas cercano al heroe.
   t.is(estado.routeTo('nox', 'city', { x: 3, y: 120 })[0].x, 1)
-  t.is(estado.routeTo('nox', 'city', { x: 34, y: 158 })[0].x, 34)
+  // La forja ya no esconde un porton a la ciudad: de NOX a RUNA solo por la R.
+  t.is(estado.routeTo('nox', 'city', { x: 34, y: 158 })[0].x, 1)
 })
 
 test('atlas: each chapter has a target', (t) => {
@@ -88,6 +89,8 @@ test('atlas: each chapter has a target', (t) => {
   t.alike(raid, { kind: 'camp', region: 'field', id: 'colmillo-rojo', x: 104, y: 18 })
   const east = estado.storyTarget(story('barbarian_raid'), 'field', camps, { x: 210, y: 55 })
   t.is(east.id, 'cuervos-ceniza', 'the nearest camp to the hero in the meadow')
+  const fromNox = estado.storyTarget(story('barbarian_raid'), 'nox', camps)
+  t.is(fromNox.id, 'cuervos-ceniza', 'from NOX the camp is measured from the NOX gate')
   const inside = estado.storyTarget(story('barbarian_raid'), 'camp:hachas-negras', camps)
   t.alike(inside, {
     kind: 'camp',

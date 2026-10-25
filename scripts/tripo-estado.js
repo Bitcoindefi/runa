@@ -532,7 +532,8 @@ function storyTarget(story, here, camps = [], at = null, boss = null) {
     const inside = open.find((camp) => 'camp:' + camp.id === here)
     if (inside) return { kind: 'camp', region: here, id: inside.id, x: null, y: null }
     if (!open.length) return null
-    const from = here === 'field' && at ? at : gateTo('city')
+    // Desde una capital se mide desde su porton a la pradera: NOX sale por el este.
+    const from = here === 'field' && at ? at : gateTo(here === 'nox' ? 'nox' : 'city')
     const far = (camp) => vdist(camp.x, camp.y, from.x, from.y)
     let best = open[0]
     for (const camp of open) if (far(camp) < far(best)) best = camp
