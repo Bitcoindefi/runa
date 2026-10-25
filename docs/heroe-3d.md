@@ -99,7 +99,8 @@ apartaba unos 35 cm). Lo mismo en el recorrido libre.
 
 Un eje que no se movio (una pared, un NPC) queda frenado un rato: el heroe se
 desliza por el otro y la tecla no se repite, asi el registro no se llena. En
-combate cada paso contra el monstruo es un golpe: va una sola tecla, cada 0,3 s.
+combate cada paso contra el monstruo es un ataque: va una tecla por turno, y el
+turno dura hasta el proximo golpe (docs/combate.md).
 
 La ficha muestra la celda donde esta el heroe, como la terminal (`X:163 Y:132`),
 y cambia en cada paso; en el recorrido libre va en la linea del lugar.
