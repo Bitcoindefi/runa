@@ -111,6 +111,12 @@
       const INTRO =
         "Runa's 3D models, generated with Tripo. Drag to turn them; the animated hero walks."
       if (DEMO) document.getElementById('back').hidden = false
+      // En el sitio cada GLB trae copias livianas (scripts/glb-ligero.js). En un
+      // telefono la galeria muestra la de 512 px: los doce originales a la vez,
+      // con texturas de 2048, no le entran. La computadora sigue con los
+      // originales. Si la copia no carga, vuelve al original.
+      const PHONE =
+        matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 900
 
       // En el sitio no se muestran los avisos para quien desarrolla.
       function say(text) {
@@ -138,6 +144,11 @@
           caption.textContent = label
           // Sin esto, un GLB que no decodifica deja la caja gris y nada mas.
           viewer.addEventListener('error', (event) => {
+            const now = shown.get(model.name)
+            if (now && now.original && viewer.getAttribute('src') !== now.original) {
+              viewer.setAttribute('src', now.original)
+              return
+            }
             const reason = (event.detail && event.detail.type) || 'error'
             caption.textContent = label + ' (no carga: ' + reason + ')'
           })
@@ -152,8 +163,13 @@
         if (entry.mtime === model.mtime) return
         entry.mtime = model.mtime
         // ?v= fuerza la descarga cuando un GLB se regenera con el mismo nombre.
-        const src = 'assets/tripo/' + encodeURIComponent(model.name) + '?v=' + model.mtime
-        entry.viewer.setAttribute('src', src)
+        const name = encodeURIComponent(model.name)
+        entry.original = 'assets/tripo/' + name + '?v=' + model.mtime
+        const light = PHONE && model.light && model.light['512']
+        entry.viewer.setAttribute(
+          'src',
+          light ? 'assets/tripo/512/' + name + '?v=' + light : entry.original
+        )
         entry.figure.classList.toggle('new', isNew)
         if (isNew) entry.figure.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }

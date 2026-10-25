@@ -262,6 +262,17 @@ En un Chrome recien abierto el primer pedido puede fallar con "Failed to fetch";
 la lista de modelos, los mapas, los GLB y el juego se reintentan antes de
 rendirse (salvo una respuesta 4xx, que no va a cambiar).
 
+Los GLB de Tripo pesan 41,6 MB en total y cada uno trae texturas de 2048 px
+(unos 67 MB de GPU por modelo). El sitio publica ademas copias livianas que arma
+`scripts/glb-ligero.js` con gltf-transform: texturas de 1024 px para
+computadoras y de 512 px para telefonos (WebP, y el mapa de normales en JPEG
+4:4:4), animaciones sin cuadros redundantes y vertices cuantizados, sin meshopt
+ni draco. Quedan en 4,9 MB y 2,8 MB. La pagina elige el juego segun el equipo
+(`?modelos=512`, `1024` u `original` lo fija) y vuelve al original si una copia
+no carga; la galeria las usa solo en telefonos. gltf-transform y sharp viven
+fuera del repo, en `..\tools\gltf` (o `RUNA_GLTF_TOOLS`); el comentario de
+`glb-ligero.js` dice como instalarlos.
+
 En un celular la cruceta mueve al heroe (se puede deslizar el dedo de una flecha
 a otra) y los botones de la izquierda son E, I, F, Esc, OK, correr o caminar, T,
 la pantalla de texto y el menu. En una pantalla del juego, como una tienda, cada
