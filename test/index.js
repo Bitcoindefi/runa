@@ -398,7 +398,8 @@ test('new game asks for a name and puts its initial on the hero', (t) => {
   t.is(game.name, 'Quinn', 'q is accepted as part of a name instead of quitting')
   t.ok(screen.includes('la ciudad'))
   t.ok(screen.includes('wasd o flechas'))
-  t.ok(screen.includes('/Q\\'), 'the first letter of the name is painted on the chest')
+  // Con la daga de inicio el torso es /|Q\ en vez de /Q\: la inicial sigue ahi.
+  t.ok(/[/|]Q[\\-]/.test(screen), 'the first letter of the name is painted on the chest')
 })
 
 test('character creation chooses, saves and restores the birth realm', (t) => {
@@ -890,6 +891,8 @@ test('inventory equips five slots and the home chest deposits persistent items',
   game.title = false
   game.width = 100
   game.height = 30
+  // La mochila arranca vacia en esta prueba (sin la daga de inicio).
+  game.player.items.clear()
   for (const id of ['sword', 'shield', 'leather', 'leather_cap', 'boots']) {
     game.player.items.add(id)
     game.player.equip(id)
@@ -1534,7 +1537,7 @@ test('the field pane paints the whole field, not one stringified line', (t) => {
   // stayed green, so only an assertion about the painted frame can see it.
   t.ok(painted.length > 10, 'terrain covers the pane rather than a single row')
   t.ok(
-    lines.some((line) => line.includes('/T\\') || line.includes('\\T-')),
+    lines.some((line) => /[/|\\]T[\\-]/.test(line)),
     'the small moving hero is somewhere on screen'
   )
 
@@ -2034,7 +2037,7 @@ test('el heroe y los NPCs no colapsan visualmente de cerca', (t) => {
   for (let dx of [1, 2, 3, -1, -2, -3]) {
     game.walker.placeAt('city', alma.x + dx, alma.y)
     const screen = style.stripAnsi(game.view())
-    t.ok(screen.includes('/T\\') || screen.includes('\\T-'), 'heroe presente (dx ' + dx + ')')
+    t.ok(/[/|\\]T[\\-]/.test(screen), 'heroe presente (dx ' + dx + ')')
     t.ok(screen.includes('.+.'), 'alma top presente (dx ' + dx + ')')
     t.ok(screen.match(/\(o[\\., ]o\)/), 'alma cara presente (dx ' + dx + ')')
     t.ok(screen.includes('/[+]\\'), 'alma torso presente (dx ' + dx + ')')
@@ -2983,4 +2986,37 @@ test('a save slot restores the current dungeon floor and defeated monsters', (t)
   } finally {
     removeSaveFixture(dir)
   }
+})
+
+test('una partida nueva arranca con la daga puesta y le gana al primer mosquito', (t) => {
+  const { World } = require('../lib/world.js')
+  const player = new Player()
+  t.ok(player.owns('dagger'), 'la daga viene en la mochila')
+  t.is(player.snapshot().equipped.left_hand, 'dagger', 'y puesta en la mano')
+  t.is(player.gold, 30, 'el oro de inicio no cambia')
+  const world = player.outfit(new World('mosquito'))
+  world.foe.x = 1
+  for (let i = 0; i < 30 * 60 && !world.over; i++) world.step()
+  t.is(world.over, 'ganaste', 'nivel 1 con la daga le gana al mosquito')
+})
+
+test('un guardado viejo sin armas recibe la daga una sola vez', (t) => {
+  const old = {
+    version: 4,
+    gold: 12,
+    xp: 0,
+    hp: 20,
+    potions: 1,
+    items: ['leather'],
+    storage: [],
+    equipped: { chest: 'leather' }
+  }
+  const player = Player.fromJSON(old)
+  t.ok(player.owns('dagger'), 'recibe la daga')
+  t.is(player.snapshot().equipped.left_hand, 'dagger', 'puesta en la mano libre')
+  t.is(player.snapshot().equipped.chest, 'leather', 'el resto del equipo queda igual')
+  const armed = Player.fromJSON({ ...old, items: ['sword'], equipped: { left_hand: 'sword' } })
+  t.absent(armed.owns('dagger'), 'quien ya tiene un arma no recibe otra')
+  const sold = Player.fromJSON({ ...player.toJSON(), items: [] })
+  t.absent(sold.owns('dagger'), 'un guardado version 5 que vendio la daga no la recupera')
 })

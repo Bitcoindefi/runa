@@ -434,6 +434,9 @@ async function runFight() {
   const [a, b] = await pair(code, ['Ana', 'Beto'])
   try {
     // Beto llega herido (3 de vida): tres golpes de Ana deciden el duelo.
+    // Ana pelea a mano limpia (1 de dano): asi la vida de Beto baja de a uno y se
+    // ve cada paso ordenado. Con la daga de inicio un golpe solo lo terminaria.
+    await a.page.eval(`window.runaGame.runa.player.equipped.left_hand = null`)
     const homes = await enterDuel(a, b, 3)
     const ids = await Promise.all([a, b].map((p) => p.page.eval(`window.runaGame.room().id`)))
     const first = await a.page.state()
