@@ -42,7 +42,12 @@ proximo turno, antes que el ataque (`tripo-combate.mjs` `CombatPace.order`).
 Las teclas estan en `lib/game.js` `COMBAT_KEYS` y en `tripo-combate.mjs`
 `ACTION_KEYS` (una prueba las compara).
 
-## L3 en la pagina: un golpe por tecla, en segundos de verdad
+## L3 en la pagina: un golpe por tecla, de quien pegue primero
+
+La regla es una tecla, un golpe de cualquiera de los dos: si el monstruo pega
+antes que el heroe, esa tecla se gasta en su golpe y el heroe pega con la
+siguiente (la barra dice "recargando" con los turnos que faltan). No es una
+tecla, un golpe del heroe.
 
 La pagina manda una tecla por turno. Cada turno dura en pantalla los ticks que
 resolvio el juego a 30 por segundo (`turnLead`, con un tope de 3 s): la barra de

@@ -332,7 +332,10 @@
         inset: 0;
         display: grid;
         grid-template-columns: minmax(0, 440px);
+        /* safe: si no entra, crece solo hacia abajo y el logo queda alcanzable
+           con el scroll (centrado a secas lo deja arriba del borde). */
         align-content: center;
+        align-content: safe center;
         padding: 24px clamp(16px, 6vw, 80px);
         background: linear-gradient(
           90deg,
@@ -2799,6 +2802,12 @@
       // mapa se arma no se vuelve a pedir, solo se anota la ultima celda.
       let loadingMap = null
       let lastAt = null
+      // Si se sostiene una direccion (tecla, cruceta o joystick): se esta caminando.
+      function stepping() {
+        const src = screen === 'tour' ? demo : mover
+        for (const dir of [...src.held, ...src.fingers.values()]) if (DIRS[dir]) return true
+        return stickId !== null && src.fingers.has(stickId)
+      }
       async function enterWorld(at) {
         lastAt = at
         if (world && world.map === at.map) {
@@ -2890,7 +2899,9 @@
             VIEWS.third[0],
             Math.cos(arrive) * VIEWS.third[1]
           )
-        } else if (cameFrom && settings.camera === 'third') {
+        } else if (cameFrom && settings.camera === 'third' && stepping()) {
+          // Solo caminando por una puerta. Volver con T (sin caminar) arranca
+          // mirando al norte, no con el giro de otro mapa (la cripta de costado).
           const az = rawForward ? hero.root.rotation.y + Math.PI : lastAz
           off.set(Math.sin(az) * VIEWS.third[1], VIEWS.third[0], Math.cos(az) * VIEWS.third[1])
         }

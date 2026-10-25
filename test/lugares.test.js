@@ -306,3 +306,18 @@ test('lugares: map ids, moods and the indoor fog', (t) => {
   t.alike(lugares.heroFog([0, 4, 24], 7), [11, 31], 'fog starts at the hero')
   t.alike(lugares.heroFog([0, 4, 24], NaN), [4, 24])
 })
+
+test('every crypt floor name has its English entry', (t) => {
+  const EN = require('../lib/locales/en.json')
+  const { floorRows } = require('../lib/dungeon.js')
+  const { withLanguage, t: tr } = require('../lib/locale.js')
+  for (const floor of FLOORS) {
+    const name = floorRows(floor).name
+    t.ok(Object.prototype.hasOwnProperty.call(EN, name), `piso ${floor}: ${name}`)
+    t.is(
+      withLanguage('en', () => tr(name + ': 12 monstruos')).startsWith(EN[name]),
+      true,
+      'and the log line uses it'
+    )
+  }
+})
