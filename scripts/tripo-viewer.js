@@ -64,6 +64,8 @@ const MODULES = {
   // carguen en Bare) y el globo y la voz en la pagina.
   'voces.js': path.join(__dirname, 'tripo-voces.mjs'),
   'voces-player.js': path.join(__dirname, 'tripo-voces-player.js'),
+  // La caja de dialogo de los NPC, con retrato y voz.
+  'dialogo.js': path.join(__dirname, 'tripo-dialogo.js'),
   // La musica de fondo de cada mapa: que pista va en cada mapa (.mjs para que
   // las pruebas lo carguen en Bare) y el reproductor de la pagina.
   'musica-pistas.js': path.join(__dirname, 'tripo-musica-pistas.mjs'),
@@ -245,6 +247,13 @@ const VOCES_FILE = /^(?:manifest\.json|[a-z_]+\/(?:en|es)\/[a-z_]+-\d+\.mp3|sfx\
 const MUSICA = path.join(root, 'assets/musica')
 const MUSICA_PREFIX = '/assets/musica/'
 const MUSICA_FILE = /^(?:manifest.json|[a-z]+.mp3)$/
+// Las voces y los retratos de los NPC (scripts/generar-voces-npc.mjs, Rosebud).
+const VOCES_NPC = path.join(root, 'assets/voces-npc')
+const VOCES_NPC_PREFIX = '/assets/voces-npc/'
+const VOCES_NPC_FILE = /^(?:manifest\.json|[a-z-]+\/en\/\d+\.mp3)$/
+const RETRATOS_NPC = path.join(root, 'assets/retratos-npc')
+const RETRATOS_NPC_PREFIX = '/assets/retratos-npc/'
+const RETRATOS_NPC_FILE = /^[a-z-]+\.webp$/
 // Los retratos de los monstruos para el globo (hechos con Rosebud): <id>.webp.
 const RETRATOS = path.join(root, 'assets/retratos')
 const RETRATOS_PREFIX = '/assets/retratos/'
@@ -726,6 +735,18 @@ function serve() {
         const type = pista.endsWith('.json') ? 'application/json' : 'audio/mpeg'
         return send(res, path.join(MUSICA, pista), type)
       }
+      const dicho = urlPath.startsWith(VOCES_NPC_PREFIX)
+        ? urlPath.slice(VOCES_NPC_PREFIX.length)
+        : ''
+      if (VOCES_NPC_FILE.test(dicho)) {
+        const type = dicho.endsWith('.json') ? 'application/json' : 'audio/mpeg'
+        return send(res, path.join(VOCES_NPC, dicho), type)
+      }
+      const rostro = urlPath.startsWith(RETRATOS_NPC_PREFIX)
+        ? urlPath.slice(RETRATOS_NPC_PREFIX.length)
+        : ''
+      if (RETRATOS_NPC_FILE.test(rostro))
+        return send(res, path.join(RETRATOS_NPC, rostro), 'image/webp')
       const cara = urlPath.startsWith(RETRATOS_PREFIX) ? urlPath.slice(RETRATOS_PREFIX.length) : ''
       if (RETRATOS_FILE.test(cara)) return send(res, path.join(RETRATOS, cara), 'image/webp')
       res.writeHead(404).end()
@@ -759,6 +780,10 @@ module.exports = {
   MUSICA_FILE,
   RETRATOS,
   RETRATOS_FILE,
+  VOCES_NPC,
+  VOCES_NPC_FILE,
+  RETRATOS_NPC,
+  RETRATOS_NPC_FILE,
   listModels,
   worldMap
 }

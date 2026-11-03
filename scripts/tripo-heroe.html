@@ -1460,6 +1460,7 @@
       } from './combate.js'
       import { createSound } from './sonido.js'
       import { createVoices } from './voces-player.js'
+      import { createDialogue } from './dialogo.js'
       import { createMusic } from './musica.js'
       import { BOSS, BOSS_WINDUP, LOW } from './voces.js'
       import { createAtlas } from './atlas.js'
@@ -5226,6 +5227,7 @@
       const pause = document.getElementById('pause')
       const pad = document.getElementById('pad')
       const talkBox = document.getElementById('talk')
+      const dialogue = createDialogue({ sound: () => settings.sound !== false })
       const bagBox = document.getElementById('bag')
       const links = document.getElementById('links')
 
@@ -5278,6 +5280,7 @@
         document.body.classList.remove('paused')
         pad.hidden = true
         talkBox.hidden = true
+        dialogue.hide()
         bagBox.hidden = true
         links.hidden = true
         demo.held.clear()
@@ -8151,6 +8154,21 @@
           return
         }
         if (world && world.built.greet) world.built.greet(npc.id)
+        // La caja de dialogo con retrato y voz (dialogo.js).
+        const shop = npc.action === 'shop' || npc.action === 'tavern'
+        talkBox.hidden = true
+        dialogue.show({
+          id: npc.id,
+          name: tr(npc.name) + (npc.role ? ', ' + tr(npc.role) : ''),
+          text: npc.line ? tr(npc.line) : '...',
+          note: shop
+            ? L(
+                'Trading happens in a real game: Play, in the menu.',
+                'Para comprar hace falta una partida: Jugar, en el menu.'
+              )
+            : ''
+        })
+        if (dialogue) return
         const speaker = document.createElement('strong')
         speaker.textContent = tr(npc.name) + (npc.role ? ', ' + tr(npc.role) : '')
         const words = document.createElement('p')
@@ -8228,6 +8246,13 @@
           return
         }
         if (!down || event.repeat) return
+        // Con la caja de dialogo abierta, E, Enter o espacio adelantan; Esc cierra.
+        if (dialogue.open() && ['e', 'Enter', ' ', 'Escape'].includes(key)) {
+          event.preventDefault()
+          if (key === 'Escape') dialogue.hide()
+          else dialogue.advance()
+          return
+        }
         if (key >= '1' && key <= String(PLACES.length)) goMap(PLACES[Number(key) - 1].map)
         else if (key === 'e') talk()
         else if (key === 'i') openBag()

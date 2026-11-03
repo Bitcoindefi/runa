@@ -175,6 +175,18 @@ async function main() {
       }
     }
   }
+  // Las voces y los retratos de los NPC para la caja de dialogo, si existen.
+  const copyNpc = (dir, rel, test, dest) => {
+    if (!fs.existsSync(dir)) return
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const name = rel ? `${rel}/${entry.name}` : entry.name
+      if (entry.isDirectory()) copyNpc(path.join(dir, entry.name), name, test, dest)
+      else if (test.test(name))
+        write(`${dest}/${name}`, fs.readFileSync(path.join(dir, entry.name)))
+    }
+  }
+  copyNpc(viewer.VOCES_NPC, '', viewer.VOCES_NPC_FILE, 'assets/voces-npc')
+  copyNpc(viewer.RETRATOS_NPC, '', viewer.RETRATOS_NPC_FILE, 'assets/retratos-npc')
   // Los retratos del globo (Rosebud), con los nombres que sirve el visor. Sin
   // ellos el globo va sin retrato.
   let faceCount = 0

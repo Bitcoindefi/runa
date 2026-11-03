@@ -1,0 +1,82 @@
+{
+  "cedric": {
+    "voice_id": "gqiWlxML5RvymIpWCMHt",
+    "name": "Sir Cedric",
+    "description": "A middle aged knight, strong and confident baritone, slightly gruff, British accent, speaks with urgency and courage."
+  },
+  "aldren": {
+    "voice_id": "Pa3JdKyBcsrcQH3wZ5Rc",
+    "name": "King Aldren",
+    "description": "An older man in his sixties, a wise medieval king. Deep, regal, warm and calm voice with a gentle British accent, slow and dignified."
+  },
+  "elian": {
+    "voice_id": "L3o44RFZyHjlzeHsnNqy",
+    "name": "Elian",
+    "description": "An adult man, royal herald, clear projecting tenor voice, cheerful and formal, British accent."
+  },
+  "brom": {
+    "voice_id": "Q8NtZPp5PqAAFMRUGfaw",
+    "name": "Brom",
+    "description": "A burly adult blacksmith, deep rough bass voice, friendly and blunt, northern English accent."
+  },
+  "iris": {
+    "voice_id": "hp0EoBCDgh3lX0jxg9o9",
+    "name": "Iris",
+    "description": "An adult woman alchemist, soft curious mezzo voice, thoughtful and a little mysterious, British accent."
+  },
+  "vera": {
+    "voice_id": "G2zOIJahIEUvhMxkoLcG",
+    "name": "Vera",
+    "description": "An adult woman armorer in her forties, firm and practical alto voice, confident, Scottish accent."
+  },
+  "alma": {
+    "voice_id": "1vyTjL2xoolL602maznX",
+    "name": "Sister Alma",
+    "description": "An older woman priestess, serene gentle and kind voice, slow and soothing, British accent."
+  },
+  "roan": {
+    "voice_id": "X7fQtwnlgI4PF1cyKGBP",
+    "name": "Roan",
+    "description": "An adult male town guard, stern steady voice, disciplined and direct, English accent."
+  },
+  "bruno": {
+    "voice_id": "7aS26IUpsJD9lacHJQyt",
+    "name": "Bruno",
+    "description": "A jolly adult innkeeper, warm hearty baritone with a laugh in it, welcoming, English accent."
+  },
+  "nox-alchemist": {
+    "voice_id": "YPqvI7gTrTQYwI40zvER",
+    "name": "Mirael",
+    "description": "An adult female elf alchemist, airy whispering mezzo voice, calm and otherworldly, elegant accent."
+  },
+  "nox-armorer": {
+    "voice_id": "vLdtjpiEkcAOebkqw3GW",
+    "name": "Zynrae",
+    "description": "An adult female dark elf armor master, sharp proud alto voice, precise and cool, elegant accent."
+  },
+  "nox-smith": {
+    "voice_id": "IiprI8uEnin55T0bEquR",
+    "name": "Theryn",
+    "description": "An adult male dark elf weaponsmith, low cold smooth voice, quiet intensity, elegant accent."
+  },
+  "nox-priestess": {
+    "voice_id": "BZogVBzlxZm99T7r3ZgL",
+    "name": "Ilyra",
+    "description": "An adult female elf moon priestess, soft ethereal and serene voice, slow and melodic, elegant accent."
+  },
+  "nox-mycologist": {
+    "voice_id": "sVzNMppAjqWe0ULCwdB3",
+    "name": "Sael",
+    "description": "An adult male elf gardener, gentle warm low voice, patient and kind, elegant accent."
+  },
+  "nox-merchant": {
+    "voice_id": "nbflwJ9tPEgpzqZalpOK",
+    "name": "Nym",
+    "description": "An adult male elf merchant, sly silky voice, hushed and conspiratorial, elegant accent."
+  },
+  "nox-sentinel": {
+    "voice_id": "BCffH6KtBUQN457dZFco",
+    "name": "Veyra",
+    "description": "An adult female dark elf sentinel, firm watchful low voice, solemn and proud, elegant accent."
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "lang": "en",
+  "model": "eleven_multilingual_v2",
+  "format": "mp3_22050_32",
+  "lines": {
+    "Every hero leaves a mark on this town; honor yours": "aldren/en/1.mp3",
+    "mosquitos are invading the meadow; I need a hunter": "cedric/en/1.mp3",
+    "the dawn market opens between the avenue and the heroes' square": "elian/en/1.mp3",
+    "you can hear the anvil in the craft district without crossing half the town": "brom/en/1.mp3",
+    "shield and armor work together; each piece has its own slot": "vera/en/1.mp3",
+    "I distill herbs from the dawn gardens and mushrooms brought from NOX": "iris/en/1.mp3",
+    "three coins restore your health; the golden mug welcomes all royal road travelers": "bruno/en/1.mp3",
+    "the tower of light guides travelers and protects the dawn district": "alma/en/1.mp3",
+    "crown avenue connects castle, square and main gate directly": "roan/en/1.mp3",
+    "obsidian gives shape; dark metal keeps it from breaking": "nox-smith/en/1.mp3",
+    "NOX armor deflects a blow like a rib of the mountain": "nox-armorer/en/1.mp3",
+    "I distill cold spores into elixirs that close wounds without fire": "nox-alchemist/en/1.mp3",
+    "in NOX even rumors are traded indoors": "nox-merchant/en/1.mp3",
+    "the night can heal too, if you know how to listen": "nox-priestess/en/1.mp3",
+    "cold mushrooms glow without fire and feed the whole town": "nox-mycologist/en/1.mp3",
+    "the palace was carved upward in search of a moon we never see": "nox-sentinel/en/1.mp3"
+  }
+}
