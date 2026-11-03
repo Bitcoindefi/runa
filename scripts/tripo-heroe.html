@@ -6079,15 +6079,17 @@
         // a su celda, mira al heroe y asiente. Se mira antes de la tecla, con lo
         // mismo que decide el juego (Runa.enter y Field.interact).
         // Tambien abre la caja de dialogo con retrato y voz, como en el recorrido.
-        // Con la caja abierta, E, Enter o espacio adelantan y Esc cierra; esas
-        // teclas no llegan al juego.
+        // Con la caja abierta, Esc la cierra y nada mas. Caminando, E, Enter o
+        // espacio la adelantan sin llegar al juego (no se vuelve a hablar). Con
+        // una pantalla del juego abierta (tienda, inventario, desafio) cualquier
+        // otra tecla la cierra y sigue al juego: el primer Comprar ya compra.
         const pressKey = session.press.bind(session)
         session.press = (name) => {
           const talkKey = ['e', 'E', 'enter', 'space'].includes(name)
-          if (dialogue.open() && (talkKey || name === 'escape')) {
-            if (name === 'escape') dialogue.hide()
-            else dialogue.advance()
-            return
+          if (dialogue.open()) {
+            if (name === 'escape') return dialogue.hide()
+            if (!exploring(session.state())) dialogue.hide()
+            else if (talkKey) return dialogue.advance()
           }
           const npc = talkKey ? townNpc() : null
           if (talkKey) greetNear()
@@ -6147,6 +6149,7 @@
         if (!session) return
         live = session.state()
         const st = live
+        if (dialogue.open() && !stillTalking(st)) dialogue.hide()
         // Los mapas fijos vienen del juego; la pradera, si pradera.js la dibuja.
         const at = st.world || (meadow && meadow.worldAt(st))
         if (at) enterWorld(at)
@@ -6832,7 +6835,8 @@
         }
         if (event.key === 'Escape') {
           event.preventDefault()
-          if (peek) peek = false
+          if (dialogue.open()) dialogue.hide()
+          else if (peek) peek = false
           // En un duelo tambien abre el menu: rendirse es R, no un Esc al pasar.
           else if (roaming) openPause()
           else session.press('escape')
@@ -6858,6 +6862,10 @@
         ]
         if (named) {
           event.preventDefault()
+          // Mantener Enter o espacio caminando no vuelve a hablar en rueda (abrir,
+          // completar, cerrar y abrir la caja de dialogo).
+          const talk = named === 'enter' || named === 'space'
+          if (event.repeat && talk && (roaming || dialogue.open())) return
           session.press(named)
           return
         }
@@ -7304,6 +7312,7 @@
       function openPause() {
         paused = true
         document.body.classList.add('paused')
+        dialogue.hide()
         atlas.close()
         mover.held.clear()
         mover.fingers.clear()
@@ -7322,6 +7331,10 @@
       // guardia se vuelve a poner.
       function backPressed() {
         if (atlas.close()) return true
+        if (dialogue.open()) {
+          dialogue.hide()
+          return true
+        }
         const st = session ? live || session.state() : null
         const roaming = !st || exploring(st) || !!st.title || !!st.naming
         const step = backStep({ screen, paused, roaming })
@@ -7521,6 +7534,7 @@
           return
         }
         if (act === 'escape') {
+          if (dialogue.open()) return dialogue.hide()
           if (peek) {
             peek = false
             return
@@ -8165,15 +8179,29 @@
 
       // El NPC del pueblo al que le habla la tecla, con lo mismo que decide
       // Runa.enter: explorando, fuera de la pradera, sin duelo y sin puerta debajo.
+      // Con el estado de este momento: un desafio que llega en este cuadro gana.
       function townNpc() {
         const runa = session && session.runa
-        if (!runa || runa.field || !exploring(live || session.state())) return null
+        if (!runa || runa.field || !exploring(session.state())) return null
         if (runa.title || (runa.duel && runa.duel.active) || runa.walker.action()) return null
         return runa.nearbyNpc()
       }
 
+      // Con quien habla la caja de dialogo en la partida, y si sigue al lado: la
+      // caja se cierra sola al alejarse, al cambiar de mapa o con otra pantalla
+      // del juego que no sea la tienda de ese NPC.
+      let talking = null
+      function stillTalking(st) {
+        const runa = session.runa
+        if (!talking || runa.field || st.duel || (st.overlay && st.overlay !== 'shop')) return false
+        if (runa.walker.mapId !== talking.map) return false
+        const near = runa.nearbyNpc(2)
+        return !!near && near.id === talking.id
+      }
+
       // La caja de dialogo con retrato y voz (dialogo.js), tambien en la partida.
       function showNpc(npc) {
+        talking = { id: npc.id, map: session.runa.walker.mapId }
         dialogue.show({
           id: npc.id,
           name: tr(npc.name) + (npc.role ? ', ' + tr(npc.role) : ''),
