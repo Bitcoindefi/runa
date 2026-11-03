@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "monsters": {
+    "espectro": {
+      "voice_id": "X2PdVzazoLuCreMlUYVI",
+      "name": "Runa Spectre",
+      "description": "A fantasy video game monster: A bored, sarcastic ghost that arrived by update and haunts out of spite. Voice: female, ageless, sounds like a young adult; airy, breathy whisper with a faint ghostly echo; soft British accent; slow and drifting. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "mosquito": {
+      "voice_id": "E5mUX9YXLdwRsbNiJpLf",
+      "name": "Runa Mosquito",
+      "description": "A fantasy video game monster: A tiny, whiny bloodsucker who thinks the hero is an all-you-can-eat buffet. Voice: male, adult; tiny, high-pitched, nasal and whiny with a buzzing edge; neutral American accent; fast and jittery. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "golem": {
+      "voice_id": "SateVLt3z1J83dWqlfZF",
+      "name": "Runa Golem",
+      "description": "A fantasy video game monster: A slow stone guardian, very proud of how far its arm reaches. Voice: male, ancient; very deep, gravelly, grinding like rocks, monotone; neutral accent; very slow, long pauses between words. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "barbarian_raider": {
+      "voice_id": "dScl6RfpuYvRJKGGEF0d",
+      "name": "Runa Barbarian raider",
+      "description": "A fantasy video game monster: A loud frontier raider who loves his axe more than people. Voice: male, around 30; gruff, rough and shouty, a bit hoarse; Nordic accent; medium, punchy. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "barbarian_thrower": {
+      "voice_id": "IJ8jx42FqN6PVOyS4mI2",
+      "name": "Runa Barbarian thrower",
+      "description": "A fantasy video game monster: A cocky javelin thrower who taunts from behind the palisade. Voice: male, early 20s; gruff but nasal, mocking and cheeky; Nordic accent; quick. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "barbarian_chief": {
+      "voice_id": "Q7CnAfrBDQprmwyoSsOH",
+      "name": "Runa Barbarian chief",
+      "description": "A fantasy video game monster: The camp chief, covered in stolen trophies, who wants yours too. Voice: male, around 50; booming, deep and gravelly, commanding; Nordic accent; slow and heavy. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "slime": {
+      "voice_id": "dnARdTtITIWh4pjx6E71",
+      "name": "Runa Slime",
+      "description": "A fantasy video game monster: A weak, cheerful blob that just wants a hug (and to digest you). Voice: neutral, childlike; bubbly, wet and gurgly, squishy and sweet; neutral American accent; bouncy, medium fast. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "skeleton": {
+      "voice_id": "cPlqClgiDTTIAOXW7fAz",
+      "name": "Runa Skeleton",
+      "description": "A fantasy video game monster: A reanimated crypt guard on an eternal night shift, tired and deadpan. Voice: male, middle-aged; hollow, dry and raspy, rattly, deadpan; neutral American accent; moderate, bored. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "skeleton_knight": {
+      "voice_id": "PvVSqWnYdr4hJDMICWAA",
+      "name": "Runa Skeleton knight",
+      "description": "A fantasy video game monster: A rusted knight whose oath outlived his flesh: formal and honorable. Voice: male, old; hollow and raspy with a metallic echo, dignified; old English, formal accent; measured. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "skeleton_archer": {
+      "voice_id": "FUvipmkquemLTyR5BTZp",
+      "name": "Runa Skeleton archer",
+      "description": "A fantasy video game monster: A sniper of the burial halls who counts every arrow out loud. Voice: male, adult; thin, hollow and raspy, a sly whisper; neutral accent; precise and calm. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "skeleton_elite": {
+      "voice_id": "m00tWYCTVA5Bogm1sQbB",
+      "name": "Runa Elite skeleton",
+      "description": "A fantasy video game monster: The black guard of the skeleton king: cold, zealous, military. Voice: male, adult; deep, hollow and raspy, a clipped military bark; neutral accent; clipped and fast. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "skeleton_king": {
+      "voice_id": "TrcrXZVdF4Z7I7G6pKN3",
+      "name": "Runa Skeleton king",
+      "description": "A fantasy video game monster: The undead sovereign of the third level: theatrical, vain and grand. Voice: male, very old; hollow, raspy and regal, theatrical, echoing in a throne room; posh British accent; slow and grandiose. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    },
+    "colossus": {
+      "voice_id": "9hwDyyRQRYESSovpSFgA",
+      "name": "Runa Colossus",
+      "description": "A fantasy video game monster: An ancient stone guardian woken by a cracked rune: speaks like a landslide. Voice: male, ancient, timeless; huge, extremely deep, rumbling like an earthquake, booming; neutral accent; very slow, heavy pauses. Clear diction, studio quality, no background noise.",
+      "source": "design",
+      "model": "eleven_multilingual_ttv_v2"
+    }
+  }
+}

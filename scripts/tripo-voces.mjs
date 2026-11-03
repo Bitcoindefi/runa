@@ -71,7 +71,7 @@ export const MONSTERS = {
     color: '#e05ad0',
     voice: {
       gender: 'male',
-      age: 'young, childish',
+      age: 'adult',
       timbre: 'tiny, high-pitched, nasal and whiny with a buzzing edge',
       accent: 'neutral American',
       pace: 'fast and jittery',

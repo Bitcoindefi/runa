@@ -1,0 +1,2554 @@
+{
+  "version": 1,
+  "model": "eleven_multilingual_v2",
+  "format": "mp3_22050_32",
+  "generated": "2026-11-03T18:20:18.678Z",
+  "monsters": {
+    "espectro": {
+      "voice": "X2PdVzazoLuCreMlUYVI",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "espectro/en/contact-1.mp3",
+              "text": "Boo. Did I startle you? Good."
+            },
+            {
+              "file": "espectro/en/contact-2.mp3",
+              "text": "You never see me coming."
+            },
+            {
+              "file": "espectro/en/contact-3.mp3",
+              "text": "Another visitor. How tiresome."
+            },
+            {
+              "file": "espectro/en/contact-4.mp3",
+              "text": "I arrived by update. You leave by coffin."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "espectro/en/monster_hits-1.mp3",
+              "text": "Cold, isn't it?"
+            },
+            {
+              "file": "espectro/en/monster_hits-2.mp3",
+              "text": "Felt that in your soul?"
+            },
+            {
+              "file": "espectro/en/monster_hits-3.mp3",
+              "text": "From nowhere, as always."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "espectro/en/monster_hurt-1.mp3",
+              "text": "You hit... nothing. Mostly."
+            },
+            {
+              "file": "espectro/en/monster_hurt-2.mp3",
+              "text": "Rude. I was haunting."
+            },
+            {
+              "file": "espectro/en/monster_hurt-3.mp3",
+              "text": "That tickles the afterlife."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "espectro/en/monster_low-1.mp3",
+              "text": "I am fading... dramatically."
+            },
+            {
+              "file": "espectro/en/monster_low-2.mp3",
+              "text": "Not again. I just came back."
+            },
+            {
+              "file": "espectro/en/monster_low-3.mp3",
+              "text": "My ectoplasm is leaking."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "espectro/en/player_low-1.mp3",
+              "text": "Soon you'll haunt with me."
+            },
+            {
+              "file": "espectro/en/player_low-2.mp3",
+              "text": "Your light flickers, mortal."
+            },
+            {
+              "file": "espectro/en/player_low-3.mp3",
+              "text": "Join the ghost club."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "espectro/en/player_potion-1.mp3",
+              "text": "Potions? So very alive of you."
+            },
+            {
+              "file": "espectro/en/player_potion-2.mp3",
+              "text": "Drink up. It won't help."
+            },
+            {
+              "file": "espectro/en/player_potion-3.mp3",
+              "text": "Mortals and their little bottles."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "espectro/en/player_guard-1.mp3",
+              "text": "Shields stop swords, not ghosts."
+            },
+            {
+              "file": "espectro/en/player_guard-2.mp3",
+              "text": "Hide all you like."
+            },
+            {
+              "file": "espectro/en/player_guard-3.mp3",
+              "text": "I pass through walls, dear."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "espectro/en/player_retreat-1.mp3",
+              "text": "Running? I float faster."
+            },
+            {
+              "file": "espectro/en/player_retreat-2.mp3",
+              "text": "I'll haunt your dreams instead."
+            },
+            {
+              "file": "espectro/en/player_retreat-3.mp3",
+              "text": "Leaving so soon? Boring."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "espectro/en/monster_death-1.mp3",
+              "text": "I'll be back next patch."
+            },
+            {
+              "file": "espectro/en/monster_death-2.mp3",
+              "text": "Finally, some peace."
+            },
+            {
+              "file": "espectro/en/monster_death-3.mp3",
+              "text": "Ooooh... how original."
+            },
+            {
+              "file": "espectro/en/monster_death-4.mp3",
+              "text": "Tell the update I tried."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "mosquito": {
+      "voice": "E5mUX9YXLdwRsbNiJpLf",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "mosquito/en/contact-1.mp3",
+              "text": "Bzzz! Lunch has legs today!"
+            },
+            {
+              "file": "mosquito/en/contact-2.mp3",
+              "text": "Ooh, fresh blood! My favorite!"
+            },
+            {
+              "file": "mosquito/en/contact-3.mp3",
+              "text": "Hold still, I'm thirsty!"
+            },
+            {
+              "file": "mosquito/en/contact-4.mp3",
+              "text": "Bzz, don't swat, just share!"
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "mosquito/en/monster_hits-1.mp3",
+              "text": "Slurp! Tasty!"
+            },
+            {
+              "file": "mosquito/en/monster_hits-2.mp3",
+              "text": "Bzz! Gotcha, buffet!"
+            },
+            {
+              "file": "mosquito/en/monster_hits-3.mp3",
+              "text": "Itchy now? Good!"
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "mosquito/en/monster_hurt-1.mp3",
+              "text": "Ow! My wings!"
+            },
+            {
+              "file": "mosquito/en/monster_hurt-2.mp3",
+              "text": "Hey! Rude! Bzz!"
+            },
+            {
+              "file": "mosquito/en/monster_hurt-3.mp3",
+              "text": "Missed me! Wait, no. Ow."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "mosquito/en/monster_low-1.mp3",
+              "text": "Bzz... running on empty..."
+            },
+            {
+              "file": "mosquito/en/monster_low-2.mp3",
+              "text": "Just one more sip, please!"
+            },
+            {
+              "file": "mosquito/en/monster_low-3.mp3",
+              "text": "My buzz is fading!"
+            }
+          ],
+          "player_low": [
+            {
+              "file": "mosquito/en/player_low-1.mp3",
+              "text": "You're almost a juice box!"
+            },
+            {
+              "file": "mosquito/en/player_low-2.mp3",
+              "text": "Bzz! Dessert time!"
+            },
+            {
+              "file": "mosquito/en/player_low-3.mp3",
+              "text": "Slow and tasty, perfect!"
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "mosquito/en/player_potion-1.mp3",
+              "text": "Ooh, flavored blood!"
+            },
+            {
+              "file": "mosquito/en/player_potion-2.mp3",
+              "text": "Drink more, I'll drink you!"
+            },
+            {
+              "file": "mosquito/en/player_potion-3.mp3",
+              "text": "Refilling the buffet? Thanks!"
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "mosquito/en/player_guard-1.mp3",
+              "text": "I'll find a gap! Bzz!"
+            },
+            {
+              "file": "mosquito/en/player_guard-2.mp3",
+              "text": "Shields don't stop the itch!"
+            },
+            {
+              "file": "mosquito/en/player_guard-3.mp3",
+              "text": "Peekaboo! Bzz!"
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "mosquito/en/player_retreat-1.mp3",
+              "text": "Come back, snack!"
+            },
+            {
+              "file": "mosquito/en/player_retreat-2.mp3",
+              "text": "I fly faster! Bzz!"
+            },
+            {
+              "file": "mosquito/en/player_retreat-3.mp3",
+              "text": "You can't outrun a buzz!"
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "mosquito/en/monster_death-1.mp3",
+              "text": "Bzz... splat."
+            },
+            {
+              "file": "mosquito/en/monster_death-2.mp3",
+              "text": "Tell my thousand kids... bzz."
+            },
+            {
+              "file": "mosquito/en/monster_death-3.mp3",
+              "text": "Worth it. Tasty."
+            },
+            {
+              "file": "mosquito/en/monster_death-4.mp3",
+              "text": "Not the face!"
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "golem": {
+      "voice": "SateVLt3z1J83dWqlfZF",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "golem/en/contact-1.mp3",
+              "text": "You... are... in... range."
+            },
+            {
+              "file": "golem/en/contact-2.mp3",
+              "text": "Stone... remembers... intruders."
+            },
+            {
+              "file": "golem/en/contact-3.mp3",
+              "text": "My arm... reaches... far."
+            },
+            {
+              "file": "golem/en/contact-4.mp3",
+              "text": "Crossbow... will not... save you."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "golem/en/monster_hits-1.mp3",
+              "text": "Rock... beats... you."
+            },
+            {
+              "file": "golem/en/monster_hits-2.mp3",
+              "text": "Long... arm... strikes."
+            },
+            {
+              "file": "golem/en/monster_hits-3.mp3",
+              "text": "Feel... the... boulder."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "golem/en/monster_hurt-1.mp3",
+              "text": "Pebble... chipped."
+            },
+            {
+              "file": "golem/en/monster_hurt-2.mp3",
+              "text": "That... was... my... good... side."
+            },
+            {
+              "file": "golem/en/monster_hurt-3.mp3",
+              "text": "Hm. Gravel."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "golem/en/monster_low-1.mp3",
+              "text": "Crumbling... slowly... like... me."
+            },
+            {
+              "file": "golem/en/monster_low-2.mp3",
+              "text": "Need... more... rocks."
+            },
+            {
+              "file": "golem/en/monster_low-3.mp3",
+              "text": "Cracks... everywhere."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "golem/en/player_low-1.mp3",
+              "text": "You... soft... like... sand."
+            },
+            {
+              "file": "golem/en/player_low-2.mp3",
+              "text": "Flesh... breaks... easy."
+            },
+            {
+              "file": "golem/en/player_low-3.mp3",
+              "text": "Almost... flat."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "golem/en/player_potion-1.mp3",
+              "text": "Drink... fast... I... wait."
+            },
+            {
+              "file": "golem/en/player_potion-2.mp3",
+              "text": "Potion... not... stone."
+            },
+            {
+              "file": "golem/en/player_potion-3.mp3",
+              "text": "Healing... is... cheating."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "golem/en/player_guard-1.mp3",
+              "text": "Shield... meet... mountain."
+            },
+            {
+              "file": "golem/en/player_guard-2.mp3",
+              "text": "Block... all... day."
+            },
+            {
+              "file": "golem/en/player_guard-3.mp3",
+              "text": "Patience... is... stone."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "golem/en/player_retreat-1.mp3",
+              "text": "Run. My... arm... still... reaches."
+            },
+            {
+              "file": "golem/en/player_retreat-2.mp3",
+              "text": "Go. Rocks... wait... forever."
+            },
+            {
+              "file": "golem/en/player_retreat-3.mp3",
+              "text": "Far... is... still... range."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "golem/en/monster_death-1.mp3",
+              "text": "Back... to... gravel."
+            },
+            {
+              "file": "golem/en/monster_death-2.mp3",
+              "text": "Finally... rest."
+            },
+            {
+              "file": "golem/en/monster_death-3.mp3",
+              "text": "Tell... the... mountain..."
+            },
+            {
+              "file": "golem/en/monster_death-4.mp3",
+              "text": "Crumble... time."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "barbarian_raider": {
+      "voice": "dScl6RfpuYvRJKGGEF0d",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "barbarian_raider/en/contact-1.mp3",
+              "text": "Fresh meat for my axe!"
+            },
+            {
+              "file": "barbarian_raider/en/contact-2.mp3",
+              "text": "Your gold, or your head!"
+            },
+            {
+              "file": "barbarian_raider/en/contact-3.mp3",
+              "text": "Ha! A soft one from town!"
+            },
+            {
+              "file": "barbarian_raider/en/contact-4.mp3",
+              "text": "Axe says hello!"
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "barbarian_raider/en/monster_hits-1.mp3",
+              "text": "Chop chop!"
+            },
+            {
+              "file": "barbarian_raider/en/monster_hits-2.mp3",
+              "text": "Ha! Felt the axe?"
+            },
+            {
+              "file": "barbarian_raider/en/monster_hits-3.mp3",
+              "text": "That's how we greet!"
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "barbarian_raider/en/monster_hurt-1.mp3",
+              "text": "Ha! Barely a scratch!"
+            },
+            {
+              "file": "barbarian_raider/en/monster_hurt-2.mp3",
+              "text": "Good hit! Do it again!"
+            },
+            {
+              "file": "barbarian_raider/en/monster_hurt-3.mp3",
+              "text": "Grr! Now I'm angry!"
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "barbarian_raider/en/monster_low-1.mp3",
+              "text": "Not... done... yet!"
+            },
+            {
+              "file": "barbarian_raider/en/monster_low-2.mp3",
+              "text": "Bleeding is for cowards! Ugh!"
+            },
+            {
+              "file": "barbarian_raider/en/monster_low-3.mp3",
+              "text": "Need... a bigger axe."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "barbarian_raider/en/player_low-1.mp3",
+              "text": "You're wobbling, townie!"
+            },
+            {
+              "file": "barbarian_raider/en/player_low-2.mp3",
+              "text": "Kneel and I'll be quick!"
+            },
+            {
+              "file": "barbarian_raider/en/player_low-3.mp3",
+              "text": "Your boots look my size!"
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "barbarian_raider/en/player_potion-1.mp3",
+              "text": "Drinking already? Ha!"
+            },
+            {
+              "file": "barbarian_raider/en/player_potion-2.mp3",
+              "text": "Save some for me!"
+            },
+            {
+              "file": "barbarian_raider/en/player_potion-3.mp3",
+              "text": "Potions are for the weak!"
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "barbarian_raider/en/player_guard-1.mp3",
+              "text": "Hide behind that plank!"
+            },
+            {
+              "file": "barbarian_raider/en/player_guard-2.mp3",
+              "text": "My axe loves shields!"
+            },
+            {
+              "file": "barbarian_raider/en/player_guard-3.mp3",
+              "text": "Knock knock, townie!"
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "barbarian_raider/en/player_retreat-1.mp3",
+              "text": "Run home to mommy!"
+            },
+            {
+              "file": "barbarian_raider/en/player_retreat-2.mp3",
+              "text": "Ha! Look at it run!"
+            },
+            {
+              "file": "barbarian_raider/en/player_retreat-3.mp3",
+              "text": "Leave the gold behind!"
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "barbarian_raider/en/monster_death-1.mp3",
+              "text": "Tell the chief... I tried..."
+            },
+            {
+              "file": "barbarian_raider/en/monster_death-2.mp3",
+              "text": "Good fight... townie..."
+            },
+            {
+              "file": "barbarian_raider/en/monster_death-3.mp3",
+              "text": "My axe... take care of it."
+            },
+            {
+              "file": "barbarian_raider/en/monster_death-4.mp3",
+              "text": "Ugh... the frost takes me."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "barbarian_thrower": {
+      "voice": "IJ8jx42FqN6PVOyS4mI2",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "barbarian_thrower/en/contact-1.mp3",
+              "text": "Target spotted! Stand still!"
+            },
+            {
+              "file": "barbarian_thrower/en/contact-2.mp3",
+              "text": "From the palisade, with love!"
+            },
+            {
+              "file": "barbarian_thrower/en/contact-3.mp3",
+              "text": "I never miss! Mostly!"
+            },
+            {
+              "file": "barbarian_thrower/en/contact-4.mp3",
+              "text": "Javelin for the tourist!"
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "barbarian_thrower/en/monster_hits-1.mp3",
+              "text": "Bullseye!"
+            },
+            {
+              "file": "barbarian_thrower/en/monster_hits-2.mp3",
+              "text": "Ha! Pinned like a pelt!"
+            },
+            {
+              "file": "barbarian_thrower/en/monster_hits-3.mp3",
+              "text": "Did you catch that?"
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "barbarian_thrower/en/monster_hurt-1.mp3",
+              "text": "Hey! Not fair, up close!"
+            },
+            {
+              "file": "barbarian_thrower/en/monster_hurt-2.mp3",
+              "text": "Ow! Back off!"
+            },
+            {
+              "file": "barbarian_thrower/en/monster_hurt-3.mp3",
+              "text": "My throwing arm!"
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "barbarian_thrower/en/monster_low-1.mp3",
+              "text": "Running out of javelins!"
+            },
+            {
+              "file": "barbarian_thrower/en/monster_low-2.mp3",
+              "text": "Chief! A little help?"
+            },
+            {
+              "file": "barbarian_thrower/en/monster_low-3.mp3",
+              "text": "Okay, maybe I miss sometimes."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "barbarian_thrower/en/player_low-1.mp3",
+              "text": "One more and you're a pincushion!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_low-2.mp3",
+              "text": "Easy target now!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_low-3.mp3",
+              "text": "Hold still, almost done!"
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "barbarian_thrower/en/player_potion-1.mp3",
+              "text": "I'll aim for the bottle!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_potion-2.mp3",
+              "text": "Drink fast, I'm reloading!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_potion-3.mp3",
+              "text": "A potion? Cute."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "barbarian_thrower/en/player_guard-1.mp3",
+              "text": "I'll throw around it!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_guard-2.mp3",
+              "text": "Nice shield. Good target."
+            },
+            {
+              "file": "barbarian_thrower/en/player_guard-3.mp3",
+              "text": "Peek out, I dare you!"
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "barbarian_thrower/en/player_retreat-1.mp3",
+              "text": "Running targets are my favorite!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_retreat-2.mp3",
+              "text": "I can throw far, you know!"
+            },
+            {
+              "file": "barbarian_thrower/en/player_retreat-3.mp3",
+              "text": "Bye! Here's a souvenir!"
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "barbarian_thrower/en/monster_death-1.mp3",
+              "text": "Should've... thrown... harder..."
+            },
+            {
+              "file": "barbarian_thrower/en/monster_death-2.mp3",
+              "text": "Out of... javelins..."
+            },
+            {
+              "file": "barbarian_thrower/en/monster_death-3.mp3",
+              "text": "Tell the chief... I missed."
+            },
+            {
+              "file": "barbarian_thrower/en/monster_death-4.mp3",
+              "text": "Not... my best throw."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "barbarian_chief": {
+      "voice": "Q7CnAfrBDQprmwyoSsOH",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "barbarian_chief/en/contact-1.mp3",
+              "text": "Another trophy walks into my camp."
+            },
+            {
+              "file": "barbarian_chief/en/contact-2.mp3",
+              "text": "Kneel, and I'll keep your skull clean."
+            },
+            {
+              "file": "barbarian_chief/en/contact-3.mp3",
+              "text": "Your armor will look good on me."
+            },
+            {
+              "file": "barbarian_chief/en/contact-4.mp3",
+              "text": "I am the law past the palisade!"
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "barbarian_chief/en/monster_hits-1.mp3",
+              "text": "Feel the weight of command!"
+            },
+            {
+              "file": "barbarian_chief/en/monster_hits-2.mp3",
+              "text": "That's a chief's blow!"
+            },
+            {
+              "file": "barbarian_chief/en/monster_hits-3.mp3",
+              "text": "Bow, little one!"
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "barbarian_chief/en/monster_hurt-1.mp3",
+              "text": "Bold. I like bold trophies."
+            },
+            {
+              "file": "barbarian_chief/en/monster_hurt-2.mp3",
+              "text": "Hmph. You'll pay for that."
+            },
+            {
+              "file": "barbarian_chief/en/monster_hurt-3.mp3",
+              "text": "You dent my stolen plate!"
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "barbarian_chief/en/monster_low-1.mp3",
+              "text": "A chief does not fall!"
+            },
+            {
+              "file": "barbarian_chief/en/monster_low-2.mp3",
+              "text": "To me, warriors! To me!"
+            },
+            {
+              "file": "barbarian_chief/en/monster_low-3.mp3",
+              "text": "You... are worth a song."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "barbarian_chief/en/player_low-1.mp3",
+              "text": "Your skull goes on my belt."
+            },
+            {
+              "file": "barbarian_chief/en/player_low-2.mp3",
+              "text": "Yield. I'll make it quick."
+            },
+            {
+              "file": "barbarian_chief/en/player_low-3.mp3",
+              "text": "The camp will feast tonight!"
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "barbarian_chief/en/player_potion-1.mp3",
+              "text": "Drink. Make the trophy shinier."
+            },
+            {
+              "file": "barbarian_chief/en/player_potion-2.mp3",
+              "text": "Potions won't save your skull."
+            },
+            {
+              "file": "barbarian_chief/en/player_potion-3.mp3",
+              "text": "Ha! Liquid courage!"
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "barbarian_chief/en/player_guard-1.mp3",
+              "text": "I've broken better shields!"
+            },
+            {
+              "file": "barbarian_chief/en/player_guard-2.mp3",
+              "text": "Hide. I will knock."
+            },
+            {
+              "file": "barbarian_chief/en/player_guard-3.mp3",
+              "text": "That shield joins my collection!"
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "barbarian_chief/en/player_retreat-1.mp3",
+              "text": "Run, and tell them who I am!"
+            },
+            {
+              "file": "barbarian_chief/en/player_retreat-2.mp3",
+              "text": "Cowards leave their gold!"
+            },
+            {
+              "file": "barbarian_chief/en/player_retreat-3.mp3",
+              "text": "The camp remembers runners."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "barbarian_chief/en/monster_death-1.mp3",
+              "text": "Take... my trophies... you earned them."
+            },
+            {
+              "file": "barbarian_chief/en/monster_death-2.mp3",
+              "text": "The camp... is yours..."
+            },
+            {
+              "file": "barbarian_chief/en/monster_death-3.mp3",
+              "text": "Sing of me... trophy hunter."
+            },
+            {
+              "file": "barbarian_chief/en/monster_death-4.mp3",
+              "text": "A worthy... end."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "slime": {
+      "voice": "dnARdTtITIWh4pjx6E71",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "slime/en/contact-1.mp3",
+              "text": "Hiii! Wanna be friends? Blorp!"
+            },
+            {
+              "file": "slime/en/contact-2.mp3",
+              "text": "A hug! Gimme a hug!"
+            },
+            {
+              "file": "slime/en/contact-3.mp3",
+              "text": "Squish squish, here I come!"
+            },
+            {
+              "file": "slime/en/contact-4.mp3",
+              "text": "You smell like snacks!"
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "slime/en/monster_hits-1.mp3",
+              "text": "Sticky hug!"
+            },
+            {
+              "file": "slime/en/monster_hits-2.mp3",
+              "text": "Blorp! Gotcha!"
+            },
+            {
+              "file": "slime/en/monster_hits-3.mp3",
+              "text": "Now you're gooey too!"
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "slime/en/monster_hurt-1.mp3",
+              "text": "Ow! I'm jelly, not a drum!"
+            },
+            {
+              "file": "slime/en/monster_hurt-2.mp3",
+              "text": "Splat! Rude!"
+            },
+            {
+              "file": "slime/en/monster_hurt-3.mp3",
+              "text": "You split my goo!"
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "slime/en/monster_low-1.mp3",
+              "text": "I'm melting... help..."
+            },
+            {
+              "file": "slime/en/monster_low-2.mp3",
+              "text": "Just a puddle now..."
+            },
+            {
+              "file": "slime/en/monster_low-3.mp3",
+              "text": "Blorp... not feeling bouncy."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "slime/en/player_low-1.mp3",
+              "text": "You look tired! Nap in me!"
+            },
+            {
+              "file": "slime/en/player_low-2.mp3",
+              "text": "Almost digested! Yay!"
+            },
+            {
+              "file": "slime/en/player_low-3.mp3",
+              "text": "Wobbly, like me!"
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "slime/en/player_potion-1.mp3",
+              "text": "Ooh, can I have some?"
+            },
+            {
+              "file": "slime/en/player_potion-2.mp3",
+              "text": "Juice! I love juice!"
+            },
+            {
+              "file": "slime/en/player_potion-3.mp3",
+              "text": "Share, share, share!"
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "slime/en/player_guard-1.mp3",
+              "text": "I'll just ooze around it!"
+            },
+            {
+              "file": "slime/en/player_guard-2.mp3",
+              "text": "Shields are sticky now!"
+            },
+            {
+              "file": "slime/en/player_guard-3.mp3",
+              "text": "Hide and seek! Blorp!"
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "slime/en/player_retreat-1.mp3",
+              "text": "Wait! Don't leave me!"
+            },
+            {
+              "file": "slime/en/player_retreat-2.mp3",
+              "text": "I'm slow but I'm clingy!"
+            },
+            {
+              "file": "slime/en/player_retreat-3.mp3",
+              "text": "Come back for hugs!"
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "slime/en/monster_death-1.mp3",
+              "text": "Blorp... bye-bye..."
+            },
+            {
+              "file": "slime/en/monster_death-2.mp3",
+              "text": "Mop me up later..."
+            },
+            {
+              "file": "slime/en/monster_death-3.mp3",
+              "text": "I just wanted... a hug..."
+            },
+            {
+              "file": "slime/en/monster_death-4.mp3",
+              "text": "Splorch."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "skeleton": {
+      "voice": "cPlqClgiDTTIAOXW7fAz",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "skeleton/en/contact-1.mp3",
+              "text": "Halt. Crypt's closed. Forever."
+            },
+            {
+              "file": "skeleton/en/contact-2.mp3",
+              "text": "Night shift again. Great."
+            },
+            {
+              "file": "skeleton/en/contact-3.mp3",
+              "text": "Who goes there? Never mind."
+            },
+            {
+              "file": "skeleton/en/contact-4.mp3",
+              "text": "No visitors past this tomb."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "skeleton/en/monster_hits-1.mp3",
+              "text": "Rattle rattle, gotcha."
+            },
+            {
+              "file": "skeleton/en/monster_hits-2.mp3",
+              "text": "Bone to pick with you."
+            },
+            {
+              "file": "skeleton/en/monster_hits-3.mp3",
+              "text": "Clocked in. Clocked you."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "skeleton/en/monster_hurt-1.mp3",
+              "text": "Hey, I need that rib."
+            },
+            {
+              "file": "skeleton/en/monster_hurt-2.mp3",
+              "text": "Ow. Phantom pain."
+            },
+            {
+              "file": "skeleton/en/monster_hurt-3.mp3",
+              "text": "Rude. I'm on duty."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "skeleton/en/monster_low-1.mp3",
+              "text": "Falling apart here..."
+            },
+            {
+              "file": "skeleton/en/monster_low-2.mp3",
+              "text": "Where'd my femur go?"
+            },
+            {
+              "file": "skeleton/en/monster_low-3.mp3",
+              "text": "Not paid enough for this."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "skeleton/en/player_low-1.mp3",
+              "text": "You'll make a fine skeleton."
+            },
+            {
+              "file": "skeleton/en/player_low-2.mp3",
+              "text": "Room for one more down here."
+            },
+            {
+              "file": "skeleton/en/player_low-3.mp3",
+              "text": "Almost my coworker."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "skeleton/en/player_potion-1.mp3",
+              "text": "Must be nice, having a throat."
+            },
+            {
+              "file": "skeleton/en/player_potion-2.mp3",
+              "text": "Potions. Living people stuff."
+            },
+            {
+              "file": "skeleton/en/player_potion-3.mp3",
+              "text": "Drink. I'll wait. Forever."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "skeleton/en/player_guard-1.mp3",
+              "text": "Shields. Classic."
+            },
+            {
+              "file": "skeleton/en/player_guard-2.mp3",
+              "text": "I've got all eternity."
+            },
+            {
+              "file": "skeleton/en/player_guard-3.mp3",
+              "text": "Knock knock on your shield."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "skeleton/en/player_retreat-1.mp3",
+              "text": "Fine. Less paperwork."
+            },
+            {
+              "file": "skeleton/en/player_retreat-2.mp3",
+              "text": "Run. I'll be here. Always."
+            },
+            {
+              "file": "skeleton/en/player_retreat-3.mp3",
+              "text": "Don't come back. Please."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "skeleton/en/monster_death-1.mp3",
+              "text": "Finally... clocking out."
+            },
+            {
+              "file": "skeleton/en/monster_death-2.mp3",
+              "text": "Rest in pieces."
+            },
+            {
+              "file": "skeleton/en/monster_death-3.mp3",
+              "text": "Tell the king... I quit."
+            },
+            {
+              "file": "skeleton/en/monster_death-4.mp3",
+              "text": "Clatter."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "skeleton_knight": {
+      "voice": "PvVSqWnYdr4hJDMICWAA",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "skeleton_knight/en/contact-1.mp3",
+              "text": "Draw thy blade, intruder."
+            },
+            {
+              "file": "skeleton_knight/en/contact-2.mp3",
+              "text": "My oath outlived my flesh."
+            },
+            {
+              "file": "skeleton_knight/en/contact-3.mp3",
+              "text": "Halt. Thou shalt not pass."
+            },
+            {
+              "file": "skeleton_knight/en/contact-4.mp3",
+              "text": "Face me with honor."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "skeleton_knight/en/monster_hits-1.mp3",
+              "text": "A clean strike. Learn from it."
+            },
+            {
+              "file": "skeleton_knight/en/monster_hits-2.mp3",
+              "text": "Discipline cuts deeper."
+            },
+            {
+              "file": "skeleton_knight/en/monster_hits-3.mp3",
+              "text": "Steel never forgets."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "skeleton_knight/en/monster_hurt-1.mp3",
+              "text": "A fair hit. Again."
+            },
+            {
+              "file": "skeleton_knight/en/monster_hurt-2.mp3",
+              "text": "My armor rusts, not my will."
+            },
+            {
+              "file": "skeleton_knight/en/monster_hurt-3.mp3",
+              "text": "Well struck, knight."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "skeleton_knight/en/monster_low-1.mp3",
+              "text": "I shall not yield."
+            },
+            {
+              "file": "skeleton_knight/en/monster_low-2.mp3",
+              "text": "My shield... holds... still."
+            },
+            {
+              "file": "skeleton_knight/en/monster_low-3.mp3",
+              "text": "A knight stands till the end."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "skeleton_knight/en/player_low-1.mp3",
+              "text": "Yield, and keep thy honor."
+            },
+            {
+              "file": "skeleton_knight/en/player_low-2.mp3",
+              "text": "Thy guard falters."
+            },
+            {
+              "file": "skeleton_knight/en/player_low-3.mp3",
+              "text": "Kneel. There is no shame."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "skeleton_knight/en/player_potion-1.mp3",
+              "text": "Mend thyself. I shall wait."
+            },
+            {
+              "file": "skeleton_knight/en/player_potion-2.mp3",
+              "text": "A fair pause. Drink."
+            },
+            {
+              "file": "skeleton_knight/en/player_potion-3.mp3",
+              "text": "Restore thyself, then fight."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "skeleton_knight/en/player_guard-1.mp3",
+              "text": "A proper guard. Good form."
+            },
+            {
+              "file": "skeleton_knight/en/player_guard-2.mp3",
+              "text": "Shield to shield, then."
+            },
+            {
+              "file": "skeleton_knight/en/player_guard-3.mp3",
+              "text": "Defense is a virtue."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "skeleton_knight/en/player_retreat-1.mp3",
+              "text": "Retreat is no dishonor."
+            },
+            {
+              "file": "skeleton_knight/en/player_retreat-2.mp3",
+              "text": "Go. Return stronger."
+            },
+            {
+              "file": "skeleton_knight/en/player_retreat-3.mp3",
+              "text": "The crypt shall await thee."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "skeleton_knight/en/monster_death-1.mp3",
+              "text": "My watch... is ended."
+            },
+            {
+              "file": "skeleton_knight/en/monster_death-2.mp3",
+              "text": "Well fought... knight."
+            },
+            {
+              "file": "skeleton_knight/en/monster_death-3.mp3",
+              "text": "At last... release."
+            },
+            {
+              "file": "skeleton_knight/en/monster_death-4.mp3",
+              "text": "Tell my king... I held."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "skeleton_archer": {
+      "voice": "FUvipmkquemLTyR5BTZp",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "skeleton_archer/en/contact-1.mp3",
+              "text": "Seen you. Since the stairs."
+            },
+            {
+              "file": "skeleton_archer/en/contact-2.mp3",
+              "text": "One arrow. One count."
+            },
+            {
+              "file": "skeleton_archer/en/contact-3.mp3",
+              "text": "Stay in the light, please."
+            },
+            {
+              "file": "skeleton_archer/en/contact-4.mp3",
+              "text": "From the back row, hello."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "skeleton_archer/en/monster_hits-1.mp3",
+              "text": "Thirty-two."
+            },
+            {
+              "file": "skeleton_archer/en/monster_hits-2.mp3",
+              "text": "Arrow found its home."
+            },
+            {
+              "file": "skeleton_archer/en/monster_hits-3.mp3",
+              "text": "Right where I counted."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "skeleton_archer/en/monster_hurt-1.mp3",
+              "text": "Up close? How vulgar."
+            },
+            {
+              "file": "skeleton_archer/en/monster_hurt-2.mp3",
+              "text": "My bowstring! Careful!"
+            },
+            {
+              "file": "skeleton_archer/en/monster_hurt-3.mp3",
+              "text": "That's not in my count."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "skeleton_archer/en/monster_low-1.mp3",
+              "text": "Quiver's... almost empty."
+            },
+            {
+              "file": "skeleton_archer/en/monster_low-2.mp3",
+              "text": "Lost count. Bad sign."
+            },
+            {
+              "file": "skeleton_archer/en/monster_low-3.mp3",
+              "text": "Need distance. Lots."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "skeleton_archer/en/player_low-1.mp3",
+              "text": "One more. Then I'm done counting."
+            },
+            {
+              "file": "skeleton_archer/en/player_low-2.mp3",
+              "text": "You're slowing. Easier shot."
+            },
+            {
+              "file": "skeleton_archer/en/player_low-3.mp3",
+              "text": "Hold that pose."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "skeleton_archer/en/player_potion-1.mp3",
+              "text": "Bottle's a nice target."
+            },
+            {
+              "file": "skeleton_archer/en/player_potion-2.mp3",
+              "text": "Drinking? Aiming."
+            },
+            {
+              "file": "skeleton_archer/en/player_potion-3.mp3",
+              "text": "Heal up. More to count."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "skeleton_archer/en/player_guard-1.mp3",
+              "text": "Shields have edges."
+            },
+            {
+              "file": "skeleton_archer/en/player_guard-2.mp3",
+              "text": "I can wait for a gap."
+            },
+            {
+              "file": "skeleton_archer/en/player_guard-3.mp3",
+              "text": "Arrows bend. Kind of."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "skeleton_archer/en/player_retreat-1.mp3",
+              "text": "Moving target. Fun."
+            },
+            {
+              "file": "skeleton_archer/en/player_retreat-2.mp3",
+              "text": "Running is still in range."
+            },
+            {
+              "file": "skeleton_archer/en/player_retreat-3.mp3",
+              "text": "Leaving? Pity."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "skeleton_archer/en/monster_death-1.mp3",
+              "text": "Final... count..."
+            },
+            {
+              "file": "skeleton_archer/en/monster_death-2.mp3",
+              "text": "Should've stayed... in the back."
+            },
+            {
+              "file": "skeleton_archer/en/monster_death-3.mp3",
+              "text": "Out of... arrows..."
+            },
+            {
+              "file": "skeleton_archer/en/monster_death-4.mp3",
+              "text": "Miss... noted."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "skeleton_elite": {
+      "voice": "m00tWYCTVA5Bogm1sQbB",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "skeleton_elite/en/contact-1.mp3",
+              "text": "Black Guard. Halt and die."
+            },
+            {
+              "file": "skeleton_elite/en/contact-2.mp3",
+              "text": "The king sees all intruders."
+            },
+            {
+              "file": "skeleton_elite/en/contact-3.mp3",
+              "text": "Formation! Engage!"
+            },
+            {
+              "file": "skeleton_elite/en/contact-4.mp3",
+              "text": "You will not reach the throne."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "skeleton_elite/en/monster_hits-1.mp3",
+              "text": "For the king!"
+            },
+            {
+              "file": "skeleton_elite/en/monster_hits-2.mp3",
+              "text": "Strike. Advance. Repeat."
+            },
+            {
+              "file": "skeleton_elite/en/monster_hits-3.mp3",
+              "text": "Obey the blade."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "skeleton_elite/en/monster_hurt-1.mp3",
+              "text": "Pain is for the living."
+            },
+            {
+              "file": "skeleton_elite/en/monster_hurt-2.mp3",
+              "text": "Noted. Retaliating."
+            },
+            {
+              "file": "skeleton_elite/en/monster_hurt-3.mp3",
+              "text": "The Guard does not flinch."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "skeleton_elite/en/monster_low-1.mp3",
+              "text": "Hold the line!"
+            },
+            {
+              "file": "skeleton_elite/en/monster_low-2.mp3",
+              "text": "The king... must be warned."
+            },
+            {
+              "file": "skeleton_elite/en/monster_low-3.mp3",
+              "text": "Guard... never... breaks."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "skeleton_elite/en/player_low-1.mp3",
+              "text": "Surrender to the crown."
+            },
+            {
+              "file": "skeleton_elite/en/player_low-2.mp3",
+              "text": "Your march ends here."
+            },
+            {
+              "file": "skeleton_elite/en/player_low-3.mp3",
+              "text": "The throne room awaits your bones."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "skeleton_elite/en/player_potion-1.mp3",
+              "text": "Potions are contraband."
+            },
+            {
+              "file": "skeleton_elite/en/player_potion-2.mp3",
+              "text": "Drink. It changes nothing."
+            },
+            {
+              "file": "skeleton_elite/en/player_potion-3.mp3",
+              "text": "Confiscated. Eventually."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "skeleton_elite/en/player_guard-1.mp3",
+              "text": "Break their guard!"
+            },
+            {
+              "file": "skeleton_elite/en/player_guard-2.mp3",
+              "text": "Defense noted. Adjusting."
+            },
+            {
+              "file": "skeleton_elite/en/player_guard-3.mp3",
+              "text": "Shields fall like kingdoms."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "skeleton_elite/en/player_retreat-1.mp3",
+              "text": "Retreat logged. Pursue!"
+            },
+            {
+              "file": "skeleton_elite/en/player_retreat-2.mp3",
+              "text": "Desertion is punishable."
+            },
+            {
+              "file": "skeleton_elite/en/player_retreat-3.mp3",
+              "text": "Run to your kingdom, peasant."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "skeleton_elite/en/monster_death-1.mp3",
+              "text": "Long live... the king..."
+            },
+            {
+              "file": "skeleton_elite/en/monster_death-2.mp3",
+              "text": "Guard... falls..."
+            },
+            {
+              "file": "skeleton_elite/en/monster_death-3.mp3",
+              "text": "My king... forgive me."
+            },
+            {
+              "file": "skeleton_elite/en/monster_death-4.mp3",
+              "text": "Line... broken..."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "skeleton_king": {
+      "voice": "TrcrXZVdF4Z7I7G6pKN3",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "skeleton_king/en/contact-1.mp3",
+              "text": "Kneel before your eternal king!"
+            },
+            {
+              "file": "skeleton_king/en/contact-2.mp3",
+              "text": "A visitor! How delightfully doomed."
+            },
+            {
+              "file": "skeleton_king/en/contact-3.mp3",
+              "text": "Welcome to my court, worm."
+            },
+            {
+              "file": "skeleton_king/en/contact-4.mp3",
+              "text": "I have waited centuries for applause."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "skeleton_king/en/monster_hits-1.mp3",
+              "text": "Royal decree: pain!"
+            },
+            {
+              "file": "skeleton_king/en/monster_hits-2.mp3",
+              "text": "Bow, when struck by royalty!"
+            },
+            {
+              "file": "skeleton_king/en/monster_hits-3.mp3",
+              "text": "Magnificent, wasn't it?"
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "skeleton_king/en/monster_hurt-1.mp3",
+              "text": "Treason! Against my crown!"
+            },
+            {
+              "file": "skeleton_king/en/monster_hurt-2.mp3",
+              "text": "You scratched the royal bones!"
+            },
+            {
+              "file": "skeleton_king/en/monster_hurt-3.mp3",
+              "text": "How dare you, peasant!"
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "skeleton_king/en/monster_low-1.mp3",
+              "text": "My kingdom... for a femur!"
+            },
+            {
+              "file": "skeleton_king/en/monster_low-2.mp3",
+              "text": "Guards! Guards? Anyone?"
+            },
+            {
+              "file": "skeleton_king/en/monster_low-3.mp3",
+              "text": "A king cannot fall... can he?"
+            }
+          ],
+          "player_low": [
+            {
+              "file": "skeleton_king/en/player_low-1.mp3",
+              "text": "Your crown of bones awaits!"
+            },
+            {
+              "file": "skeleton_king/en/player_low-2.mp3",
+              "text": "Join my court, forever!"
+            },
+            {
+              "file": "skeleton_king/en/player_low-3.mp3",
+              "text": "The audience is almost over."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "skeleton_king/en/player_potion-1.mp3",
+              "text": "Drink, jester. Entertain me longer."
+            },
+            {
+              "file": "skeleton_king/en/player_potion-2.mp3",
+              "text": "Potions in my throne room? Tacky."
+            },
+            {
+              "file": "skeleton_king/en/player_potion-3.mp3",
+              "text": "Yes, prolong the show!"
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "skeleton_king/en/player_guard-1.mp3",
+              "text": "Cowering before royalty? Fitting."
+            },
+            {
+              "file": "skeleton_king/en/player_guard-2.mp3",
+              "text": "Hide behind that shield, subject."
+            },
+            {
+              "file": "skeleton_king/en/player_guard-3.mp3",
+              "text": "Shields bore me. Attack!"
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "skeleton_king/en/player_retreat-1.mp3",
+              "text": "Did I dismiss you?"
+            },
+            {
+              "file": "skeleton_king/en/player_retreat-2.mp3",
+              "text": "Leaving the court? Rude!"
+            },
+            {
+              "file": "skeleton_king/en/player_retreat-3.mp3",
+              "text": "Run! Tell them of my glory!"
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "skeleton_king/en/monster_death-1.mp3",
+              "text": "The king... is dead..."
+            },
+            {
+              "file": "skeleton_king/en/monster_death-2.mp3",
+              "text": "Long live... me..."
+            },
+            {
+              "file": "skeleton_king/en/monster_death-3.mp3",
+              "text": "My crown... polish it."
+            },
+            {
+              "file": "skeleton_king/en/monster_death-4.mp3",
+              "text": "Curtain... falls..."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    "colossus": {
+      "voice": "9hwDyyRQRYESSovpSFgA",
+      "lines": {
+        "en": {
+          "contact": [
+            {
+              "file": "colossus/en/contact-1.mp3",
+              "text": "Who... wakes... the stone?"
+            },
+            {
+              "file": "colossus/en/contact-2.mp3",
+              "text": "The rune... calls... for you."
+            },
+            {
+              "file": "colossus/en/contact-3.mp3",
+              "text": "Small... thing. Step... closer."
+            },
+            {
+              "file": "colossus/en/contact-4.mp3",
+              "text": "I have... guarded... a thousand years."
+            }
+          ],
+          "monster_hits": [
+            {
+              "file": "colossus/en/monster_hits-1.mp3",
+              "text": "Feel... the mountain."
+            },
+            {
+              "file": "colossus/en/monster_hits-2.mp3",
+              "text": "Dust... to dust."
+            },
+            {
+              "file": "colossus/en/monster_hits-3.mp3",
+              "text": "The earth... answers."
+            }
+          ],
+          "monster_hurt": [
+            {
+              "file": "colossus/en/monster_hurt-1.mp3",
+              "text": "A pebble... stings."
+            },
+            {
+              "file": "colossus/en/monster_hurt-2.mp3",
+              "text": "You... chip... at eternity."
+            },
+            {
+              "file": "colossus/en/monster_hurt-3.mp3",
+              "text": "Hmm... bold."
+            }
+          ],
+          "monster_low": [
+            {
+              "file": "colossus/en/monster_low-1.mp3",
+              "text": "My core... is... exposed."
+            },
+            {
+              "file": "colossus/en/monster_low-2.mp3",
+              "text": "The rune... flickers..."
+            },
+            {
+              "file": "colossus/en/monster_low-3.mp3",
+              "text": "Stone... can... break."
+            }
+          ],
+          "player_low": [
+            {
+              "file": "colossus/en/player_low-1.mp3",
+              "text": "Your flame... grows... small."
+            },
+            {
+              "file": "colossus/en/player_low-2.mp3",
+              "text": "Lie down... in... the ash."
+            },
+            {
+              "file": "colossus/en/player_low-3.mp3",
+              "text": "Little... one... falls."
+            }
+          ],
+          "player_potion": [
+            {
+              "file": "colossus/en/player_potion-1.mp3",
+              "text": "Drink... it changes... nothing."
+            },
+            {
+              "file": "colossus/en/player_potion-2.mp3",
+              "text": "Mortal... remedies..."
+            },
+            {
+              "file": "colossus/en/player_potion-3.mp3",
+              "text": "Heal... I... am patient."
+            }
+          ],
+          "player_guard": [
+            {
+              "file": "colossus/en/player_guard-1.mp3",
+              "text": "Shields... are... sand."
+            },
+            {
+              "file": "colossus/en/player_guard-2.mp3",
+              "text": "Hide... the mountain... finds you."
+            },
+            {
+              "file": "colossus/en/player_guard-3.mp3",
+              "text": "Brace... yourself."
+            }
+          ],
+          "player_retreat": [
+            {
+              "file": "colossus/en/player_retreat-1.mp3",
+              "text": "Flee... the stone... remembers."
+            },
+            {
+              "file": "colossus/en/player_retreat-2.mp3",
+              "text": "Run... the ash... is wide."
+            },
+            {
+              "file": "colossus/en/player_retreat-3.mp3",
+              "text": "Go... return... stronger."
+            }
+          ],
+          "monster_death": [
+            {
+              "file": "colossus/en/monster_death-1.mp3",
+              "text": "The rune... goes... dark."
+            },
+            {
+              "file": "colossus/en/monster_death-2.mp3",
+              "text": "At last... I... sleep."
+            },
+            {
+              "file": "colossus/en/monster_death-3.mp3",
+              "text": "Crumbling... to... the sea."
+            },
+            {
+              "file": "colossus/en/monster_death-4.mp3",
+              "text": "Well... struck... small one."
+            }
+          ],
+          "windup_slam": [
+            {
+              "file": "colossus/en/windup_slam-1.mp3",
+              "text": "Fall... upon... you!"
+            },
+            {
+              "file": "colossus/en/windup_slam-2.mp3",
+              "text": "Stone... fist... descends!"
+            },
+            {
+              "file": "colossus/en/windup_slam-3.mp3",
+              "text": "Feel... the... weight!"
+            }
+          ],
+          "windup_sweep": [
+            {
+              "file": "colossus/en/windup_sweep-1.mp3",
+              "text": "The wave... comes!"
+            },
+            {
+              "file": "colossus/en/windup_sweep-2.mp3",
+              "text": "Sweep... the... ash!"
+            },
+            {
+              "file": "colossus/en/windup_sweep-3.mp3",
+              "text": "Nowhere... to... stand!"
+            }
+          ],
+          "phase_change": [
+            {
+              "file": "colossus/en/phase_change-1.mp3",
+              "text": "The shell... cracks... the rune... wakes!"
+            },
+            {
+              "file": "colossus/en/phase_change-2.mp3",
+              "text": "Now... you... see... my core!"
+            },
+            {
+              "file": "colossus/en/phase_change-3.mp3",
+              "text": "Enough... the ground... will shake!"
+            }
+          ],
+          "defeated": [
+            {
+              "file": "colossus/en/defeated-1.mp3",
+              "text": "Another... thousand... years... of rest."
+            },
+            {
+              "file": "colossus/en/defeated-2.mp3",
+              "text": "Guard... the rune... in my place."
+            },
+            {
+              "file": "colossus/en/defeated-3.mp3",
+              "text": "The ash... is... yours now."
+            }
+          ]
+        },
+        "es": {
+          "contact": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "monster_hits": [
+            null,
+            null,
+            null
+          ],
+          "monster_hurt": [
+            null,
+            null,
+            null
+          ],
+          "monster_low": [
+            null,
+            null,
+            null
+          ],
+          "player_low": [
+            null,
+            null,
+            null
+          ],
+          "player_potion": [
+            null,
+            null,
+            null
+          ],
+          "player_guard": [
+            null,
+            null,
+            null
+          ],
+          "player_retreat": [
+            null,
+            null,
+            null
+          ],
+          "monster_death": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "windup_slam": [
+            null,
+            null,
+            null
+          ],
+          "windup_sweep": [
+            null,
+            null,
+            null
+          ],
+          "phase_change": [
+            null,
+            null,
+            null
+          ],
+          "defeated": [
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    }
+  }
+}
