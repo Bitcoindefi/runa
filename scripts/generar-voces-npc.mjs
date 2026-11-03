@@ -8,7 +8,8 @@
 //
 // Escribe assets/voces-npc/voces.json (id de voz por NPC),
 // assets/voces-npc/<id>/en/<n>.mp3 y assets/voces-npc/manifest.json (texto
-// exacto en ingles -> mp3).
+// exacto en ingles -> mp3, y en faces los retratos de assets/retratos-npc).
+// Con --yes y nada pendiente solo rehace el manifiesto, sin gastar.
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -18,6 +19,7 @@ import { NPC_VOICES, allNpcLines, npcSample } from './tripo-voces-npc.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = path.join(ROOT, 'assets', 'voces-npc')
+const FACES = path.join(ROOT, 'assets', 'retratos-npc')
 const API = 'https://api.elevenlabs.io'
 const YES = process.argv.includes('--yes')
 const MODEL = 'eleven_multilingual_v2'
@@ -107,7 +109,15 @@ function buildManifest() {
   for (const line of allNpcLines()) {
     if (fs.existsSync(path.join(OUT, line.file))) lines[line.text] = line.file
   }
-  return { version: 1, lang: 'en', model: MODEL, format: FORMAT, lines }
+  // Los retratos que hay (Rosebud): la caja de dialogo no pide los que faltan.
+  const faces = fs.existsSync(FACES)
+    ? fs
+        .readdirSync(FACES)
+        .filter((name) => /^[a-z-]+\.webp$/.test(name))
+        .map((name) => name.slice(0, -'.webp'.length))
+        .sort()
+    : []
+  return { version: 1, lang: 'en', model: MODEL, format: FORMAT, lines, faces }
 }
 
 async function main() {

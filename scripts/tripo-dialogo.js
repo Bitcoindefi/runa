@@ -5,12 +5,18 @@
 //
 // Todo es perezoso: el manifiesto de voces, el mp3 y el retrato se piden solo
 // cuando se habla con ese NPC. Sin mp3 o con el sonido apagado, el texto se
-// escribe solo. Sin retrato, un marco dorado con la inicial.
+// escribe solo. Sin retrato (no esta en faces del manifiesto), un marco dorado
+// con la inicial y ningun pedido.
 //
 //   const dialogue = createDialogue({ sound: () => settings.sound !== false })
 //   dialogue.show({ id: 'cedric', name: 'sir Cedric, square knight', text })
 //   dialogue.open()   // true mientras la caja esta a la vista
+//   dialogue.onTop()  // true si la caja va arriba (celular): tapa lo de arriba
 //   dialogue.hide()
+
+// En el celular, o con el dedo, la caja va arriba, debajo de la ficha, para no
+// tapar los botones de abajo.
+const TOP = '(max-width: 700px), (pointer: coarse)'
 
 const CSS = `
 #dialogo {
@@ -65,7 +71,7 @@ const CSS = `
 }
 #dialogo .flecha[hidden] { display: none; }
 @keyframes dialogo-titila { to { visibility: hidden; } }
-@media (max-width: 700px), (pointer: coarse) {
+@media ${TOP} {
   #dialogo {
     bottom: auto;
     top: calc(env(safe-area-inset-top, 0px) + 64px);
@@ -139,18 +145,28 @@ export function createDialogue({
     audio = null
   }
 
+  // El retrato se pide solo si esta en faces del manifiesto (un manifiesto viejo
+  // sin la lista lo pide igual). Si mientras tanto habla otro, no se mezclan.
+  let faceId = ''
   function setFace(id, label) {
     const initial = (
       label.replace(/^(sir|sister|hermana|king|rey)\s+/i, '')[0] || '?'
     ).toUpperCase()
+    faceId = id || ''
     face.replaceChildren()
     face.textContent = initial
     if (!id) return
-    const img = doc.createElement('img')
-    img.alt = ''
-    img.decoding = 'async'
-    img.onload = () => face.replaceChildren(img)
-    img.src = new URL(id + '.webp', facesRoot).href
+    loadManifest().then((data) => {
+      const faces = data && data.faces
+      if (faceId !== id || (Array.isArray(faces) && !faces.includes(id))) return
+      const img = doc.createElement('img')
+      img.alt = ''
+      img.decoding = 'async'
+      img.onload = () => {
+        if (faceId === id) face.replaceChildren(img)
+      }
+      img.src = new URL(id + '.webp', facesRoot).href
+    })
   }
 
   function tick(now) {
@@ -232,5 +248,12 @@ export function createDialogue({
     advance()
   })
 
-  return { show, hide, advance, open: () => !box.hidden, element: box }
+  return {
+    show,
+    hide,
+    advance,
+    open: () => !box.hidden,
+    onTop: () => win.matchMedia(TOP).matches,
+    element: box
+  }
 }

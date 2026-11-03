@@ -20,5 +20,21 @@
     "the night can heal too, if you know how to listen": "nox-priestess/en/1.mp3",
     "cold mushrooms glow without fire and feed the whole town": "nox-mycologist/en/1.mp3",
     "the palace was carved upward in search of a moon we never see": "nox-sentinel/en/1.mp3"
-  }
+  },
+  "faces": [
+    "aldren",
+    "alma",
+    "brom",
+    "bruno",
+    "cedric",
+    "elian",
+    "iris",
+    "nox-alchemist",
+    "nox-armorer",
+    "nox-merchant",
+    "nox-priestess",
+    "nox-smith",
+    "roan",
+    "vera"
+  ]
 }

@@ -26,3 +26,17 @@ test('voces de NPC: el rey Aldren tiene voz', (t) => {
   t.ok(king)
   t.is(manifest.lines[EN[king.line]], 'aldren/en/1.mp3')
 })
+
+test('voces de NPC: faces lista justo los retratos que hay', (t) => {
+  const fs = require('bare-fs')
+  const path = require('bare-path')
+  const dir = path.join(__dirname, '..', 'assets', 'retratos-npc')
+  const files = fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith('.webp'))
+    .map((name) => name.slice(0, -'.webp'.length))
+    .sort()
+  t.alike(manifest.faces, files)
+  const ids = new Set(Object.values(MAPS).flatMap((map) => (map.npcs || []).map((npc) => npc.id)))
+  for (const id of manifest.faces) t.ok(ids.has(id), 'retrato de un NPC del juego: ' + id)
+})
