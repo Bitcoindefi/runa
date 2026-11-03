@@ -144,53 +144,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -334,53 +296,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -524,53 +448,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -714,53 +600,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -904,53 +752,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -1094,53 +904,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -1284,53 +1056,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -1474,53 +1208,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -1664,53 +1360,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -1854,53 +1512,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -2044,53 +1664,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -2234,53 +1816,15 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null]
         }
       }
     },
@@ -2480,73 +2024,19 @@
           ]
         },
         "es": {
-          "contact": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "monster_hits": [
-            null,
-            null,
-            null
-          ],
-          "monster_hurt": [
-            null,
-            null,
-            null
-          ],
-          "monster_low": [
-            null,
-            null,
-            null
-          ],
-          "player_low": [
-            null,
-            null,
-            null
-          ],
-          "player_potion": [
-            null,
-            null,
-            null
-          ],
-          "player_guard": [
-            null,
-            null,
-            null
-          ],
-          "player_retreat": [
-            null,
-            null,
-            null
-          ],
-          "monster_death": [
-            null,
-            null,
-            null,
-            null
-          ],
-          "windup_slam": [
-            null,
-            null,
-            null
-          ],
-          "windup_sweep": [
-            null,
-            null,
-            null
-          ],
-          "phase_change": [
-            null,
-            null,
-            null
-          ],
-          "defeated": [
-            null,
-            null,
-            null
-          ]
+          "contact": [null, null, null, null],
+          "monster_hits": [null, null, null],
+          "monster_hurt": [null, null, null],
+          "monster_low": [null, null, null],
+          "player_low": [null, null, null],
+          "player_potion": [null, null, null],
+          "player_guard": [null, null, null],
+          "player_retreat": [null, null, null],
+          "monster_death": [null, null, null, null],
+          "windup_slam": [null, null, null],
+          "windup_sweep": [null, null, null],
+          "phase_change": [null, null, null],
+          "defeated": [null, null, null]
         }
       }
     }
