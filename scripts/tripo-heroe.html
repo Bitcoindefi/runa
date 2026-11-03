@@ -3676,8 +3676,14 @@
         'Death'
       ])
       // La carga del juego dura de 0,6 s a varios segundos: el clip se acelera
-      // hasta 2,5 veces o se frena hasta 0,6 para que el impacto caiga justo.
-      const BOSS_PACE = [0.6, 2.5]
+      // hasta 2,5 veces o se frena hasta 0,3 para que el impacto caiga justo.
+      // Con 0,6 una carga larga dejaba al Coloso quieto en la pose de reposo
+      // (el clip parado en el cuadro 0) hasta el ultimo segundo y medio.
+      const BOSS_PACE = [0.3, 2.5]
+      // La base un poco mas viva que el clip: respira y se balancea mas rapido.
+      const BOSS_SPEED = { Idle: 1.35, Walk: 1.15 }
+      // Quieto en Idle este rato, sin golpe en carga, ruge para mover los brazos.
+      const BOSS_TAUNT_S = 7
       const bossAnim = {}
       function bossAnimReset() {
         if (bossAnim.mixer) {
@@ -3690,6 +3696,7 @@
           actions: {},
           current: null,
           base: 'Idle',
+          idle: 0,
           turn: 0,
           strike: null,
           phase: null,
@@ -3734,7 +3741,7 @@
           return next
         }
         next.reset()
-        next.setEffectiveTimeScale(1)
+        next.setEffectiveTimeScale(BOSS_SPEED[name] || 1)
         next.setEffectiveWeight(1)
         next.play()
         if (from && fade > 0) next.crossFadeFrom(from, fade, false)
@@ -3762,6 +3769,13 @@
               } else bossPlay(anim.base, 0.3)
             }
           } else if (name !== anim.base) bossPlay(anim.base, 0.4)
+        }
+        // Mucho rato en Idle: un rugido de provocacion (solo la vista).
+        if (name === 'Idle' && !anim.strike) anim.idle += dt
+        else anim.idle = 0
+        if (anim.idle > BOSS_TAUNT_S && anim.actions.Roar) {
+          anim.idle = 0
+          bossPlay('Roar', 0.3, true)
         }
         anim.mixer.update(dt)
       }
@@ -4208,7 +4222,7 @@
           // que no titile entre Idle y Walk). Los clips hacen el balanceo.
           const rate = dt > 0 && !aim ? Math.abs(turned) / dt : 0
           anim.turn += (rate - anim.turn) * Math.min(1, dt * 6)
-          anim.base = anim.turn > (anim.base === 'Walk' ? 0.12 : 0.3) ? 'Walk' : 'Idle'
+          anim.base = anim.turn > (anim.base === 'Walk' ? 0.08 : 0.18) ? 'Walk' : 'Idle'
           rig.lean.rotation.z = 0
           rig.lean.position.y = 0
           // El estiron hacia la celda del golpe, en el marco del pivote.

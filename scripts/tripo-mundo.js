@@ -3664,9 +3664,40 @@ export function buildWorld(data, extras = {}) {
     sponsors(toWorld(data.boss.x, data.boss.y))
   }
 
-  // Tripothon en la arena del Coloso, como la publicidad de una cancha: el logo
-  // pintado en el piso frente al Coloso (se lee derecho desde la camara, que
-  // mira al norte), tableros bajos sobre el borde norte, contra la lava, y dos
+  // El logo de ElevenLabs (las voces del juego) dibujado en un canvas: dos
+  // barras verticales y la palabra en una sans gruesa, en blanco sobre
+  // transparente. Sin descargas. Sin document (Node) no hay canvas: null.
+  function elevenLabsTexture() {
+    if (typeof document === 'undefined') return null
+    const canvas = document.createElement('canvas')
+    canvas.width = 1024
+    canvas.height = 244
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.fillStyle = '#ffffff'
+    const h = 150
+    const top = (canvas.height - h) / 2
+    ctx.fillRect(70, top, 26, h)
+    ctx.fillRect(116, top, 26, h)
+    ctx.font = 'bold 150px "Helvetica Neue", Arial, sans-serif'
+    ctx.textBaseline = 'middle'
+    const word = 'ElevenLabs'
+    const room = canvas.width - 190
+    const wide = ctx.measureText(word).width
+    if (wide > room) {
+      ctx.font = `bold ${Math.floor((150 * room) / wide)}px "Helvetica Neue", Arial, sans-serif`
+    }
+    ctx.fillText(word, 168, canvas.height / 2 + 6)
+    const t = new THREE.CanvasTexture(canvas)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 8
+    return t
+  }
+
+  // Los auspiciantes en la arena del Coloso, como la publicidad de una cancha:
+  // ElevenLabs (las voces de esta jam) pintado en el piso frente al Coloso (se
+  // lee derecho desde la camara, que mira al norte), tableros bajos sobre el
+  // borde norte, contra la lava, que alternan ElevenLabs y Tripothon, y dos
   // afiches con la portada de la Demo Day de Sao Paulo en las puntas.
   function sponsors(boss) {
     const textures = new THREE.TextureLoader()
@@ -3678,12 +3709,13 @@ export function buildWorld(data, extras = {}) {
     }
     const logo = texture('tripothon-logo.png')
     const poster = texture('tripothon-sp.png')
+    const eleven = elevenLabsTexture()
     const ASPECT = 4.2
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(8.5, 8.5 / ASPECT),
       new THREE.MeshBasicMaterial({
-        map: logo,
-        color: 0xffe6c0,
+        map: eleven || logo,
+        color: eleven ? 0xfff4e8 : 0xffe6c0,
         transparent: true,
         opacity: 0.85,
         depthWrite: false,
@@ -3708,9 +3740,18 @@ export function buildWorld(data, extras = {}) {
       roughness: 0.4
     })
     const face = new THREE.MeshBasicMaterial({ map: logo, transparent: true, depthWrite: false })
+    const elevenFace = eleven
+      ? new THREE.MeshBasicMaterial({ map: eleven, transparent: true, depthWrite: false })
+      : face
     const posterFace = new THREE.MeshBasicMaterial({ map: poster })
     const edge = 15.25
-    for (const x of [boss.x - 7, boss.x - 2, boss.x + 3]) {
+    // Las puntas con ElevenLabs y el del medio con Tripothon.
+    const boards = [
+      [boss.x - 7, elevenFace],
+      [boss.x - 2, face],
+      [boss.x + 3, elevenFace]
+    ]
+    for (const [x, look] of boards) {
       const board = new THREE.Group()
       const panel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.15, 0.14), [
         frame,
@@ -3722,7 +3763,7 @@ export function buildWorld(data, extras = {}) {
       ])
       panel.position.y = 0.95
       panel.castShadow = true
-      const words = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7 / ASPECT), face)
+      const words = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7 / ASPECT), look)
       words.position.set(0, 0.95, 0.075)
       for (const side of [-1.8, 1.8]) {
         const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), frame)
