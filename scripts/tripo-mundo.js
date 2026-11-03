@@ -3694,11 +3694,110 @@ export function buildWorld(data, extras = {}) {
     return t
   }
 
+  // La marca de Rosebud AI (los retratos de la jam) dibujada en un canvas: un
+  // pimpollo de rosa hecho con formas simples y la palabra en una sans gruesa
+  // blanca. Sin descargas ni logos bajados. Con poster en true sale cuadrada,
+  // con fondo oscuro y la palabra debajo del pimpollo, para un afiche.
+  function rosebudTexture(poster = false) {
+    if (typeof document === 'undefined') return null
+    const canvas = document.createElement('canvas')
+    canvas.width = poster ? 512 : 1024
+    canvas.height = poster ? 512 : 244
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    if (poster) {
+      const sky = ctx.createLinearGradient(0, 0, 0, 512)
+      sky.addColorStop(0, '#2a1022')
+      sky.addColorStop(1, '#0d0a12')
+      ctx.fillStyle = sky
+      ctx.fillRect(0, 0, 512, 512)
+      ctx.strokeStyle = '#e8436e'
+      ctx.lineWidth = 6
+      ctx.strokeRect(14, 14, 484, 484)
+    }
+    // El pimpollo: centro (cx, cy) y radio r.
+    const bud = (cx, cy, r) => {
+      ctx.fillStyle = '#3fae5a'
+      ctx.fillRect(cx - r * 0.07, cy + r * 0.6, r * 0.14, r * 0.95)
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.ellipse(
+          cx + side * r * 0.42,
+          cy + r * 0.78,
+          r * 0.42,
+          r * 0.17,
+          side * -0.5,
+          0,
+          Math.PI * 2
+        )
+        ctx.fill()
+      }
+      ctx.fillStyle = '#e8436e'
+      ctx.beginPath()
+      ctx.moveTo(cx, cy + r * 0.85)
+      ctx.bezierCurveTo(
+        cx - r * 1.05,
+        cy + r * 0.55,
+        cx - r * 0.95,
+        cy - r * 0.75,
+        cx - r * 0.2,
+        cy - r
+      )
+      ctx.quadraticCurveTo(cx, cy - r * 0.6, cx + r * 0.2, cy - r)
+      ctx.bezierCurveTo(
+        cx + r * 0.95,
+        cy - r * 0.75,
+        cx + r * 1.05,
+        cy + r * 0.55,
+        cx,
+        cy + r * 0.85
+      )
+      ctx.fill()
+      // Los petalos que se envuelven: dos arcos mas oscuros.
+      ctx.strokeStyle = '#9c1d45'
+      ctx.lineWidth = r * 0.09
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.arc(cx, cy - r * 0.05, r * 0.42, Math.PI * 0.15, Math.PI * 1.25)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(cx + r * 0.05, cy + r * 0.05, r * 0.68, Math.PI * 1.75, Math.PI * 0.85)
+      ctx.stroke()
+    }
+    const font = (px) => `bold ${px}px "Helvetica Neue", Arial, sans-serif`
+    const word = 'Rosebud AI'
+    ctx.fillStyle = '#ffffff'
+    if (poster) {
+      bud(256, 210, 120)
+      ctx.font = font(84)
+      const wide = ctx.measureText(word).width
+      if (wide > 450) ctx.font = font(Math.floor((84 * 450) / wide))
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(word, 256, 432)
+    } else {
+      bud(105, 112, 82)
+      ctx.font = font(140)
+      ctx.textBaseline = 'middle'
+      const room = canvas.width - 220
+      const wide = ctx.measureText(word).width
+      if (wide > room) ctx.font = font(Math.floor((140 * room) / wide))
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(word, 200, canvas.height / 2 + 6)
+    }
+    const t = new THREE.CanvasTexture(canvas)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 8
+    return t
+  }
+
   // Los auspiciantes en la arena del Coloso, como la publicidad de una cancha:
   // ElevenLabs (las voces de esta jam) pintado en el piso frente al Coloso (se
   // lee derecho desde la camara, que mira al norte), tableros bajos sobre el
-  // borde norte, contra la lava, que alternan ElevenLabs y Tripothon, y dos
-  // afiches con la portada de la Demo Day de Sao Paulo en las puntas.
+  // borde norte, contra la lava, con ElevenLabs, Rosebud AI y Tripothon, y
+  // dos afiches en las puntas: la portada de la Demo Day de Sao Paulo y el
+  // pimpollo de Rosebud AI.
   function sponsors(boss) {
     const textures = new THREE.TextureLoader()
     const texture = (file) => {
@@ -3710,6 +3809,8 @@ export function buildWorld(data, extras = {}) {
     const logo = texture('tripothon-logo.png')
     const poster = texture('tripothon-sp.png')
     const eleven = elevenLabsTexture()
+    const rosebud = rosebudTexture()
+    const rosebudPoster = rosebudTexture(true)
     const ASPECT = 4.2
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(8.5, 8.5 / ASPECT),
@@ -3743,13 +3844,20 @@ export function buildWorld(data, extras = {}) {
     const elevenFace = eleven
       ? new THREE.MeshBasicMaterial({ map: eleven, transparent: true, depthWrite: false })
       : face
+    const rosebudFace = rosebud
+      ? new THREE.MeshBasicMaterial({ map: rosebud, transparent: true, depthWrite: false })
+      : face
     const posterFace = new THREE.MeshBasicMaterial({ map: poster })
+    const rosebudPosterFace = rosebudPoster
+      ? new THREE.MeshBasicMaterial({ map: rosebudPoster })
+      : posterFace
     const edge = 15.25
-    // Las puntas con ElevenLabs y el del medio con Tripothon.
+    // ElevenLabs a la izquierda, Tripothon detras del Coloso y Rosebud AI a la
+    // derecha: el Coloso no tapa a ninguno de los dos de las puntas.
     const boards = [
       [boss.x - 7, elevenFace],
       [boss.x - 2, face],
-      [boss.x + 3, elevenFace]
+      [boss.x + 3, rosebudFace]
     ]
     for (const [x, look] of boards) {
       const board = new THREE.Group()
@@ -3774,14 +3882,17 @@ export function buildWorld(data, extras = {}) {
       board.position.set(x, 0, edge)
       group.add(board)
     }
-    for (const x of [boss.x - 12, boss.x + 8]) {
+    for (const [x, look] of [
+      [boss.x - 12, posterFace],
+      [boss.x + 8, rosebudPosterFace]
+    ]) {
       const stand = new THREE.Group()
       const art = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 0.12), [
         frame,
         frame,
         frame,
         frame,
-        posterFace,
+        look,
         frame
       ])
       art.position.y = 1.9
