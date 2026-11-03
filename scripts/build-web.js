@@ -166,11 +166,21 @@ async function main() {
     }
   }
   copyVoices(viewer.VOCES, '')
+  // Los retratos del globo (Rosebud), con los nombres que sirve el visor. Sin
+  // ellos el globo va sin retrato.
+  let faceCount = 0
+  if (fs.existsSync(viewer.RETRATOS)) {
+    for (const name of fs.readdirSync(viewer.RETRATOS)) {
+      if (!viewer.RETRATOS_FILE.test(name)) continue
+      write(`assets/retratos/${name}`, fs.readFileSync(path.join(viewer.RETRATOS, name)))
+      faceCount++
+    }
+  }
   // Sin Jekyll, GitHub Pages sirve cada archivo tal cual.
   write('.nojekyll', '')
   const kb = Math.round(game.bytes / 1024)
   console.log(
-    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo (mas ${Math.round(lightBytes / 1024)} KB de copias livianas), ${freeCount} libres (CC0), ${voiceCount} voces y ${ids.length} mapas`
+    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo (mas ${Math.round(lightBytes / 1024)} KB de copias livianas), ${freeCount} libres (CC0), ${voiceCount} voces, ${faceCount} retratos y ${ids.length} mapas`
   )
 }
 

@@ -12,6 +12,10 @@
 //    los golpes mientras habla.
 //  - El globo es HTML: se lee bien en el celular, sigue al monstruo en la
 //    pantalla y se apaga solo.
+//  - Va como el cuadro de dialogo de un RPG clasico: el retrato a la
+//    izquierda, el nombre y la frase. Los retratos (assets/retratos/<id>.webp,
+//    hechos con Rosebud) se bajan cuando empieza la pelea de ese monstruo; si
+//    falta uno, el globo va sin retrato.
 
 import {
   createPicker,
@@ -33,21 +37,30 @@ const PRELOAD = 3
 // Lo minimo desde arriba de la ventana, en px: debajo de la barra del monstruo.
 const TOP = 64
 
+// El cuadro: panel oscuro con borde dorado doble, el retrato a la izquierda
+// (con un brillo del color del monstruo) y a la derecha el nombre y la frase.
 const STYLE = `
 .voz-globo {
   position: fixed;
   left: 0;
   top: 0;
   z-index: 26;
-  max-width: min(78vw, 300px);
-  padding: 7px 12px 8px;
-  border: 2px solid var(--voz, #ffd27a);
-  border-radius: 12px;
-  background: rgba(18, 12, 8, 0.92);
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  box-sizing: border-box;
+  max-width: min(88vw, 340px);
+  padding: 6px 11px 7px 6px;
+  border: 2px solid #d9b25a;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(30, 22, 40, 0.95), rgba(10, 8, 16, 0.95));
   color: #fff6e0;
-  font: 600 16px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif;
-  text-align: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  font: 600 15px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  text-align: left;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 2px rgba(255, 214, 122, 0.3),
+    0 4px 16px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   opacity: 0;
   transform: scale(0.85);
@@ -55,13 +68,27 @@ const STYLE = `
   transition: opacity 0.22s ease, transform 0.22s ease;
 }
 .voz-globo.on { opacity: 1; transform: scale(1); }
+.voz-retrato {
+  flex: none;
+  display: block;
+  width: 52px;
+  height: 52px;
+  border: 2px solid #d9b25a;
+  border-radius: 3px;
+  background: #000;
+  object-fit: cover;
+  box-shadow: 0 0 6px var(--voz, #ffd27a);
+}
+.voz-retrato[hidden] { display: none; }
+.voz-texto { min-width: 0; padding-top: 1px; }
 .voz-globo b {
   display: block;
-  margin-bottom: 1px;
-  color: var(--voz, #ffd27a);
+  margin-bottom: 2px;
+  color: #ffd27a;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-shadow: 0 1px 0 #000;
 }
 .voz-globo::after {
   content: '';
@@ -71,10 +98,11 @@ const STYLE = `
   margin-left: -8px;
   border: 8px solid transparent;
   border-bottom: 0;
-  border-top-color: var(--voz, #ffd27a);
+  border-top-color: #d9b25a;
 }
 @media (max-width: 520px) {
-  .voz-globo { font-size: 15px; max-width: 80vw; }
+  .voz-globo { font-size: 14px; gap: 8px; }
+  .voz-retrato { width: 46px; height: 46px; }
 }
 `
 
@@ -82,6 +110,7 @@ const STYLE = `
  * Las voces de la pagina. Recibe:
  *  - win: la ventana;
  *  - base: donde estan los audios (assets/voces/, relativo a la pagina);
+ *  - faces: donde estan los retratos (assets/retratos/, relativo a la pagina);
  *  - lang(): 'en' o 'es';
  *  - sound(): si el sonido esta prendido (Opciones);
  *  - audio(): el AudioContext de los golpes, o null si todavia no hay;
@@ -93,6 +122,7 @@ const STYLE = `
 export function createVoices({
   win = globalThis.window,
   base = 'assets/voces/',
+  faces = 'assets/retratos/',
   lang = () => 'en',
   sound = () => true,
   audio = () => null,
@@ -104,6 +134,7 @@ export function createVoices({
   const picker = createPicker({ seed })
   const clock = () => win.performance.now() / 1000
   const root = new URL(base, doc.baseURI)
+  const facesRoot = new URL(faces, doc.baseURI)
 
   // El manifiesto: se pide la primera vez que alguien habla.
   let manifest = null
@@ -182,8 +213,12 @@ export function createVoices({
     })
   }
 
-  // El globo: uno solo, el del ultimo que hablo.
+  // El globo: uno solo, el del ultimo que hablo. Adentro: el retrato, el
+  // nombre y la frase.
   let bubble = null
+  let face = null
+  let who = null
+  let words = null
   let shown = null
   function element() {
     if (bubble) return bubble
@@ -195,8 +230,53 @@ export function createVoices({
     bubble.setAttribute('role', 'status')
     bubble.setAttribute('aria-live', 'polite')
     bubble.hidden = true
+    face = doc.createElement('img')
+    face.className = 'voz-retrato'
+    face.alt = ''
+    face.setAttribute('aria-hidden', 'true')
+    face.decoding = 'async'
+    face.width = 52
+    face.height = 52
+    face.hidden = true
+    const column = doc.createElement('div')
+    column.className = 'voz-texto'
+    who = doc.createElement('b')
+    words = doc.createElement('span')
+    column.appendChild(who)
+    column.appendChild(words)
+    bubble.appendChild(face)
+    bubble.appendChild(column)
     doc.body.appendChild(bubble)
     return bubble
+  }
+
+  // Los retratos: uno por monstruo, pedido la primera vez que hace falta (al
+  // empezar su pelea). state: 'loading', 'ok' o 'none' (no esta o fallo).
+  const portraits = new Map()
+  function portrait(monster) {
+    if (portraits.has(monster)) return portraits.get(monster)
+    const entry = { state: 'loading', src: new URL(`${monster}.webp`, facesRoot).href }
+    portraits.set(monster, entry)
+    const probe = doc.createElement('img')
+    probe.decoding = 'async'
+    probe.onload = () => {
+      entry.state = 'ok'
+      if (shown && shown.monster === monster) showFace(monster)
+    }
+    probe.onerror = () => {
+      entry.state = 'none'
+      if (shown && shown.monster === monster) showFace(monster)
+    }
+    probe.src = entry.src
+    return entry
+  }
+  // Muestra el retrato del que habla si ya llego; si no, el globo va sin el.
+  function showFace(monster) {
+    if (!face) return
+    const entry = portraits.get(monster)
+    const ok = !!entry && entry.state === 'ok'
+    if (ok && face.getAttribute('src') !== entry.src) face.src = entry.src
+    face.hidden = !ok
   }
 
   // Lo que suena ahora.
@@ -263,23 +343,26 @@ export function createVoices({
    */
   function say(monster, event, info = {}) {
     if (!MONSTERS[monster]) return null
-    if (event === 'contact') preload(monster)
+    if (event === 'contact') {
+      preload(monster)
+      portrait(monster)
+    }
     const line = picker.pick(monster, event, clock(), lang())
     if (!line) return null
     said++
     const urgent = event === 'contact' || event === 'monster_death' || event === 'defeated'
     const box = element()
     const entry = MONSTERS[monster]
-    const name = entry.name[lang() === 'es' ? 1 : 0]
-    box.innerHTML = ''
-    const who = doc.createElement('b')
-    who.textContent = name
-    box.appendChild(who)
-    box.appendChild(doc.createTextNode(line.text))
+    who.textContent = entry.name[lang() === 'es' ? 1 : 0]
+    words.textContent = line.text
     box.style.setProperty('--voz', entry.color)
     box.hidden = false
+    // Si hablo sin el aviso de la pelea (contact), el retrato se pide ahora.
+    portrait(monster)
+    showFace(monster)
     const now = clock()
     shown = {
+      monster,
       line,
       where: typeof info.where === 'function' ? info.where : () => null,
       at: null,
@@ -357,11 +440,17 @@ export function createVoices({
       heard,
       playing: !!playing,
       loaded: buffers.size,
+      faces: Object.fromEntries([...portraits].map(([monster, entry]) => [monster, entry.state])),
       visible: !!shown && !!bubble && !bubble.hidden,
       line: shown ? { ...shown.line } : null,
       box:
         shown && bubble
-          ? { left: bubble.style.left, top: bubble.style.top, text: bubble.textContent }
+          ? {
+              left: bubble.style.left,
+              top: bubble.style.top,
+              text: bubble.textContent,
+              face: !face.hidden
+            }
           : null
     }
   }

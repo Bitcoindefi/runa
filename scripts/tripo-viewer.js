@@ -236,6 +236,10 @@ const CC0_FILE = /^[a-z0-9-]+\/(?:[\w-]+(?:\.gltf)?\.glb|Textures\/[\w-]+\.png)$
 const VOCES = path.join(root, 'assets/voces')
 const VOCES_PREFIX = '/assets/voces/'
 const VOCES_FILE = /^(?:manifest\.json|[a-z_]+\/(?:en|es)\/[a-z_]+-\d+\.mp3|sfx\/[a-z_-]+\.mp3)$/
+// Los retratos de los monstruos para el globo (hechos con Rosebud): <id>.webp.
+const RETRATOS = path.join(root, 'assets/retratos')
+const RETRATOS_PREFIX = '/assets/retratos/'
+const RETRATOS_FILE = /^[a-z_]+\.webp$/
 const skipped = new Set()
 
 // El juego reescribe la ranura en cada tecla (game.js saveCurrent), unas 15 veces
@@ -708,6 +712,8 @@ function serve() {
         const type = voz.endsWith('.json') ? 'application/json' : 'audio/mpeg'
         return send(res, path.join(VOCES, voz), type)
       }
+      const cara = urlPath.startsWith(RETRATOS_PREFIX) ? urlPath.slice(RETRATOS_PREFIX.length) : ''
+      if (RETRATOS_FILE.test(cara)) return send(res, path.join(RETRATOS, cara), 'image/webp')
       res.writeHead(404).end()
     })
     .on('error', (error) => {
@@ -735,6 +741,8 @@ module.exports = {
   WORLD_MAPS,
   VOCES,
   VOCES_FILE,
+  RETRATOS,
+  RETRATOS_FILE,
   listModels,
   worldMap
 }
