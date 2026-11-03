@@ -82,7 +82,8 @@ export function createDialogue({
   sound = () => true,
   voices = 'assets/voces-npc/',
   faces = 'assets/retratos-npc/',
-  doc = document
+  win = globalThis.window,
+  doc = win.document
 } = {}) {
   const voicesRoot = new URL(voices, doc.baseURI)
   const facesRoot = new URL(faces, doc.baseURI)
@@ -159,12 +160,12 @@ export function createDialogue({
       shown = count
       words.textContent = full.slice(0, shown)
     }
-    if (shown < full.length) frame = requestAnimationFrame(tick)
+    if (shown < full.length) frame = win.requestAnimationFrame(tick)
     else arrow.hidden = false
   }
 
   function finish() {
-    cancelAnimationFrame(frame)
+    win.cancelAnimationFrame(frame)
     shown = full.length
     words.textContent = full
     arrow.hidden = false
@@ -176,7 +177,7 @@ export function createDialogue({
     const file = data && data.lines && data.lines[text]
     if (!file || !sound() || box.hidden || full !== text) return
     stopVoice()
-    const voice = new Audio(new URL(file, voicesRoot).href)
+    const voice = new win.Audio(new URL(file, voicesRoot).href)
     audio = voice
     voice.addEventListener('loadedmetadata', () => {
       if (audio !== voice || !isFinite(voice.duration) || voice.duration <= 0) return
@@ -189,7 +190,7 @@ export function createDialogue({
 
   function show({ id, name: label, text, note, close } = {}) {
     stopVoice()
-    cancelAnimationFrame(frame)
+    win.cancelAnimationFrame(frame)
     full = String(text || '...')
     shown = 0
     speed = 32
@@ -201,14 +202,14 @@ export function createDialogue({
     setFace(id, label || '')
     box.hidden = false
     started = performance.now()
-    frame = requestAnimationFrame(tick)
+    frame = win.requestAnimationFrame(tick)
     speak(full)
   }
 
   function hide() {
     if (box.hidden) return
     stopVoice()
-    cancelAnimationFrame(frame)
+    win.cancelAnimationFrame(frame)
     box.hidden = true
     const done = onClose
     onClose = null

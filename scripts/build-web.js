@@ -181,8 +181,9 @@ async function main() {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const name = rel ? `${rel}/${entry.name}` : entry.name
       if (entry.isDirectory()) copyNpc(path.join(dir, entry.name), name, test, dest)
-      else if (test.test(name))
+      else if (test.test(name)) {
         write(`${dest}/${name}`, fs.readFileSync(path.join(dir, entry.name)))
+      }
     }
   }
   copyNpc(viewer.VOCES_NPC, '', viewer.VOCES_NPC_FILE, 'assets/voces-npc')

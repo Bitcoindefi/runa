@@ -745,8 +745,9 @@ function serve() {
       const rostro = urlPath.startsWith(RETRATOS_NPC_PREFIX)
         ? urlPath.slice(RETRATOS_NPC_PREFIX.length)
         : ''
-      if (RETRATOS_NPC_FILE.test(rostro))
+      if (RETRATOS_NPC_FILE.test(rostro)) {
         return send(res, path.join(RETRATOS_NPC, rostro), 'image/webp')
+      }
       const cara = urlPath.startsWith(RETRATOS_PREFIX) ? urlPath.slice(RETRATOS_PREFIX.length) : ''
       if (RETRATOS_FILE.test(cara)) return send(res, path.join(RETRATOS, cara), 'image/webp')
       res.writeHead(404).end()

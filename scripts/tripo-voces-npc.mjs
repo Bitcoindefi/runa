@@ -9,7 +9,7 @@ export const NPC_VOICES = {
     name: 'King Aldren',
     brief:
       'An older man in his sixties, a wise medieval king. Deep, regal, warm and calm voice with a gentle British accent, slow and dignified.',
-    lines: ['Every hero leaves a mark on this town; honor yours']
+    lines: ['every hero leaves a mark on this town; honor yours']
   },
   cedric: {
     name: 'Sir Cedric',

@@ -4,7 +4,7 @@
   "model": "eleven_multilingual_v2",
   "format": "mp3_22050_32",
   "lines": {
-    "Every hero leaves a mark on this town; honor yours": "aldren/en/1.mp3",
+    "every hero leaves a mark on this town; honor yours": "aldren/en/1.mp3",
     "mosquitos are invading the meadow; I need a hunter": "cedric/en/1.mp3",
     "the dawn market opens between the avenue and the heroes' square": "elian/en/1.mp3",
     "you can hear the anvil in the craft district without crossing half the town": "brom/en/1.mp3",

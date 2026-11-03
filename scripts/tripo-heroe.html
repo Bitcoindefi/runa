@@ -1381,14 +1381,21 @@
       // consola donde leerlo.
       ;(() => {
         const box = document.getElementById('failure')
-        window.runaFailure = (failure) => {
+        // Las extensiones del navegador (MetaMask y otras billeteras meten su
+        // script en toda pagina) tiran sus propios errores: no son de Runa.
+        const foreign = (text, file) =>
+          /(chrome|moz|safari|safari-web)-extension:\/\//.test(file + '\n' + text) ||
+          /metamask/i.test(text)
+        window.runaFailure = (failure, file = '') => {
           const text = failure && (failure.stack || failure.message || String(failure))
-          if (!text || !box.hidden) return
+          if (!text || !box.hidden || foreign(String(text), String(file))) return
           box.textContent = 'Runa: ' + String(text).slice(0, 600)
           box.hidden = false
         }
         box.addEventListener('click', () => (box.hidden = true))
-        addEventListener('error', (event) => window.runaFailure(event.error || event.message))
+        addEventListener('error', (event) =>
+          window.runaFailure(event.error || event.message, event.filename)
+        )
         addEventListener('unhandledrejection', (event) => window.runaFailure(event.reason))
       })()
     </script>
@@ -6071,10 +6078,22 @@
         // Al hablarle a un NPC (E, Enter o espacio a su lado), el NPC en 3D vuelve
         // a su celda, mira al heroe y asiente. Se mira antes de la tecla, con lo
         // mismo que decide el juego (Runa.enter y Field.interact).
+        // Tambien abre la caja de dialogo con retrato y voz, como en el recorrido.
+        // Con la caja abierta, E, Enter o espacio adelantan y Esc cierra; esas
+        // teclas no llegan al juego.
         const pressKey = session.press.bind(session)
         session.press = (name) => {
-          if (['e', 'E', 'enter', 'space'].includes(name)) greetNear()
-          return pressKey(name)
+          const talkKey = ['e', 'E', 'enter', 'space'].includes(name)
+          if (dialogue.open() && (talkKey || name === 'escape')) {
+            if (name === 'escape') dialogue.hide()
+            else dialogue.advance()
+            return
+          }
+          const npc = talkKey ? townNpc() : null
+          if (talkKey) greetNear()
+          const result = pressKey(name)
+          if (npc) showNpc(npc)
+          return result
         }
         if (how.load && !session.load(how.load)) {
           const message = session.runa.menuMessage
@@ -8142,6 +8161,24 @@
           id = npc && npc.id
         }
         if (id) world.built.greet(id)
+      }
+
+      // El NPC del pueblo al que le habla la tecla, con lo mismo que decide
+      // Runa.enter: explorando, fuera de la pradera, sin duelo y sin puerta debajo.
+      function townNpc() {
+        const runa = session && session.runa
+        if (!runa || runa.field || !exploring(live || session.state())) return null
+        if (runa.title || (runa.duel && runa.duel.active) || runa.walker.action()) return null
+        return runa.nearbyNpc()
+      }
+
+      // La caja de dialogo con retrato y voz (dialogo.js), tambien en la partida.
+      function showNpc(npc) {
+        dialogue.show({
+          id: npc.id,
+          name: tr(npc.name) + (npc.role ? ', ' + tr(npc.role) : ''),
+          text: npc.line ? tr(npc.line) : '...'
+        })
       }
       // Para las pruebas: los NPC del mapa en pantalla.
       window.runaNpcs = () => (world && world.built.npcs ? world.built.npcs() : null)
