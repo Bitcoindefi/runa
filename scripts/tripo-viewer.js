@@ -60,6 +60,10 @@ const MODULES = {
   // Los sonidos sintetizados y la vibracion: .mjs para que las pruebas lo
   // carguen en Bare.
   'sonido.js': path.join(__dirname, 'tripo-sonido.mjs'),
+  // Lo que dicen los monstruos en la pelea (.mjs para que las pruebas lo
+  // carguen en Bare) y el globo y la voz en la pagina.
+  'voces.js': path.join(__dirname, 'tripo-voces.mjs'),
+  'voces-player.js': path.join(__dirname, 'tripo-voces-player.js'),
   // Los NPC en 3D: como se ve cada uno y por donde pasea (.mjs para que las
   // pruebas lo carguen en Bare), y los modelos animados en la escena.
   'vecinos.js': path.join(__dirname, 'tripo-vecinos.mjs'),
@@ -227,6 +231,11 @@ const UI_PNG = /^[a-z0-9-]+\.png$/
 const CC0 = path.join(root, 'assets/cc0')
 const CC0_PREFIX = '/assets/cc0/'
 const CC0_FILE = /^[a-z0-9-]+\/(?:[\w-]+(?:\.gltf)?\.glb|Textures\/[\w-]+\.png)$/
+// Las voces de los monstruos (scripts/generar-voces.mjs): el manifiesto y un
+// mp3 por frase, <monstruo>/<idioma>/<evento>-<n>.mp3.
+const VOCES = path.join(root, 'assets/voces')
+const VOCES_PREFIX = '/assets/voces/'
+const VOCES_FILE = /^(?:manifest\.json|[a-z_]+\/(?:en|es)\/[a-z_]+-\d+\.mp3|sfx\/[a-z_-]+\.mp3)$/
 const skipped = new Set()
 
 // El juego reescribe la ranura en cada tecla (game.js saveCurrent), unas 15 veces
@@ -694,6 +703,11 @@ function serve() {
         const type = free.endsWith('.png') ? 'image/png' : 'model/gltf-binary'
         return send(res, path.join(CC0, free), type)
       }
+      const voz = urlPath.startsWith(VOCES_PREFIX) ? urlPath.slice(VOCES_PREFIX.length) : ''
+      if (VOCES_FILE.test(voz)) {
+        const type = voz.endsWith('.json') ? 'application/json' : 'audio/mpeg'
+        return send(res, path.join(VOCES, voz), type)
+      }
       res.writeHead(404).end()
     })
     .on('error', (error) => {
@@ -719,6 +733,8 @@ module.exports = {
   WORLD_JS,
   MODULES,
   WORLD_MAPS,
+  VOCES,
+  VOCES_FILE,
   listModels,
   worldMap
 }

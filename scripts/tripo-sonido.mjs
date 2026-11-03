@@ -59,6 +59,9 @@ export const PATTERNS = {
 // mismo cuadro suena una vez.
 export const MIN_GAP = 0.05
 
+// El volumen de todos los sonidos juntos.
+const MASTER = 0.55
+
 const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0))
 
 /**
@@ -120,7 +123,7 @@ export function createSound({ win = globalThis.window, sound = () => true, vibra
       if (!ctx) {
         ctx = new Context()
         master = ctx.createGain()
-        master.gain.value = 0.55
+        master.gain.value = MASTER
         // Sin recortes cuando suenan varios a la vez.
         const squeeze = ctx.createDynamicsCompressor ? ctx.createDynamicsCompressor() : null
         if (squeeze) {
@@ -256,6 +259,25 @@ export function createSound({ win = globalThis.window, sound = () => true, vibra
     return heard
   }
 
+  // Baja los golpes mientras habla un monstruo (tripo-voces-player.js): level
+  // de 0 a 1 sobre el volumen de siempre, en un cuarto de segundo.
+  function duck(level = 1) {
+    if (!ctx || !master) return false
+    const want = MASTER * Math.max(0, Math.min(1, Number(level)))
+    try {
+      const now = ctx.currentTime
+      if (master.gain.cancelScheduledValues) master.gain.cancelScheduledValues(now)
+      master.gain.setValueAtTime(master.gain.value, now)
+      master.gain.linearRampToValueAtTime(want, now + 0.25)
+    } catch {
+      master.gain.value = want
+    }
+    return true
+  }
+
+  // El contexto de audio ya destrabado (o null): las voces suenan por el mismo.
+  const context = () => ctx
+
   function state() {
     return {
       supported: !!Context,
@@ -266,5 +288,5 @@ export function createSound({ win = globalThis.window, sound = () => true, vibra
     }
   }
 
-  return { cue, play, buzz, unlock, state, vibrates }
+  return { cue, play, buzz, unlock, state, vibrates, duck, context }
 }

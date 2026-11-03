@@ -2500,12 +2500,17 @@ const FOE_SHOT = {
   espectro: 0x7ff8ff
 }
 
+// La parte de la vida por debajo de la cual el monstruo habla de la poca vida
+// (la suya o la del heroe), una vez por pelea.
+const LOW_HP = 0.3
+
 class Effects {
   // hint(st, touch), si viene, reemplaza la ayuda de la pradera (nearHint): la
   // de un lugar de adentro.
-  // feel, si viene: { stop(ms), shake(amount), contact(), cue(kind, share) }, la
-  // pausa del golpe, el temblor de la camara, el aviso de que empezo una pelea y
-  // el sonido y la vibracion (createMeadow).
+  // feel, si viene: { stop(ms), shake(amount), contact(), cue(kind, share),
+  // voice(event, info) }, la pausa del golpe, el temblor de la camara, el aviso
+  // de que empezo una pelea, el sonido y la vibracion, y lo que dice el monstruo
+  // (createMeadow).
   constructor(ctx, crowd, bits, L, hint = null, feel = null) {
     this.ctx = ctx
     this.crowd = crowd
@@ -2527,6 +2532,9 @@ class Effects {
     this.foeCharge = chargeLine(1, 1, 0, 0)
     // La vida del heroe que se ve: baja con el golpe que se muestra (heroHp).
     this.shownHp = null
+    // Con quien se pelea (para que hable: voces-player.js) y si ya dijo lo de
+    // la poca vida de cada uno en esta pelea.
+    this.talker = null
     this.pies = new Map()
     this.group = new THREE.Group()
     ctx.scene.add(this.group)
@@ -2752,6 +2760,15 @@ class Effects {
       this.heroCharge = chargeLine(hero, hero, time, time)
       this.foeCharge = chargeLine(foe, foe, time, time)
       if (this.feel) this.feel.contact()
+      this.talker = {
+        id: fight.id,
+        kind: fight.kind,
+        foeMax: Math.max(1, Number(fight.foeMaxhp) || 1),
+        heroMax: Math.max(1, Number(fight.maxhp) || 1),
+        foeLow: false,
+        heroLow: false
+      }
+      this.say('contact')
     } else if (fight && (fight.tick !== this.last.tick || fight.logged !== this.last.logged)) {
       this.turn(this.last, fight, time)
     } else if (!fight && this.last) {
@@ -3177,6 +3194,13 @@ class Effects {
       this.barHp = item.hp
       this.impact(item.share, 0.8)
       this.cue(item.hp === 0 ? 'kill' : 'hit', item.share)
+      // Lo de la poca vida se marca dicho solo si hablo: si le tocaba esperar,
+      // lo intenta en el proximo golpe.
+      const talker = this.talker
+      if (item.hp === 0) this.say('monster_death')
+      else if (talker && !talker.foeLow && item.hp / talker.foeMax < LOW_HP) {
+        talker.foeLow = !!this.say('monster_low')
+      } else this.say('monster_hurt')
     } else if (item.kind === 'foe-swing') {
       this.crowd.strike(item.id, time)
       const shot = spot ? FOE_SHOT[spot.kind] : undefined
@@ -3207,6 +3231,10 @@ class Effects {
       )
       this.impact(item.share, 1)
       this.cue('hurt', item.share)
+      const talker = this.talker
+      if (talker && !talker.heroLow && item.hp > 0 && item.hp / talker.heroMax < LOW_HP) {
+        talker.heroLow = !!this.say('player_low')
+      } else this.say('monster_hits')
       const flash = this.bits.flash
       flash.hidden = false
       flash.classList.add('on')
@@ -3214,14 +3242,30 @@ class Effects {
     } else if (item.kind === 'potion') {
       if (Number.isFinite(item.hp)) this.shownHp = item.hp
       this.number(this.L('+potion', '+pocion'), '#7fe08a', hero.x, 2.6, hero.z, time)
+      this.say('player_potion')
     } else if (item.kind === 'guard') {
       // Se cubre (L4): se planta y su aro se pone celeste hasta el golpe.
       this.heroBrace = time
       this.guarding = true
+      this.say('player_guard')
     } else if (item.kind === 'retreat') {
       // Se retira (L5): un respingo hacia atras; el registro dice como salio.
       this.heroRecoil = time
+      this.say('player_retreat')
     }
+  }
+
+  // El monstruo de la pelea dice algo (voces-player.js, si la pagina lo dio):
+  // con su tipo y el punto sobre su cabeza, que sigue al modelo. Devuelve la
+  // frase, o null si se callo.
+  say(event) {
+    const talker = this.talker
+    if (!talker || !this.feel || !this.feel.voice) return null
+    const where = () => {
+      const spot = this.crowd.spot(talker.id)
+      return spot ? { x: spot.x, y: spot.top + 0.35, z: spot.z } : null
+    }
+    return this.feel.voice(event, { monster: talker.kind, where }) || null
   }
 
   // La pausa del golpe y el temblor, segun la parte de la vida que se llevo
@@ -3684,6 +3728,7 @@ export function createMeadow(ctx) {
     stop: (ms) => stop.kick(ms, realTime),
     shake: (amount) => (ctx.shake ? ctx.shake(amount) : null),
     cue: (kind, share) => (ctx.cue ? ctx.cue(kind, share) : null),
+    voice: (event, info) => (ctx.voice ? ctx.voice(event, info) : null),
     contact: () => pace.contact(fightTime)
   }
 

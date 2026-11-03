@@ -150,11 +150,27 @@ async function main() {
     }
   }
   write('assets/cc0/README.md', fs.readFileSync(path.join(free, 'README.md')))
+  // Las voces de los monstruos (scripts/generar-voces.mjs), si ya se generaron:
+  // el manifiesto y sus mp3, con los mismos nombres que sirve el visor. Sin
+  // ellas la pagina muestra solo los globos.
+  let voiceCount = 0
+  const copyVoices = (dir, rel) => {
+    if (!fs.existsSync(dir)) return
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const name = rel ? `${rel}/${entry.name}` : entry.name
+      if (entry.isDirectory()) copyVoices(path.join(dir, entry.name), name)
+      else if (viewer.VOCES_FILE.test(name)) {
+        write(`assets/voces/${name}`, fs.readFileSync(path.join(dir, entry.name)))
+        if (name.endsWith('.mp3')) voiceCount++
+      }
+    }
+  }
+  copyVoices(viewer.VOCES, '')
   // Sin Jekyll, GitHub Pages sirve cada archivo tal cual.
   write('.nojekyll', '')
   const kb = Math.round(game.bytes / 1024)
   console.log(
-    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo (mas ${Math.round(lightBytes / 1024)} KB de copias livianas), ${freeCount} libres (CC0) y ${ids.length} mapas`
+    `${out}: el juego (${kb} KB), ${models.length} modelos de Tripo (mas ${Math.round(lightBytes / 1024)} KB de copias livianas), ${freeCount} libres (CC0), ${voiceCount} voces y ${ids.length} mapas`
   )
 }
 

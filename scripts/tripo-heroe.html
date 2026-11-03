@@ -1459,6 +1459,8 @@
         ACTION_KEYS
       } from './combate.js'
       import { createSound } from './sonido.js'
+      import { createVoices } from './voces-player.js'
+      import { BOSS, BOSS_WINDUP, LOW } from './voces.js'
       import { createAtlas } from './atlas.js'
       import { createTrack, placeOf as peerPlace, nearest, RIGS, CLIPS } from './jugadores.js'
 
@@ -1574,6 +1576,29 @@
         vibrate: () => settings.vibrate !== false
       })
       const cue = (kind, share) => sound.cue(kind, share)
+      // Lo que dicen los monstruos en la pelea (voces-player.js): un globo sobre
+      // el que habla y, si estan los mp3 de ElevenLabs, su voz. ?voces=N fija la
+      // semilla de que dice cada uno.
+      const voicePoint = new THREE.Vector3()
+      const voices = createVoices({
+        win: window,
+        lang: () => settings.lang,
+        sound: () => settings.sound !== false,
+        audio: () => sound.context(),
+        duck: (level) => sound.duck(level),
+        project: (at) => {
+          if (!renderer) return null
+          voicePoint.set(at.x, at.y, at.z).project(camera)
+          if (voicePoint.z > 1) return null
+          const box = renderer.domElement.getBoundingClientRect()
+          return {
+            x: box.left + ((voicePoint.x + 1) / 2) * box.width,
+            y: box.top + ((1 - voicePoint.y) / 2) * box.height
+          }
+        },
+        seed: Number(new URLSearchParams(location.search).get('voces')) || undefined
+      })
+      globalThis.runaVoices = () => voices.state()
       const install = createInstall(window)
       // El aviso de iOS (agregar a inicio) se ve durante esta visita al titulo;
       // la proxima ya no.
@@ -3544,7 +3569,9 @@
         hurt: 0,
         swing: 0,
         shake: 0,
-        bits: []
+        bits: [],
+        // Lo que ya dijo el Coloso en esta pelea (bossTalk).
+        talk: null
       }
       const sparkGeo = new THREE.OctahedronGeometry(0.08)
       const flashColor = new THREE.Color(0xffc890)
@@ -3603,6 +3630,7 @@
         }
         fight.bits = []
         fight.rig = null
+        fight.talk = null
         fight.bossHp = fight.heroHp = null
         fight.warned = fight.burning = 0
         fight.windup = fight.slam = fight.hit = fight.hurt = fight.swing = fight.shake = 0
@@ -3993,6 +4021,65 @@
         return shake
       }
 
+      // El punto sobre el Coloso donde va su globo (voces-player.js): sobre el
+      // pecho, que la cabeza suele quedar fuera del cuadro.
+      function bossVoiceAt() {
+        const rig = fight.rig
+        if (!rig) return null
+        const at = new THREE.Vector3().setFromMatrixPosition(rig.turn.matrixWorld)
+        return { x: at.x, y: at.y + rig.height * 0.82, z: at.z }
+      }
+
+      // Lo que dice el Coloso (voces.js): al empezar la pelea, cuando le pegan
+      // y cuando pega, con poca vida (la suya o la del heroe), cuando el heroe
+      // toma una pocion, al cambiar de fase y al caer. Antes de actualizar
+      // fight.bossHp y fight.heroHp: compara con el cuadro anterior.
+      function bossTalk(boss, st, struck, time) {
+        if (!fight.talk) {
+          fight.talk = {
+            met: false,
+            phase: boss.phase,
+            low: false,
+            heroLow: false,
+            potions: st.potions,
+            // Cuando se despide despues de caer (-1: ya lo hizo o ya estaba caido).
+            farewell: boss.defeated ? -1 : null
+          }
+        }
+        const talk = fight.talk
+        const say = (event) => voices.say(BOSS, event, { where: bossVoiceAt })
+        const share = boss.hp / Math.max(1, boss.maxhp)
+        if (!talk.met && boss.active && !boss.defeated) {
+          talk.met = true
+          say('contact')
+        }
+        if (struck && boss.hp <= 0) {
+          say('monster_death')
+          if (talk.farewell === null) talk.farewell = time + 2.8
+        } else if (struck && !talk.low && share < LOW) {
+          // Si le tocaba esperar, lo dice en el proximo golpe.
+          talk.low = !!say('monster_low')
+        } else if (struck) say('monster_hurt')
+        if (boss.phase !== talk.phase) {
+          talk.phase = boss.phase
+          if (boss.hp > 0 && !boss.defeated) say('phase_change')
+        }
+        const before = fight.heroHp
+        if (before !== null && st.hp < before) {
+          if (!talk.heroLow && st.hp > 0 && st.hp / Math.max(1, st.maxhp) < LOW) {
+            talk.heroLow = !!say('player_low')
+          } else say('monster_hits')
+        } else if (before !== null && st.hp > before && st.potions < talk.potions) {
+          say('player_potion')
+        }
+        talk.potions = st.potions
+        if (boss.defeated && talk.farewell === null) talk.farewell = time + 0.5
+        if (talk.farewell !== null && talk.farewell >= 0 && time >= talk.farewell) {
+          talk.farewell = -1
+          say('defeated')
+        }
+      }
+
       function fightFrame(dt, time, st) {
         const boss = st && st.boss
         if (!world || world.map !== 'boss' || !boss) {
@@ -4034,6 +4121,7 @@
         bossLift += (wantLift - bossLift) * Math.min(1, dt * (roaring ? 4 : 2))
         // Lo que paso desde el cuadro anterior, en los numeros del juego.
         const struck = fight.bossHp !== null && boss.hp < fight.bossHp
+        bossTalk(boss, st, struck, time)
         const anim = bossAnimOf()
         if (anim) bossAnimDrive(anim, boss, struck)
         if (struck && chest) {
@@ -4068,7 +4156,12 @@
           } else if (chest) shockwave(chest)
         }
         // El Coloso marca donde va a caer: el aviso suena una vez por golpe.
-        if (warned > 0 && fight.warned === 0) cue('telegraph')
+        if (warned > 0 && fight.warned === 0) {
+          cue('telegraph')
+          // Y lo anuncia: un puno que cae o una onda que barre.
+          const windup = BOSS_WINDUP[boss.dodge && boss.dodge.attack]
+          if (windup && !boss.defeated) voices.say(BOSS, windup, { where: bossVoiceAt })
+        }
         fight.warned = warned
         fight.burning = burning
         fight.windup = warned
@@ -4909,7 +5002,9 @@
           fight.shake = Math.max(fight.shake, amount)
         },
         // El sonido y la vibracion de los golpes en el campo.
-        cue
+        cue,
+        // Lo que dice el monstruo de la pelea (voces-player.js).
+        voice: (event, info) => voices.say(info.monster, event, info)
       })
       const inventory = createInventory({
         tr: (name) => tr(name),
@@ -5016,6 +5111,8 @@
         // pelea con el Coloso la suba: lo que esta detras del heroe no se cala.
         seeView.y.value = world ? controls.target.y : 1
         effects.render(dt, screen)
+        // El globo del monstruo que habla sigue su punto en la pantalla.
+        voices.update(t, screen === 'play')
         if (shook) camera.position.sub(shook)
         if (pulled) camera.position.sub(pulled)
         if (turned) camera.quaternion.copy(armQuat)
