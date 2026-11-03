@@ -64,6 +64,10 @@ const MODULES = {
   // carguen en Bare) y el globo y la voz en la pagina.
   'voces.js': path.join(__dirname, 'tripo-voces.mjs'),
   'voces-player.js': path.join(__dirname, 'tripo-voces-player.js'),
+  // La musica de fondo de cada mapa: que pista va en cada mapa (.mjs para que
+  // las pruebas lo carguen en Bare) y el reproductor de la pagina.
+  'musica-pistas.js': path.join(__dirname, 'tripo-musica-pistas.mjs'),
+  'musica.js': path.join(__dirname, 'tripo-musica.js'),
   // Los NPC en 3D: como se ve cada uno y por donde pasea (.mjs para que las
   // pruebas lo carguen en Bare), y los modelos animados en la escena.
   'vecinos.js': path.join(__dirname, 'tripo-vecinos.mjs'),
@@ -236,6 +240,11 @@ const CC0_FILE = /^[a-z0-9-]+\/(?:[\w-]+(?:\.gltf)?\.glb|Textures\/[\w-]+\.png)$
 const VOCES = path.join(root, 'assets/voces')
 const VOCES_PREFIX = '/assets/voces/'
 const VOCES_FILE = /^(?:manifest\.json|[a-z_]+\/(?:en|es)\/[a-z_]+-\d+\.mp3|sfx\/[a-z_-]+\.mp3)$/
+// La musica de fondo (scripts/generar-musica.mjs): el manifiesto y un mp3 por
+// pista, <pista>.mp3.
+const MUSICA = path.join(root, 'assets/musica')
+const MUSICA_PREFIX = '/assets/musica/'
+const MUSICA_FILE = /^(?:manifest.json|[a-z]+.mp3)$/
 // Los retratos de los monstruos para el globo (hechos con Rosebud): <id>.webp.
 const RETRATOS = path.join(root, 'assets/retratos')
 const RETRATOS_PREFIX = '/assets/retratos/'
@@ -712,6 +721,11 @@ function serve() {
         const type = voz.endsWith('.json') ? 'application/json' : 'audio/mpeg'
         return send(res, path.join(VOCES, voz), type)
       }
+      const pista = urlPath.startsWith(MUSICA_PREFIX) ? urlPath.slice(MUSICA_PREFIX.length) : ''
+      if (MUSICA_FILE.test(pista)) {
+        const type = pista.endsWith('.json') ? 'application/json' : 'audio/mpeg'
+        return send(res, path.join(MUSICA, pista), type)
+      }
       const cara = urlPath.startsWith(RETRATOS_PREFIX) ? urlPath.slice(RETRATOS_PREFIX.length) : ''
       if (RETRATOS_FILE.test(cara)) return send(res, path.join(RETRATOS, cara), 'image/webp')
       res.writeHead(404).end()
@@ -741,6 +755,8 @@ module.exports = {
   WORLD_MAPS,
   VOCES,
   VOCES_FILE,
+  MUSICA,
+  MUSICA_FILE,
   RETRATOS,
   RETRATOS_FILE,
   listModels,

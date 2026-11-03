@@ -1460,6 +1460,7 @@
       } from './combate.js'
       import { createSound } from './sonido.js'
       import { createVoices } from './voces-player.js'
+      import { createMusic } from './musica.js'
       import { BOSS, BOSS_WINDUP, LOW } from './voces.js'
       import { createAtlas } from './atlas.js'
       import { createTrack, placeOf as peerPlace, nearest, RIGS, CLIPS } from './jugadores.js'
@@ -1599,6 +1600,15 @@
         seed: Number(new URLSearchParams(location.search).get('voces')) || undefined
       })
       globalThis.runaVoices = () => voices.state()
+      // La musica de fondo de cada mapa (musica.js), debajo de las voces.
+      const music = createMusic({
+        win: window,
+        map: () => (world ? world.map : 'title'),
+        sound: () => settings.sound !== false,
+        audio: () => sound.context(),
+        speaking: () => voices.state().playing
+      })
+      globalThis.runaMusic = () => music.state()
       const install = createInstall(window)
       // El aviso de iOS (agregar a inicio) se ve durante esta visita al titulo;
       // la proxima ya no.

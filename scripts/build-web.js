@@ -166,6 +166,15 @@ async function main() {
     }
   }
   copyVoices(viewer.VOCES, '')
+  // La musica de fondo (scripts/generar-musica.mjs), si ya se genero: el
+  // manifiesto y un mp3 por pista. Sin ella la pagina va sin musica.
+  if (fs.existsSync(viewer.MUSICA)) {
+    for (const name of fs.readdirSync(viewer.MUSICA)) {
+      if (viewer.MUSICA_FILE.test(name)) {
+        write(`assets/musica/${name}`, fs.readFileSync(path.join(viewer.MUSICA, name)))
+      }
+    }
+  }
   // Los retratos del globo (Rosebud), con los nombres que sirve el visor. Sin
   // ellos el globo va sin retrato.
   let faceCount = 0

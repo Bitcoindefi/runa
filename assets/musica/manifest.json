@@ -1,0 +1,67 @@
+{
+  "tracks": [
+    {
+      "id": "boss",
+      "file": "boss.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Epic boss battle against a colossal stone giant on a lava field: pounding war drums, low brass stabs, deep strings ostinato, 140 bpm, menacing and heroic."
+    },
+    {
+      "id": "meadow",
+      "file": "meadow.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Pastoral adventure on a sunny open meadow: wooden flutes, light plucked strings, soft hand percussion, 100 bpm, hopeful and calm."
+    },
+    {
+      "id": "city",
+      "file": "city.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Warm medieval market town: lute and mandolin melody, recorder, frame drum, 96 bpm, cozy and lively."
+    },
+    {
+      "id": "crypt",
+      "file": "crypt.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Dark ambient crypt: water drips, low drones, distant wordless choir pads, slow pulse at 60 bpm, eerie and tense."
+    },
+    {
+      "id": "camp",
+      "file": "camp.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Barbarian war camp: heavy war drums, war horns, low drones, 110 bpm, savage and driving."
+    },
+    {
+      "id": "nox",
+      "file": "nox.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Mysterious elven city at night: harp arpeggios, ethereal pads, soft bells, 80 bpm, dreamy and mysterious."
+    },
+    {
+      "id": "title",
+      "file": "title.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Main theme of a fantasy adventure: noble horn melody over strings and harp, gentle timpani, 90 bpm, wonder and courage."
+    },
+    {
+      "id": "coliseum",
+      "file": "coliseum.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Arena duel in a stone coliseum: fast tribal percussion, brass fanfare hits, tense strings, 130 bpm, competitive."
+    },
+    {
+      "id": "castle",
+      "file": "castle.mp3",
+      "seconds": 60,
+      "kb": 352,
+      "prompt": "Regal royal castle hall: slow stately strings, harpsichord, soft brass chorale, 70 bpm, dignified and calm."
+    }
+  ]
+}
