@@ -6081,18 +6081,20 @@
         // Tambien abre la caja de dialogo con retrato y voz, como en el recorrido.
         // Con la caja abierta, Esc la cierra y nada mas. Caminando, E, Enter o
         // espacio la adelantan sin llegar al juego (no se vuelve a hablar). Con
-        // una pantalla del juego abierta (la tienda del NPC) la tecla la cierra y
-        // sigue al juego, asi el primer Comprar ya compra; salvo E, que tambien
-        // cerraria la tienda, y en el celular, donde la caja tapa la lista de
-        // arriba: ahi el primer toque solo la cierra.
+        // la tienda del NPC abierta la tecla la cierra y sigue al juego, asi el
+        // primer Comprar ya compra; salvo E, que tambien cerraria la tienda, y en
+        // el celular, donde la caja tapa la lista de arriba: ahi el primer toque
+        // solo la cierra. Con otra pantalla (un desafio que llega) solo la cierra.
         const pressKey = session.press.bind(session)
         session.press = (name) => {
           const talkKey = ['e', 'E', 'enter', 'space'].includes(name)
           if (dialogue.open()) {
             if (name === 'escape') return dialogue.hide()
-            if (!exploring(session.state())) {
+            const st = session.state()
+            if (!exploring(st)) {
               dialogue.hide()
-              if (name === 'e' || name === 'E' || dialogue.onTop()) return
+              const shop = st.overlay === 'shop'
+              if (!shop || name === 'e' || name === 'E' || dialogue.onTop()) return
             } else if (talkKey) return dialogue.advance()
           }
           const npc = talkKey ? townNpc() : null
@@ -6877,6 +6879,8 @@
           // Contra el Coloso, mantener F repite: la recarga del arma pone el ritmo.
           const holdF = key === 'f' && st.field === 'boss'
           if (event.repeat && !st.naming && !st.overlay && !holdF) return
+          // Mantener E al lado de un comerciante no cierra la tienda recien abierta.
+          if (event.repeat && key === 'e' && (dialogue.open() || st.overlay === 'shop')) return
           event.preventDefault()
           session.press(event.key)
         }

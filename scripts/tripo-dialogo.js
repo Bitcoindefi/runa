@@ -128,12 +128,16 @@ export function createDialogue({
   let frame = 0
   let onClose = null
 
-  // El manifiesto se pide una sola vez, la primera vez que alguien habla.
+  // El manifiesto se pide una sola vez, la primera vez que alguien habla. Si la
+  // red falla, se vuelve a pedir la proxima vez (un 404 si queda como nulo).
   function loadManifest() {
     if (!manifest) {
       manifest = fetch(new URL('manifest.json', voicesRoot))
         .then((res) => (res.ok ? res.json() : null))
-        .catch(() => null)
+        .catch(() => {
+          manifest = null
+          return null
+        })
     }
     return manifest
   }
@@ -253,7 +257,7 @@ export function createDialogue({
     hide,
     advance,
     open: () => !box.hidden,
-    onTop: () => win.matchMedia(TOP).matches,
+    onTop: () => !!(win.matchMedia && win.matchMedia(TOP).matches),
     element: box
   }
 }

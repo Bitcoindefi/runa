@@ -131,9 +131,10 @@ async function main() {
   )
   if (ttsChars + designChars > LIMIT) throw new Error(`Pasa el tope de ${LIMIT} letras`)
   if (!YES) return console.log('Sin --yes no se gasta nada.')
-  const key = readKey()
-  // Varios NPC a la vez, de a tres, para que no tarde tanto.
+  // Varios NPC a la vez, de a tres, para que no tarde tanto. Sin nada pendiente
+  // no hace falta la clave: solo se rehace el manifiesto.
   const ids = [...new Set(todo.map((line) => line.id))]
+  const key = ids.length ? readKey() : null
   const work = async (id) => {
     try {
       const voice = await voiceFor(key, id, voices)
