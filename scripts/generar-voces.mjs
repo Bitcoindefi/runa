@@ -8,6 +8,7 @@
 //   node scripts/generar-voces.mjs --yes            genera lo que falta
 //   node scripts/generar-voces.mjs --yes --only mosquito,skeleton --lang es
 //   node scripts/generar-voces.mjs --yes --sfx      ademas, unos efectos
+//   node scripts/generar-voces.mjs --yes --crudas <carpeta>       hace falta con fx
 //   node scripts/generar-voces.mjs --fx --crudas <carpeta>        cuenta, no toca
 //   node scripts/generar-voces.mjs --yes --fx --crudas <carpeta>  efecto a lo que hay
 //
@@ -24,9 +25,13 @@
 //
 // Un monstruo con fx (el mosquito) pasa cada frase nueva por ffmpeg justo
 // despues de Text to Speech (scripts/voces-efectos.mjs) y el manifiesto anota
-// el efecto en la frase. --fx aplica el efecto a los mp3 que ya estaban: guarda
-// cada original en --crudas (fuera del repositorio, con las mismas rutas) y el
-// efecto sale siempre de esa copia, asi que nunca se aplica dos veces.
+// el efecto en la frase. El original queda en --crudas (fuera del repositorio,
+// con las mismas rutas) y su texto al lado, en <archivo>.mp3.txt. --fx aplica
+// el efecto a los mp3 que ya estaban, siempre desde su original en --crudas y
+// solo si ese original dice el texto de ahora: nunca sobre un mp3 que quiza ya
+// lo tiene. --tomar-originales copia a --crudas los mp3 sin marca que no tienen
+// original, como originales del texto de ahora: solo si de verdad no tienen
+// ningun efecto (la primera vez).
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -43,16 +48,20 @@ import {
 } from './tripo-voces.mjs'
 import {
   LIMITS,
-  voiceArgs,
-  mixArgs,
+  fxOf,
+  fxArgs,
+  fxJobs,
   firstGain,
   loudnessArgs,
   decodeArgs,
   parseLoudness,
+  parseStream,
   checkRender,
   nextLevel,
   usable,
-  mp3Format
+  mp3Format,
+  entryOf,
+  manifestItem
 } from './voces-efectos.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -75,6 +84,7 @@ const ONLY = option('only', null)
 const LANG = option('lang', null)
 const FX_MODE = flag('fx')
 const CRUDAS = option('crudas', null)
+const ADOPT = flag('tomar-originales')
 
 // Los efectos de --sfx: nombre, pedido y duracion en segundos.
 const EFFECTS = [
@@ -207,24 +217,13 @@ function pending(manifest) {
   })
 }
 
-function oldItem(manifest, line) {
-  const entry = manifest && manifest.monsters && manifest.monsters[line.monster]
-  const list = entry && entry.lines && entry.lines[line.lang] && entry.lines[line.lang][line.event]
-  const item = Array.isArray(list) ? list[line.index] : null
-  return item && typeof item.text === 'string' ? item : null
-}
-
 function oldText(manifest, line) {
-  const item = oldItem(manifest, line)
+  const item = entryOf(manifest, line)
   return item ? item.text : null
 }
 
-// El efecto que ya tiene el mp3 de una frase segun el manifiesto (si el texto
-// no cambio), o null.
-function oldFx(manifest, line) {
-  const item = oldItem(manifest, line)
-  return item && item.text === line.text && typeof item.fx === 'string' ? item.fx : null
-}
+// El efecto de una frase: el suyo (LINE_FX) o el de su monstruo, o null.
+const fxFor = (line) => fxOf(line, MONSTERS[line.monster].fx)
 
 // ffmpeg con una lista de argumentos, sin shell. Sin ffmpeg, un error claro.
 function ffmpeg(args, binary = false) {
@@ -244,18 +243,20 @@ function ffmpeg(args, binary = false) {
 }
 
 // Lo que se mide de un mp3: si decodifica, si hay NaN, la duracion, la
-// loudness integrada y el pico verdadero.
+// loudness integrada, el pico verdadero y, si es mp3, su tasa y sus kbit/s.
 function measure(file) {
   const rate = 22050
   const pcm = ffmpeg(decodeArgs(file, rate), true)
   if (pcm.status !== 0 || !pcm.stdout.length) return { decoded: false }
   const bytes = new Uint8Array(pcm.stdout)
   const samples = new Float32Array(bytes.buffer, 0, bytes.length >> 2)
+  const { stderr } = ffmpeg(loudnessArgs(file))
   return {
     decoded: true,
     finite: samples.every(Number.isFinite),
     seconds: samples.length / rate,
-    ...parseLoudness(ffmpeg(loudnessArgs(file)).stderr)
+    ...parseLoudness(stderr),
+    ...parseStream(stderr)
   }
 }
 
@@ -265,32 +266,41 @@ function step(args) {
   return run.status === 0 ? [] : [`ffmpeg: ${String(run.stderr).trim().split('\n').pop()}`]
 }
 
+// Una carpeta temporal fuera del repositorio para los archivos de ffmpeg.
+const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'runa-fx-'))
+
 // Pasa `input` (el mp3 crudo) por el efecto `name` y deja el resultado en
-// `output`. Cada intento hace las dos pasadas a temporales y mide la salida
-// (checkRender); si el nivel quedo lejos, corrige la ganancia y prueba de
-// nuevo, hasta LIMITS.tries veces, y se queda con la mejor salida que cumple.
-// Si ninguna cumple, error y `output` queda como estaba.
-function applyFx(name, input, output, format) {
+// `output`, con la misma tasa y los mismos kbit/s que `input`. Cada intento
+// hace las dos pasadas en una carpeta temporal y mide la salida (checkRender);
+// si el nivel quedo lejos, corrige la ganancia y el techo y prueba de nuevo,
+// hasta LIMITS.tries veces, y se queda con la mejor salida que cumple. Si
+// ninguna cumple, error y `output` queda como estaba.
+function applyFx(name, input, output) {
   const source = measure(input)
   if (!source.decoded || !Number.isFinite(source.I)) {
     throw new Error(`${path.basename(input)}: no pude medir el original para el efecto ${name}`)
   }
+  if (!source.rate || !source.kbps) {
+    throw new Error(`${path.basename(input)}: el original no dice su tasa y sus kbit/s de mp3`)
+  }
   const aim = source.I + LIMITS.offset
-  const voice = output + '.voz.wav'
-  const tmp = output + '.fx.mp3'
-  const keep = output + '.fx-mejor.mp3'
+  const dir = tempDir()
+  const voice = path.join(dir, 'voz.wav')
+  const tmp = path.join(dir, 'salida.mp3')
+  const keep = path.join(dir, 'mejor.mp3')
   let level = null
   let last = null
   let best = null
   let problems = []
   try {
+    const passes = fxArgs(name, input, tmp, { voice, rate: source.rate, kbps: source.kbps })
     for (let attempt = 0; attempt < LIMITS.tries; attempt++) {
-      problems = step(voiceArgs(name, input, voice))
+      problems = step(passes.voice)
       if (!problems.length && !level) {
         const voiceI = parseLoudness(ffmpeg(loudnessArgs(voice)).stderr).I
         level = { gain: firstGain(name, aim, voiceI), ceiling: LIMITS.ceiling }
       }
-      if (!problems.length) problems = step(mixArgs(name, voice, tmp, { ...level, ...format }))
+      if (!problems.length) problems = step(passes.mix(level))
       const result = problems.length ? { decoded: false } : measure(tmp)
       if (!problems.length) problems = checkRender(source, result)
       if (!problems.length) {
@@ -311,9 +321,34 @@ function applyFx(name, input, output, format) {
         `${path.basename(output)}: el efecto ${name} no salio bien en ${LIMITS.tries} intentos (${problems.join('; ')})`
       )
     }
-    fs.renameSync(keep, output)
+    fs.copyFileSync(keep, output)
   } finally {
-    for (const file of [voice, tmp, keep]) fs.rmSync(file, { force: true })
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+// Antes de gastar: cada efecto existe y este ffmpeg corre sus dos pasadas
+// (con 0,2 s de silencio, en una carpeta temporal).
+function checkFx(names, format) {
+  const dir = tempDir()
+  try {
+    const input = path.join(dir, 'silencio.mp3')
+    const made = step([
+      ...['-hide_banner', '-nostdin', '-v', 'error', '-y', '-f', 'lavfi'],
+      ...['-i', `anullsrc=r=${format.rate}:cl=mono`, '-t', '0.2', '-b:a', `${format.kbps}k`, input]
+    ])
+    if (made.length) throw new Error(`ffmpeg no pudo armar la prueba del efecto: ${made[0]}`)
+    for (const name of names) {
+      const output = path.join(dir, 'prueba.mp3')
+      const passes = fxArgs(name, input, output, { voice: path.join(dir, 'voz.wav'), ...format })
+      let problems = step(passes.voice)
+      if (!problems.length) problems = step(passes.mix({ ceiling: LIMITS.ceiling }))
+      if (problems.length) {
+        throw new Error(`el efecto ${name} no corre en este ffmpeg: ${problems[0]}`)
+      }
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
   }
 }
 
@@ -322,52 +357,57 @@ function crudasDir() {
   if (!CRUDAS) return null
   const dir = path.resolve(CRUDAS)
   const rel = path.relative(ROOT, dir)
-  if (!rel || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
-    fail('--crudas tiene que ser una carpeta fuera del repositorio.')
-  }
+  const outside = rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)
+  if (!rel || !outside) fail('--crudas tiene que ser una carpeta fuera del repositorio.')
   return dir
 }
 
-// --fx: el efecto de cada monstruo con fx sobre sus mp3 que ya existen y que el
-// manifiesto no marca con ese efecto. El original queda en --crudas con las
-// mismas rutas que assets/voces y el efecto sale siempre de esa copia: correrlo
-// otra vez, o despues de un corte, no lo aplica dos veces.
+// El original de una frase en --crudas: null si no esta; { text } con el texto
+// anotado en <archivo>.mp3.txt, o text null si no lo tiene.
+function readRaw(raw) {
+  if (!fs.existsSync(raw)) return null
+  const note = raw + '.txt'
+  if (!fs.existsSync(note)) return { text: null }
+  const text = fs.readFileSync(note, 'utf8')
+  return { text: text.replace(/^\uFEFF/, '').replace(/\r?\n$/, '') }
+}
+
+// Guarda un original y su texto al lado. El texto viejo se borra antes: un
+// corte nunca deja un original con el texto de otro.
+function saveRaw(raw, audio, text) {
+  fs.mkdirSync(path.dirname(raw), { recursive: true })
+  fs.rmSync(raw + '.txt', { force: true })
+  fs.writeFileSync(raw, audio)
+  fs.writeFileSync(raw + '.txt', text)
+}
+
+// --fx: el efecto de cada frase con fx (fxFor) sobre su mp3, si el manifiesto
+// no lo marca con ese efecto. Sale siempre de su original en --crudas y solo si
+// ese original dice el texto de ahora (fxJobs): correrlo otra vez, o despues
+// de un corte, no lo aplica dos veces.
 function applyToExisting(manifestFile, manifest) {
   if (!manifest) fail('No hay manifiesto: primero hay que generar las voces.')
   const crudas = crudasDir()
-  if (!crudas) fail('--fx necesita --crudas <carpeta> para guardar los originales.')
-  const chosen = selection()
-  const jobs = []
-  for (const line of allLines()) {
-    const fx = MONSTERS[line.monster].fx
-    if (!fx || !chosen(line)) continue
-    const item = oldItem(manifest, line)
-    const file = path.join(OUT, line.file)
-    const current = item && item.text === line.text && item.file === line.file
-    if (!current || !fs.existsSync(file) || item.fx === fx) continue
-    const raw = path.join(crudas, line.file)
-    if (item.fx && !fs.existsSync(raw)) {
-      console.log(
-        `  ${line.file}: ya tiene ${item.fx} y su original no esta en --crudas; queda asi.`
-      )
-      continue
-    }
-    jobs.push({ line, item, fx, file, raw })
-  }
+  if (!crudas) fail('--fx necesita --crudas <carpeta>: la de los originales.')
+  const { jobs, notes } = fxJobs(allLines().filter(selection()), manifest, {
+    fxOf: fxFor,
+    exists: (file) => fs.existsSync(path.join(OUT, file)),
+    raw: (file) => readRaw(path.join(crudas, file)),
+    adopt: ADOPT
+  })
+  for (const note of notes) console.log(`  ${note}`)
   console.log(`Frases para pasar por su efecto: ${jobs.length}.`)
   if (!jobs.length) return
   if (!YES) {
     console.log('No se toco nada. Para aplicarlo, corre de nuevo con --yes.')
     return
   }
-  const format = mp3Format(manifest.format)
   ffmpeg(['-hide_banner', '-version'])
   for (const job of jobs) {
-    if (!fs.existsSync(job.raw)) {
-      fs.mkdirSync(path.dirname(job.raw), { recursive: true })
-      fs.copyFileSync(job.file, job.raw)
-    }
-    applyFx(job.fx, job.raw, job.file, format)
+    const file = path.join(OUT, job.line.file)
+    const raw = path.join(crudas, job.line.file)
+    if (job.copy) saveRaw(raw, fs.readFileSync(file), job.line.text)
+    applyFx(job.fx, raw, file)
     job.item.fx = job.fx
     // Despues de cada frase: si algo se corta, lo hecho queda anotado.
     writeJson(manifestFile, manifest)
@@ -379,53 +419,51 @@ function applyToExisting(manifestFile, manifest) {
 }
 
 // El manifiesto de lo que hay en disco: cada frase con su mp3 (null si falta)
-// y, si lo tiene, su efecto. fresh: los mp3 de esta corrida y su efecto.
+// y, si lo tiene, su efecto (manifestItem). fresh: los mp3 de esta corrida y su
+// efecto. El formato es el de esta corrida si genero algo; si no, el de antes.
 function buildManifest(previous, voices, fresh) {
   const manifest = {
     version: 1,
     model: MODEL,
-    format: FORMAT,
+    format: fresh.size || !previous || !previous.format ? FORMAT : previous.format,
     generated: new Date().toISOString(),
     monsters: {}
   }
   for (const line of allLines()) {
     const exists = fs.existsSync(path.join(OUT, line.file))
-    // Un mp3 de un texto viejo no cuenta: la pagina solo mostraria el globo.
-    const before = oldText(previous, line)
-    const stale = exists && !fresh.has(line.file) && before !== null && before !== line.text
     const entry = (manifest.monsters[line.monster] ||= {
       voice: (voices.monsters[line.monster] || {}).voice_id || null,
       lines: {}
     })
     const lang = (entry.lines[line.lang] ||= {})
     const list = (lang[line.event] ||= [])
-    const item = exists && !stale ? { file: line.file, text: line.text } : null
-    const fx = item && (fresh.has(line.file) ? fresh.get(line.file) : oldFx(previous, line))
-    if (fx) item.fx = fx
-    list[line.index] = item
+    list[line.index] = manifestItem(line, entryOf(previous, line), {
+      exists,
+      fresh: fresh.has(line.file) ? fresh.get(line.file) : undefined
+    })
   }
   if (previous && previous.sfx) manifest.sfx = previous.sfx
   return manifest
 }
 
-// Guarda el mp3 de Text to Speech de una frase. Con fx, el crudo va a
-// --crudas (o a un temporal) y lo que queda en assets es la salida del efecto.
-function saveLine(line, audio) {
+// Guarda el mp3 de Text to Speech de una frase. Con efecto, el original queda
+// en --crudas con su texto y lo que va a assets es la salida del efecto; si el
+// efecto falla, el original igual queda.
+function saveLine(line, audio, crudas) {
   const file = path.join(OUT, line.file)
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  const fx = MONSTERS[line.monster].fx
+  const fx = fxFor(line)
   if (!fx) {
     fs.writeFileSync(file, audio)
     return null
   }
-  const crudas = crudasDir()
-  const raw = crudas ? path.join(crudas, line.file) : file + '.crudo.mp3'
-  fs.mkdirSync(path.dirname(raw), { recursive: true })
-  fs.writeFileSync(raw, audio)
+  const raw = path.join(crudas, line.file)
+  saveRaw(raw, audio, line.text)
   try {
-    applyFx(fx, raw, file, mp3Format(FORMAT))
-  } finally {
-    if (!crudas) fs.rmSync(raw, { force: true })
+    applyFx(fx, raw, file)
+  } catch (error) {
+    error.message += ` (el original quedo en ${raw})`
+    throw error
   }
   return fx
 }
@@ -441,7 +479,8 @@ async function main() {
   // Los mp3 de esta corrida (ya dicen el texto de ahora) y su efecto.
   const fresh = new Map()
   const monsters = [...new Set(todo.map((line) => line.monster))]
-  const withFx = monsters.filter((id) => MONSTERS[id].fx)
+  const effects = [...new Set(todo.map(fxFor).filter(Boolean))]
+  const crudas = crudasDir()
   const design = monsters.filter((id) => !(voices.monsters[id] && voices.monsters[id].voice_id))
   const chars = todo.reduce((sum, line) => sum + line.text.length, 0)
   const designChars = design.reduce((sum, id) => sum + sampleText(id).length, 0)
@@ -457,7 +496,10 @@ async function main() {
     `Voces por disenar: ${design.length} (${design.join(', ') || 'ninguna'}), muestras de ${designChars} caracteres.`
   )
   if (SFX) console.log(`Efectos por generar: ${sfx.length}.`)
-  if (withFx.length) console.log(`Con efecto de voz (ffmpeg): ${withFx.join(', ')}.`)
+  if (effects.length) {
+    console.log(`Con efecto de voz (ffmpeg): ${effects.join(', ')}. Los originales van a --crudas.`)
+    if (!crudas) console.log('Sin --crudas <carpeta> no se genera nada con efecto.')
+  }
   console.log(
     `Estimado: unos ${chars + designChars} creditos de texto (1 por caracter en ${MODEL})` +
       (sfx.length ? ` mas los efectos (se cobran por segundo).` : '.')
@@ -484,10 +526,11 @@ async function main() {
     console.log('No se gasto nada. Para generar, corre de nuevo con --yes.')
     return
   }
-  // Antes de gastar: el efecto necesita ffmpeg y un formato mp3.
-  if (withFx.length) {
-    mp3Format(FORMAT)
-    ffmpeg(['-hide_banner', '-version'])
+  // Antes de gastar: el efecto necesita --crudas (ahi queda cada original con
+  // su texto), un formato mp3 y un ffmpeg que corra sus dos pasadas.
+  if (effects.length) {
+    if (!crudas) fail('Las frases con efecto necesitan --crudas <carpeta>. No se gasto nada.')
+    checkFx(effects, mp3Format(FORMAT))
   }
 
   let done = 0
@@ -496,37 +539,45 @@ async function main() {
     const settings = MONSTERS[monster].voice
     const mine = todo.filter((line) => line.monster === monster)
     console.log(`${monster}: ${mine.length} frases`)
-    // De a dos: la API limita los pedidos simultaneos segun el plan.
+    // De a dos: la API limita los pedidos simultaneos segun el plan. Si algo
+    // falla, no se piden mas, pero lo que ya venia se guarda.
     const queue = [...mine]
+    let failure = null
     const worker = async () => {
-      for (let line = queue.shift(); line; line = queue.shift()) {
-        const audio = await call(
-          key,
-          'POST',
-          `/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=${FORMAT}`,
-          {
-            text: line.text,
-            model_id: MODEL,
-            voice_settings: {
-              stability: settings.stability,
-              similarity_boost: 0.75,
-              style: 0.35,
-              use_speaker_boost: true,
-              speed: settings.speed
-            }
-          },
-          true
-        )
-        const fx = saveLine(line, audio)
-        fresh.set(line.file, fx)
-        // Con efecto, enseguida: un mp3 procesado nunca queda sin su marca.
-        if (fx) writeJson(manifestFile, buildManifest(previous, voices, fresh))
-        done++
+      while (queue.length && !failure) {
+        const line = queue.shift()
+        try {
+          const audio = await call(
+            key,
+            'POST',
+            `/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=${FORMAT}`,
+            {
+              text: line.text,
+              model_id: MODEL,
+              voice_settings: {
+                stability: settings.stability,
+                similarity_boost: 0.75,
+                style: 0.35,
+                use_speaker_boost: true,
+                speed: settings.speed
+              }
+            },
+            true
+          )
+          const fx = saveLine(line, audio, crudas)
+          fresh.set(line.file, fx)
+          // Con efecto, enseguida: un mp3 procesado nunca queda sin su marca.
+          if (fx) writeJson(manifestFile, buildManifest(previous, voices, fresh))
+          done++
+        } catch (error) {
+          failure ||= error
+        }
       }
     }
     await Promise.all([worker(), worker()])
     // Despues de cada monstruo: si algo se corta, lo hecho queda anotado.
     writeJson(manifestFile, buildManifest(previous, voices, fresh))
+    if (failure) throw failure
   }
 
   for (const [name, text, seconds] of sfx) {

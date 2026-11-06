@@ -203,7 +203,7 @@
             {
               "file": "mosquito/en/monster_hurt-1.mp3",
               "text": "Ow! My wings!",
-              "fx": "mosquito"
+              "fx": "mosquito_claro"
             },
             {
               "file": "mosquito/en/monster_hurt-2.mp3",

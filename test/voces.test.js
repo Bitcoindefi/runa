@@ -177,8 +177,12 @@ test('voces: solo el mosquito pasa por un efecto y el modulo lo conoce', (t) => 
     t.ok(p.pitch >= 5 && p.pitch <= 8, `${name}: sube de 5 a 8 semitonos`)
     t.ok(p.whine >= 500 && p.whine <= 700, `${name}: zumbido de ala de 500 a 700 Hz`)
     t.ok(p.bed <= -20, `${name}: el zumbido queda bajo la voz`)
-    const steps = efectos.fxArgs(name, 'crudo.mp3', 'salida.mp3', { voice: 'voz.wav' })
-    t.is(steps.length, 2, `${name}: dos pasadas`)
+    const passes = efectos.fxArgs(name, 'crudo.mp3', 'salida.mp3', {
+      voice: 'voz.wav',
+      rate: 22050,
+      kbps: 32
+    })
+    const steps = [passes.voice, passes.mix({ gain: 1, ceiling: -3.5 })]
     for (const args of steps) {
       t.ok(
         Array.isArray(args) && args.every((arg) => typeof arg === 'string' && arg.length > 0),
@@ -198,8 +202,17 @@ test('voces: solo el mosquito pasa por un efecto y el modulo lo conoce', (t) => 
     const graph = second[second.indexOf('-filter_complex') + 1]
     t.ok(graph.endsWith('[out]') && !/\s/.test(graph), `${name}: un grafo sin espacios`)
     t.absent(/acompressor/.test(first.join(' ') + graph), `${name}: sin compresor`)
-    const tempo = Number(/atempo=([\d.]+)/.exec(first.join(' '))[1])
-    t.ok(Math.abs(tempo * 2 ** (p.pitch / 12) - 1) < 0.001, `${name}: la misma duracion`)
+    t.is(second[second.indexOf('-ar') + 1], '22050', `${name}: a la tasa del original`)
+    t.ok(graph.includes('volume=1dB'), `${name}: con la ganancia del intento`)
+    const voice = first.join(' ')
+    if (p.keepFormants) {
+      const ratio = Number(/rubberband=pitch=([\d.]+):formant=preserved/.exec(voice)[1])
+      t.ok(Math.abs(ratio - 2 ** (p.pitch / 12)) < 0.001, `${name}: sube con los formantes quietos`)
+      t.absent(/asetrate|atempo/.test(voice), `${name}: sin asetrate`)
+    } else {
+      const tempo = Number(/atempo=([\d.]+)/.exec(voice)[1])
+      t.ok(Math.abs(tempo * 2 ** (p.pitch / 12) - 1) < 0.001, `${name}: la misma duracion`)
+    }
   }
   const out = efectos.mixArgs('mosquito', 'voz.wav', 'salida.mp3', { rate: 22050, kbps: 32 })
   t.is(out[out.indexOf('-ar') + 1], '22050', 'mp3 a 22050 Hz')
@@ -207,6 +220,143 @@ test('voces: solo el mosquito pasa por un efecto y el modulo lo conoce', (t) => 
   t.alike(efectos.mp3Format('mp3_22050_32'), { rate: 22050, kbps: 32 })
   t.exception(() => efectos.mp3Format('pcm_16000'), 'el efecto sale en mp3')
   t.exception(() => efectos.fxArgs('dragon', 'a', 'b', { voice: 'c' }), 'un efecto que no existe')
+  t.exception(() => efectos.fxArgs('mosquito', 'a', 'b', {}), 'sin el wav de la primera pasada')
+})
+
+test('voces: una frase puede tener su propio efecto, siempre de un monstruo con efecto', (t) => {
+  const hurt = 'mosquito/en/monster_hurt-1.mp3'
+  t.is(efectos.fxOf({ file: hurt }, 'mosquito'), 'mosquito_claro', '"Ow! My wings!" va clara')
+  t.is(efectos.fxOf({ file: 'mosquito/en/contact-1.mp3' }, 'mosquito'), 'mosquito', 'las demas no')
+  t.is(efectos.fxOf({ file: hurt }, undefined), null, 'sin efecto del monstruo, nada')
+  const files = new Map(voces.allLines().map((line) => [line.file, line]))
+  for (const [file, name] of Object.entries(efectos.LINE_FX)) {
+    const line = files.get(file)
+    t.ok(line && voces.MONSTERS[line.monster].fx, `${file}: una frase de un monstruo con efecto`)
+    t.ok(efectos.FX_NAMES.includes(name), `${file}: ${name} existe`)
+  }
+  t.ok(efectos.FX.mosquito_claro.keepFormants, 'mosquito_claro no mueve los formantes')
+  t.alike(
+    { ...efectos.FX.mosquito_claro, keepFormants: undefined },
+    { ...efectos.FX.mosquito, keepFormants: undefined },
+    'y lo demas es el mosquito de siempre'
+  )
+})
+
+test('voces: --fx sale siempre de un original con el texto de ahora', (t) => {
+  const mine = (event) =>
+    voces.allLines().filter((l) => l.monster === 'mosquito' && l.lang === 'en' && l.event === event)
+  const [a, b, c, d] = mine('contact')
+  const [hurt] = mine('monster_hurt')
+  const bones = voces
+    .allLines()
+    .find((l) => l.monster === 'skeleton' && l.lang === 'en' && l.event === 'contact')
+  const entry = (line, extra = {}) => ({ file: line.file, text: line.text, ...extra })
+  const manifest = {
+    version: 1,
+    monsters: {
+      mosquito: {
+        lines: {
+          en: {
+            contact: [
+              entry(a, { fx: 'mosquito' }),
+              entry(b),
+              entry(c, { text: 'Otra cosa' }),
+              entry(d)
+            ],
+            monster_hurt: [entry(hurt, { fx: 'mosquito' })]
+          }
+        }
+      },
+      skeleton: { lines: { en: { contact: [entry(bones)] } } }
+    }
+  }
+  const lines = [a, b, c, d, hurt, bones]
+  const fxOf = (line) => efectos.fxOf(line, voces.MONSTERS[line.monster].fx)
+  const run = (raws, more = {}) =>
+    efectos.fxJobs(lines, manifest, {
+      fxOf,
+      exists: () => true,
+      raw: (file) => (file in raws ? { text: raws[file] } : null),
+      ...more
+    })
+  const jobs = (result) => result.jobs.map((job) => `${job.line.file}:${job.fx}:${job.copy}`)
+  const all = Object.fromEntries(lines.map((line) => [line.file, line.text]))
+
+  let result = run(all)
+  t.alike(
+    jobs(result),
+    [`${b.file}:mosquito:false`, `${d.file}:mosquito:false`, `${hurt.file}:mosquito_claro:false`],
+    'las que no tienen ese efecto, desde su original; el esqueleto nunca'
+  )
+  t.alike(result.notes, [], 'sin avisos')
+  t.is(result.jobs[0].item, manifest.monsters.mosquito.lines.en.contact[1], 'marca su entrada')
+
+  result = run({ ...all, [b.file]: 'Otra cosa', [d.file]: null })
+  t.alike(jobs(result), [`${hurt.file}:mosquito_claro:false`], 'un original de otro texto no sirve')
+  t.is(result.notes.length, 2, 'y avisa por las dos')
+  t.ok(result.notes[0].includes('dice otro texto') && result.notes[1].includes('texto anotado'))
+
+  result = run({})
+  t.alike(jobs(result), [], 'sin originales no toca nada')
+  t.ok(result.notes.some((n) => n.startsWith(b.file) && n.includes('--tomar-originales')))
+  t.ok(
+    result.notes.some((n) => n.startsWith(hurt.file) && n.includes('ya tiene mosquito')),
+    'una frase marcada sin original queda como esta'
+  )
+
+  result = run({}, { adopt: true })
+  t.alike(
+    jobs(result),
+    [`${b.file}:mosquito:true`, `${d.file}:mosquito:true`],
+    'con --tomar-originales copia los mp3 sin marca, nunca uno marcado'
+  )
+  t.alike(jobs(run(all, { exists: () => false })), [], 'sin mp3 en assets, nada')
+})
+
+test('voces: al rearmar el manifiesto la marca del efecto sigue', (t) => {
+  const line = voces.allLines().find((l) => l.file === 'mosquito/en/monster_hurt-1.mp3')
+  const marked = { file: line.file, text: line.text, fx: 'mosquito_claro' }
+  const again = efectos.manifestItem(line, marked, { exists: true })
+  t.alike(again, marked, 'sin cambios, la misma entrada y la misma marca')
+  t.alike(
+    efectos.manifestItem(line, marked, { exists: true, fresh: null }),
+    { file: line.file, text: line.text },
+    'regenerada sin efecto, sin marca'
+  )
+  t.is(
+    efectos.manifestItem(line, null, { exists: true, fresh: 'mosquito' }).fx,
+    'mosquito',
+    'regenerada con efecto, con su marca'
+  )
+  t.is(efectos.manifestItem(line, marked, { exists: false }), null, 'sin mp3, null')
+
+  const old = { file: line.file, text: 'Ouch!', fx: 'mosquito' }
+  const stale = efectos.manifestItem(line, old, { exists: true })
+  t.alike(stale, old, 'un mp3 de un texto viejo conserva su entrada vieja')
+  t.alike(
+    efectos.manifestItem(line, stale, { exists: true }),
+    old,
+    'tambien en la corrida siguiente'
+  )
+  const manifest = {
+    version: 1,
+    monsters: { mosquito: { lines: { en: { monster_hurt: [stale] } } } }
+  }
+  t.alike(voces.validateManifest(manifest), [], 'el manifiesto sigue bien formado')
+  t.is(voces.audioFor(manifest, line), null, 'la pagina no lo usa')
+  const fxOf = (l) => efectos.fxOf(l, 'mosquito')
+  const raw = () => ({ text: line.text })
+  t.alike(
+    efectos.fxJobs([line], manifest, { fxOf, exists: () => true, raw }).jobs,
+    [],
+    'y --fx no lo toca'
+  )
+  manifest.monsters.mosquito.lines.en.monster_hurt = [again]
+  t.alike(
+    efectos.fxJobs([line], manifest, { fxOf, exists: () => true, raw }).jobs,
+    [],
+    'una frase marcada que se rearmo no vuelve a pasar por el efecto'
+  )
 })
 
 test('voces: cada salida del efecto se mide y el nivel se corrige', (t) => {
@@ -232,6 +382,18 @@ test('voces: cada salida del efecto se mide y el nivel se corrige', (t) => {
     -4.4,
     'un pico de mas baja el techo'
   )
+  const top = { gain: 12, ceiling: -3.5 }
+  t.alike(
+    efectos.nextLevel(top, -13.3, { I: -14.2, TP: -1.9 }),
+    { gain: 12, ceiling: -3.1 },
+    'con la ganancia al maximo, el techo sube lo que sobra de pico'
+  )
+  t.is(efectos.nextLevel(top, -12, { I: -14, TP: -4 }).ceiling, efectos.LIMITS.top, 'hasta un tope')
+  t.is(
+    efectos.nextLevel(top, -14, { I: -14.2, TP: -3 }).ceiling,
+    -3.5,
+    'si al nivel le falta poco, no'
+  )
   const gain = efectos.FX.mosquito.gain
   t.is(efectos.firstGain('mosquito', -15, -11), +(gain - 4).toFixed(2), 'arranca por lo que falta')
   t.is(efectos.firstGain('mosquito', -15, NaN), gain, 'sin medida, la de siempre')
@@ -241,6 +403,15 @@ test('voces: cada salida del efecto se mide y el nivel se corrige', (t) => {
     '    Threshold: -24.4 LUFS\n\n  True peak:\n    Peak:        0.5 dBFS\n'
   t.alike(efectos.parseLoudness(stderr), { I: -14.1, TP: 0.5 }, 'lee el resumen de ebur128')
   t.ok(Number.isNaN(efectos.parseLoudness('nada').I), 'sin resumen, NaN')
+
+  const opened =
+    "Input #0, mp3, from 'crudo.mp3':\n  Duration: 00:00:02.23, start: 0.050113, bitrate: 33 kb/s\n" +
+    '  Stream #0:0: Audio: mp3 (mp3float), 22050 Hz, mono, fltp, 32 kb/s, start 0.050113\n' +
+    'Stream mapping:\nOutput #0, null, to pipe:\n' +
+    '  Stream #0:0: Audio: pcm_s16le, 44100 Hz, mono, s16, 705 kb/s\n'
+  t.alike(efectos.parseStream(opened), { rate: 22050, kbps: 32 }, 'la tasa y los kbit/s del mp3')
+  t.is(efectos.parseStream(opened.slice(opened.indexOf('Output'))), null, 'no los de la salida')
+  t.is(efectos.parseStream("Input #0, wav, from 'a.wav':\n  Stream #0:0: Audio: pcm_s16le"), null)
 })
 
 test('voces: la marca del efecto en el manifiesto no cambia que suena', (t) => {
