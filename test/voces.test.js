@@ -1,5 +1,6 @@
 const { test } = require('brittle')
 const voces = require('../scripts/tripo-voces.mjs')
+const efectos = require('../scripts/voces-efectos.mjs')
 const sonido = require('../scripts/tripo-sonido.mjs')
 const { foes } = require('../lib/content.js')
 
@@ -161,6 +162,99 @@ test('voces: el manifiesto se valida y da el mp3 de cada frase', (t) => {
     'un idioma que no esta'
   )
   t.ok(voces.validateManifest(null).length > 0, 'nada no es un manifiesto')
+})
+
+test('voces: solo el mosquito pasa por un efecto y el modulo lo conoce', (t) => {
+  t.is(voces.MONSTERS.mosquito.fx, 'mosquito', 'el mosquito zumba')
+  t.ok(efectos.FX_NAMES.includes('mosquito'), 'voces-efectos.mjs conoce su efecto')
+  t.alike(
+    voces.MONSTER_IDS.filter((id) => voces.MONSTERS[id].fx !== undefined),
+    ['mosquito'],
+    'los demas monstruos siguen sin efecto'
+  )
+  for (const name of efectos.FX_NAMES) {
+    const p = efectos.FX[name]
+    t.ok(p.pitch >= 5 && p.pitch <= 8, `${name}: sube de 5 a 8 semitonos`)
+    t.ok(p.whine >= 500 && p.whine <= 700, `${name}: zumbido de ala de 500 a 700 Hz`)
+    t.ok(p.bed <= -20, `${name}: el zumbido queda bajo la voz`)
+    const steps = efectos.fxArgs(name, 'crudo.mp3', 'salida.mp3', { voice: 'voz.wav' })
+    t.is(steps.length, 2, `${name}: dos pasadas`)
+    for (const args of steps) {
+      t.ok(
+        Array.isArray(args) && args.every((arg) => typeof arg === 'string' && arg.length > 0),
+        `${name}: una lista de argumentos, sin shell`
+      )
+      t.absent(
+        args.some((arg) => DASHES.test(arg)),
+        `${name}: sin rayas en el texto`
+      )
+      t.ok(args.includes('-filter_complex_threads'), `${name}: un solo hilo`)
+    }
+    const [first, second] = steps
+    t.is(first[first.indexOf('-i') + 1], 'crudo.mp3', `${name}: lee el crudo`)
+    t.is(first[first.length - 1], 'voz.wav', `${name}: la voz a un wav`)
+    t.is(second[second.indexOf('-i') + 1], 'voz.wav', `${name}: mezcla esa voz`)
+    t.is(second[second.length - 1], 'salida.mp3', `${name}: escribe la salida`)
+    const graph = second[second.indexOf('-filter_complex') + 1]
+    t.ok(graph.endsWith('[out]') && !/\s/.test(graph), `${name}: un grafo sin espacios`)
+    t.absent(/acompressor/.test(first.join(' ') + graph), `${name}: sin compresor`)
+    const tempo = Number(/atempo=([\d.]+)/.exec(first.join(' '))[1])
+    t.ok(Math.abs(tempo * 2 ** (p.pitch / 12) - 1) < 0.001, `${name}: la misma duracion`)
+  }
+  const out = efectos.mixArgs('mosquito', 'voz.wav', 'salida.mp3', { rate: 22050, kbps: 32 })
+  t.is(out[out.indexOf('-ar') + 1], '22050', 'mp3 a 22050 Hz')
+  t.is(out[out.indexOf('-b:a') + 1], '32k', 'y 32 kbit/s, como Text to Speech')
+  t.alike(efectos.mp3Format('mp3_22050_32'), { rate: 22050, kbps: 32 })
+  t.exception(() => efectos.mp3Format('pcm_16000'), 'el efecto sale en mp3')
+  t.exception(() => efectos.fxArgs('dragon', 'a', 'b', { voice: 'c' }), 'un efecto que no existe')
+})
+
+test('voces: cada salida del efecto se mide y el nivel se corrige', (t) => {
+  const source = { I: -14, seconds: 2 }
+  const good = { decoded: true, finite: true, I: -15, TP: -1.5, seconds: 2.03 }
+  t.alike(efectos.checkRender(source, good), [], 'una salida que sirve')
+  t.ok(efectos.checkRender(source, { decoded: false }).length, 'no decodifica')
+  t.ok(efectos.checkRender(source, { ...good, finite: false }).length, 'con NaN')
+  t.ok(efectos.checkRender(source, { ...good, I: -29.1 }).length, 'casi muda')
+  t.ok(efectos.checkRender(source, { ...good, I: NaN }).length, 'sin nivel')
+  t.ok(efectos.checkRender(source, { ...good, TP: -0.9 }).length, 'pico de mas')
+  t.ok(efectos.checkRender(source, { ...good, seconds: 2.4 }).length, 'otra duracion')
+
+  const level = { gain: 1, ceiling: -3.5 }
+  t.is(efectos.nextLevel(level, -15, { I: -29, TP: -2 }), level, 'una salida rota no corrige')
+  const up = efectos.nextLevel(level, -15, { I: -16, TP: -2 })
+  t.is(up.gain, 3, 'sin intento anterior, supone que sube la mitad')
+  t.is(up.ceiling, -3.5, 'el techo no sube')
+  const previous = { level, result: { I: -16, TP: -2 } }
+  t.is(efectos.nextLevel(up, -15, { I: -15.5, TP: -2 }, previous).gain, 5, 'aprende cuanto sube')
+  t.is(
+    efectos.nextLevel(level, -15, { I: -15, TP: -0.6 }).ceiling,
+    -4.4,
+    'un pico de mas baja el techo'
+  )
+  const gain = efectos.FX.mosquito.gain
+  t.is(efectos.firstGain('mosquito', -15, -11), +(gain - 4).toFixed(2), 'arranca por lo que falta')
+  t.is(efectos.firstGain('mosquito', -15, NaN), gain, 'sin medida, la de siempre')
+
+  const stderr =
+    '[Parsed_ebur128_0 @ 0] Summary:\n\n  Integrated loudness:\n    I:         -14.1 LUFS\n' +
+    '    Threshold: -24.4 LUFS\n\n  True peak:\n    Peak:        0.5 dBFS\n'
+  t.alike(efectos.parseLoudness(stderr), { I: -14.1, TP: 0.5 }, 'lee el resumen de ebur128')
+  t.ok(Number.isNaN(efectos.parseLoudness('nada').I), 'sin resumen, NaN')
+})
+
+test('voces: la marca del efecto en el manifiesto no cambia que suena', (t) => {
+  const text = voces.linesOf('mosquito', 'monster_hurt', 'en')[0]
+  const file = 'mosquito/en/monster_hurt-1.mp3'
+  const manifest = {
+    version: 1,
+    monsters: {
+      mosquito: { voice: 'abc', lines: { en: { monster_hurt: [{ file, text, fx: 'mosquito' }] } } }
+    }
+  }
+  t.alike(voces.validateManifest(manifest), [], 'el manifiesto sigue bien formado')
+  const line = { monster: 'mosquito', lang: 'en', event: 'monster_hurt', index: 0, text }
+  t.is(voces.audioFor(manifest, line), file, 'y da el mismo mp3')
 })
 
 test('voces: el sonido baja los golpes y presta su contexto', (t) => {

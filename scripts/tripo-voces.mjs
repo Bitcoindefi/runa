@@ -49,7 +49,9 @@ export const LOW = 0.3
 
 // Como habla cada uno. voice: el pedido para ElevenLabs Voice Design (genero,
 // edad, timbre, acento, ritmo) y los ajustes de la voz al generar (speed de 0,7
-// a 1,2; stability de 0 a 1). color: el borde del globo.
+// a 1,2; stability de 0 a 1). color: el borde del globo. fx (opcional): el
+// efecto de ffmpeg que se aplica despues de Text to Speech, uno de
+// scripts/voces-efectos.mjs.
 export const MONSTERS = {
   espectro: {
     name: ['Spectre', 'Espectro'],
@@ -77,7 +79,10 @@ export const MONSTERS = {
       pace: 'fast and jittery',
       speed: 1.15,
       stability: 0.3
-    }
+    },
+    // Voice Design no hace el zumbido: la voz sube, se afina y aletea, con un
+    // zumbido de ala debajo.
+    fx: 'mosquito'
   },
   golem: {
     name: ['Golem', 'Golem'],

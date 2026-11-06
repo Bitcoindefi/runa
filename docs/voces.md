@@ -11,6 +11,7 @@ estan. Sin audios la pagina funciona igual, solo con los globos.
 | `scripts/tripo-voces.mjs`       | Personalidad, pedido de voz y frases (ingles y castellano) de cada monstruo; el que elige que se dice; la validacion del manifiesto. Sin three.js: lo cargan las pruebas en Bare. |
 | `scripts/tripo-voces-player.js` | En la pagina: el globo HTML que sigue al monstruo, la carga perezosa de los mp3 y la reproduccion.                                                                                |
 | `scripts/generar-voces.mjs`     | En la compu, nunca en la pagina: disena una voz por monstruo y genera un mp3 por frase.                                                                                           |
+| `scripts/voces-efectos.mjs`     | Los efectos de ffmpeg que siguen a Text to Speech (hoy, el zumbido del mosquito): los argumentos de cada pasada y como se mide cada salida. Datos y funciones puras.              |
 | `assets/voces/`                 | `voces.json` (ids de voz), `manifest.json` y `<monstruo>/<idioma>/<evento>-<n>.mp3`.                                                                                              |
 | `test/voces.test.js`            | Frases completas y cortas, la espera, sin repetir y el manifiesto.                                                                                                                |
 
@@ -90,6 +91,50 @@ pasan siempre y reemplazan el globo. Los golpes llevan frase solo a veces
 
 La clave nunca sale del script: no se imprime, no va al manifiesto ni a la
 pagina.
+
+## El zumbido del mosquito (fx)
+
+Voice Design no hizo el zumbido que se le pidio, asi que el mosquito pasa por
+ffmpeg despues de Text to Speech. `MONSTERS.mosquito.fx = 'mosquito'` en
+`scripts/tripo-voces.mjs` elige el efecto de `scripts/voces-efectos.mjs`:
+
+- La voz sube 6 semitonos (`asetrate` y `atempo`, misma duracion), pierde
+  graves, gana nasalidad cerca de 1,3 y 3 kHz y tiene un vibrato leve.
+- Un aleteo de 45 Hz en la amplitud (`tremolo`) y, debajo, un zumbido de ala de
+  600 Hz hecho con `aevalsrc` (armonicos y un vaiven lento) que baja cuando habla
+  (`sidechaincompress`). El efecto de sonido de ElevenLabs que se probo para el
+  zumbido quedo descartado: su energia estaba en 5 kHz y subia y bajaba 16 dB.
+- Ganancia y `alimiter` sobremuestreado: queda 1 LU por debajo del original (los
+  originales recortan) y con el pico verdadero bajo -1 dBTP. Sigue en mp3 mono,
+  22050 Hz y 32 kbit/s.
+
+Va en dos pasadas (la voz a un wav y despues la mezcla): en una sola, ffmpeg 8
+sacaba a veces una mezcla rota. Cada salida se mide (decodifica, sin NaN,
+loudness a menos de 2 LU del original, pico de -1 dBTP como mucho, duracion a
+menos de 15 %); se corrige el nivel y se repite hasta 4 veces y, si ninguna
+sirve, el script para con un error y el mp3 queda como estaba. Hay
+`mosquito_suave` y `mosquito_fuerte` para comparar.
+
+Hace falta `ffmpeg` en el PATH. Las frases nuevas de un monstruo con `fx` salen
+ya con el efecto y el manifiesto lo anota en cada frase (`"fx": "mosquito"`).
+Para los mp3 que ya estaban:
+
+```powershell
+node scripts/generar-voces.mjs --fx --crudas C:\Users\usuario\Grantfox\verificacion\voces-mosquito\crudas
+node scripts/generar-voces.mjs --yes --fx --crudas C:\Users\usuario\Grantfox\verificacion\voces-mosquito\crudas
+npx prettier --write assets/voces/manifest.json
+```
+
+`--crudas` es una carpeta fuera del repositorio: guarda cada original con las
+mismas rutas que `assets/voces/` y el efecto sale siempre de esa copia, asi que
+correrlo de nuevo no aplica el efecto dos veces (una frase ya marcada se
+saltea). Para cambiar el efecto, borrar las marcas del manifiesto y correrlo con
+la misma carpeta. Los originales del mosquito tambien estan en
+`C:\Users\usuario\Grantfox\verificacion\voces-mosquito\original\`.
+
+Con Speech to Text (Scribe) las 29 frases procesadas se entienden casi como las
+originales. Una sola cambia: "Ow! My wings!" se oye "Ciao, my wings" con
+cualquier corrimiento de 4 a 8 semitonos, con o sin zumbido.
 
 ## En la pagina
 

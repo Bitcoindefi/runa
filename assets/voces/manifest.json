@@ -163,135 +163,164 @@
           "contact": [
             {
               "file": "mosquito/en/contact-1.mp3",
-              "text": "Bzzz! Lunch has legs today!"
+              "text": "Bzzz! Lunch has legs today!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/contact-2.mp3",
-              "text": "Ooh, fresh blood! My favorite!"
+              "text": "Ooh, fresh blood! My favorite!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/contact-3.mp3",
-              "text": "Hold still, I'm thirsty!"
+              "text": "Hold still, I'm thirsty!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/contact-4.mp3",
-              "text": "Bzz, don't swat, just share!"
+              "text": "Bzz, don't swat, just share!",
+              "fx": "mosquito"
             }
           ],
           "monster_hits": [
             {
               "file": "mosquito/en/monster_hits-1.mp3",
-              "text": "Slurp! Tasty!"
+              "text": "Slurp! Tasty!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_hits-2.mp3",
-              "text": "Bzz! Gotcha, buffet!"
+              "text": "Bzz! Gotcha, buffet!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_hits-3.mp3",
-              "text": "Itchy now? Good!"
+              "text": "Itchy now? Good!",
+              "fx": "mosquito"
             }
           ],
           "monster_hurt": [
             {
               "file": "mosquito/en/monster_hurt-1.mp3",
-              "text": "Ow! My wings!"
+              "text": "Ow! My wings!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_hurt-2.mp3",
-              "text": "Hey! Rude! Bzz!"
+              "text": "Hey! Rude! Bzz!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_hurt-3.mp3",
-              "text": "Missed me! Wait, no. Ow."
+              "text": "Missed me! Wait, no. Ow.",
+              "fx": "mosquito"
             }
           ],
           "monster_low": [
             {
               "file": "mosquito/en/monster_low-1.mp3",
-              "text": "Bzz... running on empty..."
+              "text": "Bzz... running on empty...",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_low-2.mp3",
-              "text": "Just one more sip, please!"
+              "text": "Just one more sip, please!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_low-3.mp3",
-              "text": "My buzz is fading!"
+              "text": "My buzz is fading!",
+              "fx": "mosquito"
             }
           ],
           "player_low": [
             {
               "file": "mosquito/en/player_low-1.mp3",
-              "text": "You're almost a juice box!"
+              "text": "You're almost a juice box!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_low-2.mp3",
-              "text": "Bzz! Dessert time!"
+              "text": "Bzz! Dessert time!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_low-3.mp3",
-              "text": "Slow and tasty, perfect!"
+              "text": "Slow and tasty, perfect!",
+              "fx": "mosquito"
             }
           ],
           "player_potion": [
             {
               "file": "mosquito/en/player_potion-1.mp3",
-              "text": "Ooh, flavored blood!"
+              "text": "Ooh, flavored blood!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_potion-2.mp3",
-              "text": "Drink more, I'll drink you!"
+              "text": "Drink more, I'll drink you!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_potion-3.mp3",
-              "text": "Refilling the buffet? Thanks!"
+              "text": "Refilling the buffet? Thanks!",
+              "fx": "mosquito"
             }
           ],
           "player_guard": [
             {
               "file": "mosquito/en/player_guard-1.mp3",
-              "text": "I'll find a gap! Bzz!"
+              "text": "I'll find a gap! Bzz!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_guard-2.mp3",
-              "text": "Shields don't stop the itch!"
+              "text": "Shields don't stop the itch!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_guard-3.mp3",
-              "text": "Peekaboo! Bzz!"
+              "text": "Peekaboo! Bzz!",
+              "fx": "mosquito"
             }
           ],
           "player_retreat": [
             {
               "file": "mosquito/en/player_retreat-1.mp3",
-              "text": "Come back, snack!"
+              "text": "Come back, snack!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_retreat-2.mp3",
-              "text": "I fly faster! Bzz!"
+              "text": "I fly faster! Bzz!",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/player_retreat-3.mp3",
-              "text": "You can't outrun a buzz!"
+              "text": "You can't outrun a buzz!",
+              "fx": "mosquito"
             }
           ],
           "monster_death": [
             {
               "file": "mosquito/en/monster_death-1.mp3",
-              "text": "Bzz... splat."
+              "text": "Bzz... splat.",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_death-2.mp3",
-              "text": "Tell my thousand kids... bzz."
+              "text": "Tell my thousand kids... bzz.",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_death-3.mp3",
-              "text": "Worth it. Tasty."
+              "text": "Worth it. Tasty.",
+              "fx": "mosquito"
             },
             {
               "file": "mosquito/en/monster_death-4.mp3",
-              "text": "Not the face!"
+              "text": "Not the face!",
+              "fx": "mosquito"
             }
           ]
         },
